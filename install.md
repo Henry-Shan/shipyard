@@ -111,6 +111,19 @@ into PRs):
 .feature-test-result.json
 ```
 
+**If the user has no target repo on this machine yet** (or wants to decide
+later): do NOT write a config.json with guessed values. Finish the install
+without it and include in your final report exactly how to complete setup later:
+
+```
+cp ~/.claude/skills/manager/config.example.json ~/.claude/skills/manager/config.json
+# edit "repo" + the commands, then:
+python3 ~/.claude/skills/manager/skill_config.py check
+```
+
+Everything else (skills, selftests) is already done; the daemon refuses to start
+until "repo" is set, so nothing half-configured can run by accident.
+
 ## Step 4 — Smoke-check (no real dispatch)
 
 ```bash
