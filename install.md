@@ -21,26 +21,47 @@ This package contains three Claude Code skills that work together:
 > and **never merges** — merging is always the human's action. The user should
 > read `dispatch.sh` before first use.
 
-## Step 1 — Get the skills into `~/.claude/skills/`
+## Step 1 — Install OR update (this step is idempotent)
 
-Clone the repo and copy the three skill folders (they must be siblings — the
-scripts resolve each other by relative path):
+The repo is cloned once to a persistent location and each skill is **symlinked**
+into `~/.claude/skills/` (the skills must stay siblings — the scripts resolve
+each other by relative path). Updating is the same step re-run: the pull brings
+new code and any newly added skills; user state (`config.json`, `manager.db`,
+run history) is gitignored inside the clone and survives every pull.
 
 ```bash
-git clone https://github.com/Henry-Shan/agent-warehouse.git /tmp/manager-skill-install
+WAREHOUSE=~/.claude/agent-warehouse
+if [ -d "$WAREHOUSE/.git" ]; then
+  git -C "$WAREHOUSE" log --oneline HEAD..origin/main 2>/dev/null | head  # show the user what's new
+  git -C "$WAREHOUSE" pull --ff-only
+else
+  git clone https://github.com/Henry-Shan/agent-warehouse.git "$WAREHOUSE"
+fi
 mkdir -p ~/.claude/skills
-cp -R /tmp/manager-skill-install/skills/manager      ~/.claude/skills/manager
-cp -R /tmp/manager-skill-install/skills/ship-task    ~/.claude/skills/ship-task
-cp -R /tmp/manager-skill-install/skills/feature-tester ~/.claude/skills/feature-tester
-rm -rf /tmp/manager-skill-install
-chmod +x ~/.claude/skills/manager/*.sh ~/.claude/skills/ship-task/*.sh ~/.claude/skills/feature-tester/*.sh
+for s in "$WAREHOUSE"/skills/*/; do
+  name="$(basename "$s")"
+  [ -e ~/.claude/skills/"$name" ] || ln -s "$s" ~/.claude/skills/"$name"
+done
+chmod +x "$WAREHOUSE"/skills/*/*.sh
+ls -l ~/.claude/skills/    # report which skills are now linked (note any NEW ones to the user)
 ```
 
-(If `git clone` is unavailable, download and unpack the tarball instead:
-`curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
-and copy from the extracted `*/skills/` directory.)
+Handle these cases:
+- **Old copy-based install** (`~/.claude/skills/manager` is a real directory,
+  not a symlink): preserve the user's state first —
+  `cp ~/.claude/skills/manager/config.json "$WAREHOUSE/skills/manager/config.json"`
+  (plus `manager.db` and `runs/` if present) — then, with the user's OK, replace
+  each real directory with the symlink.
+- **A skill folder exists but is neither a symlink into the warehouse nor the
+  old install**: name-collision with something else the user has — ask before
+  touching it.
+- **Update run** (clone already existed): after pulling, skip straight to
+  Step 4's smoke checks, re-run `skill_config.py check`, tell the user what
+  changed and whether any NEW skills were linked, and stop — no interview needed.
 
-If any of the three folders already exists, ask the user before overwriting.
+(If `git` is unavailable, fall back to the tarball:
+`curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
+into `$WAREHOUSE` — but note that updates then require re-downloading.)
 
 ## Step 2 — Check prerequisites and REPORT the result
 

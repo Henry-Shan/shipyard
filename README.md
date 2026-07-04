@@ -58,6 +58,18 @@ Also works with [`npx skills add Henry-Shan/agent-warehouse`](https://github.com
 thanks to the standard `skills/<name>/SKILL.md` layout (then copy
 `config.example.json` → `config.json` yourself).
 
+## Update
+
+Paste the **same install line again** — it's idempotent. The installer keeps a
+git clone at `~/.claude/agent-warehouse` with each skill symlinked into
+`~/.claude/skills/`, so an update is a `git pull` (your `config.json`, queue DB,
+and run history are gitignored and survive), and any skill added to this repo
+later gets linked automatically. Manual equivalent:
+
+```bash
+git -C ~/.claude/agent-warehouse pull
+```
+
 ## Configure
 
 One file: `skills/manager/config.json` (gitignored; `config.example.json` is the
