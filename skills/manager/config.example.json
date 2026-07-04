@@ -1,0 +1,15 @@
+{
+  "repo": "/abs/path/to/target/repo",
+  "base_branch": "main",
+  "worktree_dir": "~/.manager-worktrees",
+  "archive_dir": "~/.manager-archive",
+  "panel_port": 4317,
+  "dispatch_cap": 2,
+  "setup_command": "npm install && npm run build",
+  "dev_command": "npm run dev",
+  "dev_port": 3000,
+  "verify_command": "npm run lint && npm test",
+  "env_files": [],
+  "risk_keywords_extra": [],
+  "memory_mcp": null
+}

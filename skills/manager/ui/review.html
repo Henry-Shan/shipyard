@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review · requirement coverage</title>
+<style>
+  :root{
+    --canvas:#eceef1; --paper:#ffffff; --ink:#1f2328; --dim:#656d76; --line:#d8dce0;
+    --queued:#6e7781; --prog:#0969da; --test:#8250df; --ready:#1a7f37;
+    --wait:#9a6700; --block:#bc4c00; --fail:#cf222e; --none:#8b949e; --ctx:#57606a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--canvas);color:var(--ink);
+    font:13.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--prog);text-decoration:none} a:hover{text-decoration:underline}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;
+    padding:9px 18px;background:var(--paper);border-bottom:1px solid var(--line)}
+  header .title{font-size:15px;font-weight:650} header .sub{color:var(--dim);font-size:12px}
+  header .spacer{flex:1}
+  .cov{display:flex;gap:5px;flex-wrap:wrap}
+  .pillc{font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px}
+  .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
+  .live i{width:7px;height:7px;border-radius:50%;background:var(--ready);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+  #shell{display:grid;grid-template-columns:212px 1fr;height:calc(100vh - 47px)}
+  #index{background:var(--paper);border-right:1px solid var(--line);overflow-y:auto;padding:8px 0}
+  #index .ihead{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);padding:6px 13px 4px}
+  .irow{display:flex;align-items:center;gap:8px;padding:6px 13px;cursor:pointer;border-left:3px solid transparent}
+  .irow:hover{background:#f3f5f7} .irow.on{background:#eef4ff;border-left-color:var(--prog)}
+  .irow .sd{width:8px;height:8px;border-radius:50%;flex:none}
+  .irow .it{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  #stage{overflow-y:auto;position:relative}
+  #docwrap{position:relative;margin:24px auto 140px}
+  /* continuous pages — no per-page chrome, one flowing document */
+  .pg{position:absolute;left:0;background:var(--paper);box-shadow:0 1px 4px rgba(0,0,0,.10);overflow:hidden}
+  .pg img{display:block;width:100%;height:100%}
+  .box{position:absolute;border:2px dashed var(--none);border-radius:7px;pointer-events:auto;cursor:pointer;
+    transition:box-shadow .12s,border-color .12s,background .12s}
+  .box:hover,.box.hl{border-style:solid;background:rgba(9,105,218,.06);box-shadow:0 0 0 3px rgba(9,105,218,.16)}
+  .box .bn{position:absolute;top:-10px;left:8px;font-size:10px;font-weight:700;color:#fff;border-radius:5px;padding:0 6px}
+
+  /* right-margin note cards (Google-Docs style), absolutely placed beside their section */
+  .note{position:absolute;background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--none);
+    border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:9px 11px;transition:box-shadow .12s}
+  .note.hl{box-shadow:0 0 0 3px rgba(9,105,218,.16)}
+  .note .nh{display:flex;align-items:center;gap:7px}
+  .note .bn{font-size:10px;font-weight:700;color:#fff;border-radius:5px;min-width:18px;text-align:center;padding:1px 0}
+  .note .nt{font-weight:600;font-size:12.5px;line-height:1.3;flex:1}
+  .badge{font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 8px}
+  .note .task{margin-top:7px;padding-top:7px;border-top:1px solid #eef0f2;font-size:12px}
+  .note .task:first-of-type{border-top:0;margin-top:5px;padding-top:0}
+  .note .tt{color:var(--ink)} .note .prog{margin-top:4px;color:#3d4450;background:#f6f8fa;
+    border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:11.5px;line-height:1.4}
+  .note .ctxn{color:var(--dim);font-size:12px;margin-top:5px}
+  .note .acts{margin-top:5px;font-size:11.5px}
+
+  .empty{max-width:740px;margin:60px auto;text-align:center;color:var(--dim)}
+  .banner{max-width:900px;margin:24px auto;background:#fff8c5;border:1px solid #d4c66a;border-radius:8px;
+    padding:14px 16px;color:#54470f;font-size:13px;line-height:1.5}
+  .banner .mono{font-size:12px;word-break:break-all}
+  .cmd{margin:10px 0 0;padding:11px 12px;background:#1f2328;color:#e8f0ea;border-radius:7px;
+    font-family:ui-monospace,Menlo,monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-all;user-select:all}
+  .skel{height:300px;margin:24px auto;max-width:520px;border-radius:6px;background:linear-gradient(90deg,#e6e9ec,#f2f4f6,#e6e9ec);
+    background-size:200% 100%;animation:sh 1.4s infinite}@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  /* Notion mode: the doc rendered from blocks */
+  .ndoc{max-width:840px;margin:24px auto 120px;background:var(--paper);border:1px solid var(--line);
+    border-radius:8px;box-shadow:0 1px 5px rgba(0,0,0,.08);padding:30px 42px}
+  .ntest{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1a2029;margin:28px 0 6px;border-bottom:2px solid var(--line);padding-bottom:6px}
+  .ntest:first-child{margin-top:0}
+  .nfeat{font-size:14.5px;font-weight:650;color:#3a414c;margin:20px 0 6px}
+  .ntext{font-size:13.5px;color:#4a525e;margin:6px 0;line-height:1.6}
+  .nimg{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin:10px 0 2px}
+  .ncap{color:var(--dim);font-size:11px;margin:0 0 12px}
+  .nfind{border:1px solid var(--line);border-left:3px solid var(--none);border-radius:8px;
+    padding:12px 14px;margin:12px 0;background:#fbfcfd;scroll-margin-top:60px}
+  .nfh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .sevtag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;text-transform:uppercase;letter-spacing:.02em}
+  .nft{margin-top:8px;font-size:14px;font-weight:500;color:#1f2733;line-height:1.55}
+  /* screenshot evidence attached to a finding — shown together with it */
+  .nevi{margin-top:8px;display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:#5a6472;line-height:1.5}
+  .nevi .evi-ic{flex:0 0 auto;opacity:.75}
+  .nevi .evi-id{font-weight:700;color:#3d4450}
+  .nevi-img{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin:7px 0 2px}
+  .ntask{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px}
+  .nprog{margin-top:4px;color:#3d4450;background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:11.5px;line-height:1.4}
+  .nnotask{margin-top:8px;color:var(--dim);font-size:12px;font-style:italic}
+  .ndoc strong{font-weight:700;color:#2b3440}
+  /* cumulative pipeline breadcrumb of task/finding states */
+  .prow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:2px}
+  .pstep{font-size:10.5px;font-weight:600;border:1px solid;border-radius:999px;padding:1px 8px;opacity:.5}
+  .pstep.cur{opacity:1;font-weight:750}
+  .parr{color:var(--none);font-size:10px;opacity:.7}
+  /* collapsible finding: click the header to shrink to just the header row */
+  .nfh{cursor:pointer;user-select:none}
+  .chev{display:inline-block;font-size:11px;color:var(--dim);transition:transform .15s;flex:0 0 auto}
+  .nfind.collapsed .chev{transform:rotate(-90deg)}
+  .nfind.collapsed .nbody{display:none}
+  .nfind.flash{outline:2px solid var(--prog);outline-offset:2px}
+  /* Test-this-branch (boots the localhost app for a PR-ready task's worktree) */
+  .tact{margin-top:9px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .tspacer{flex:1 1 auto}                    /* pushes session + Remove to the right */
+  /* neutral, quiet default button; color is reserved for the ONE primary + live app */
+  .tbtn{font:inherit;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:4px 10px;line-height:1.5;white-space:nowrap;transition:background .12s,border-color .12s}
+  .tbtn:hover{background:#f2f4f6;border-color:#c4cad0} .tbtn:disabled{opacity:.55;cursor:default}
+  .tbtn.primary{border-color:var(--prog);background:var(--prog);color:#fff;font-weight:600}
+  .tbtn.primary:hover{background:var(--prog);filter:brightness(1.06)}
+  .tbtn.gh{border-color:transparent;background:transparent;color:var(--dim)}
+  .tbtn.gh:hover{background:#f0f2f4;border-color:transparent}
+  .tbtn.danger{border-color:transparent;background:transparent;color:var(--fail)}
+  .tbtn.danger:hover{background:#fdecec;border-color:transparent}
+  .tbtn.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px}
+  .applink{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--ready);color:#fff;border-radius:6px;padding:4px 11px}
+  .applink:hover{text-decoration:none;filter:brightness(1.06)}
+  .terr{font-size:12px;color:var(--fail);font-weight:600}
+  .tstarting{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--prog);display:inline-block;animation:pulse 1.4s infinite}
+  /* ---- migrated panel controls ---- */
+  .hbtn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:7px;padding:5px 11px}
+  .hbtn:hover{background:#f3f5f7}
+  .hbtn.primary{background:var(--ready);border-color:var(--ready);color:#fff}
+  .hbtn.gh{color:var(--dim)}
+  .hbtn.danger{color:#b42318;border-color:#f0c2bd;background:#fff}
+  .hbtn.danger:hover{background:#fdf0ee}
+  .capctl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+  .caplbl{font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .capb{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:6px;width:22px;height:22px;line-height:1;color:var(--ink)}
+  .capb:hover{background:#f3f5f7} .capctl b{min-width:14px;text-align:center;font-size:13px;color:var(--ink)}
+  #pausebanner:empty{display:none}
+  .banner{background:#fff8e6;border-bottom:1px solid #f0e0b0;color:#7a5b00;font-size:12.5px;padding:8px 22px}
+  /* needs-your-input questions */
+  .qwrap{max-width:840px;margin:18px auto 0;display:flex;flex-direction:column;gap:12px}
+  .qhead{font-size:11px;font-weight:700;color:var(--wait);text-transform:uppercase;letter-spacing:.5px}
+  .qcard{background:#fffdf5;border:1px solid #f0dfae;border-left:3px solid var(--wait);border-radius:10px;padding:13px 15px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim)}
+  .qq{margin:7px 0 4px;font-weight:600;font-size:14px}
+  .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px;white-space:pre-wrap}
+  .qopts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .qcard textarea,.rwbox textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:13px;resize:vertical;margin-top:6px}
+  /* task action bar / feature-test / test-plan / modal */
+  .ntask-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ntask-h .tt{font-weight:600;color:var(--ink);font-size:13.5px}
+  .nprog.err{background:#fdf0ee;border-color:#f0c2bd;color:#b42318}
+  .rwbox{margin-top:8px}
+  .testplan{margin-top:8px;font-size:12px}
+  .testplan>summary{cursor:pointer;color:var(--dim);font-weight:600;list-style:none}
+  .tpbody{position:relative;margin-top:6px}
+  .testplan pre{white-space:pre-wrap;background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:10px 12px;padding-right:64px;margin:0;font-size:11.5px;line-height:1.5}
+  /* clean, modern floating Copy button pinned to the box's top-right corner */
+  .testplan .cp{position:absolute;top:7px;right:7px;font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--dim);border-radius:6px;padding:2px 9px;box-shadow:0 1px 2px rgba(0,0,0,.06);opacity:.9;transition:color .12s,border-color .12s,box-shadow .12s,opacity .12s}
+  .testplan .cp:hover{color:var(--ink);border-color:#c4cad0;opacity:1;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+  .ftchip{font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px}
+  .ft-pass{color:var(--ready);background:#e6f4ea} .ft-fail{color:var(--fail);background:#fde8e8}
+  .ft-blocked{color:var(--block);background:#fdeee2} .ft-skipped{color:var(--dim);background:#eef0f2}
+  .ftdetail{margin-top:6px;font-size:12px} .ftdetail>summary{cursor:pointer;color:var(--dim)}
+  .ftturns{margin:6px 0;padding-left:18px;font-size:12px;color:#3d4450}
+  .ftout{white-space:pre-wrap;background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:11px;margin-top:6px}
+  .otherdoc{margin-top:16px}
+  #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:20px}
+  .modal-box{background:var(--paper);border-radius:10px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
+  #modal-log{white-space:pre-wrap;padding:14px 16px;margin:0;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,monospace}
+  /* /manager setup progress feed — the live ingest steps */
+  .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
+  .setupwrap.doc{margin:16px auto 0}
+  .setup{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:0 2px 14px rgba(0,0,0,.06)}
+  .setup-h{font-size:14.5px;font-weight:650;color:var(--ink);display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .setup-steps{display:flex;flex-direction:column}
+  .stp{display:flex;align-items:flex-start;gap:11px;padding:6px 0 6px 14px;margin-left:7px;border-left:2px solid var(--line)}
+  .stp.active{border-left-color:var(--prog)} .stp.done{border-left-color:var(--ready)} .stp.error{border-left-color:var(--fail)}
+  .stp-ic{flex:0 0 auto;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;margin-top:1px}
+  .stp-ic.ok{background:var(--ready)} .stp-ic.err{background:var(--fail)}
+  .stp-ic.sp{background:transparent;border:2px solid var(--prog);border-top-color:transparent;animation:spin .7s linear infinite}
+  .sp-lg{width:15px;height:15px;border-radius:50%;border:2px solid var(--prog);border-top-color:transparent;display:inline-block;animation:spin .7s linear infinite}
+  .stp-l{font-size:13px;font-weight:500;color:var(--ink);line-height:1.35}
+  .stp.done .stp-l{color:var(--dim);font-weight:400}
+  .stp-d{font-size:11.5px;color:var(--dim);margin-top:2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---- phone ---- */
+  @media (max-width:640px){
+    body{overflow-x:hidden}
+    header{flex-wrap:wrap;gap:8px 10px;padding:9px 13px}
+    header .cov{order:5;width:100%}
+    /* drop the side index; the doc scrolls fine on a phone */
+    #shell{grid-template-columns:1fr;height:calc(100vh - 86px)}
+    #index{display:none}
+    #stage{overflow-x:auto}                 /* let the PDF pixel-board pan if used */
+    .ndoc{padding:18px 15px;margin:14px auto 90px;border-radius:8px}
+    .ntest{font-size:18px} .nfeat{font-size:14px}
+    .nfind{padding:11px 12px} a{word-break:break-word}
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">Review</span><span class="sub" id="sub">…</span>
+  <span class="live"><i></i> live</span>
+  <div class="spacer"></div>
+  <div class="cov" id="cov"></div>
+  <span id="capctl" class="capctl"></span>
+  <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
+  <button class="hbtn gh" onclick="reconnectManager(this)" title="copy the command to reopen the /manager orchestrator (the daemon + all tasks persist)">⧉ Reconnect</button>
+  <button class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
+</header>
+<div id="pausebanner"></div>
+<div id="shell">
+  <nav id="index"><div class="ihead">requirements</div></nav>
+  <div id="stage"><div class="skel"></div></div>
+</div>
+<div id="modal"><div class="modal-box">
+  <div class="modal-head"><span id="modal-title"></span><button class="tbtn gh" onclick="closeModal()">Close</button></div>
+  <pre id="modal-log"></pre>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// inline markdown: escape, then render **bold** (Notion carries "**Feature**: …")
+const mdi=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+async function api(p){ return (await fetch(p)).json(); }
+function uiBusy(){ if(window.getSelection&&String(window.getSelection()).length) return true;
+  const a=document.activeElement; return !!(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA")); }
+const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// A cumulative pipeline breadcrumb for a task/finding: the states it has moved
+// through, in order, with the current one lit — new states append at the end.
+const LABV={"queued":"--queued","in progress":"--prog","testing":"--test","PR ready":"--ready",
+  "needs you":"--wait","failed":"--fail","blocked":"--block","done":"--ready","draft":"--queued",
+  "no task":"--none","context":"--ctx"};
+const PIPE=["queued","in progress","testing","PR ready"];   // the happy-path order
+function pipelineRow(cur){
+  if(!cur || cur==="no task" || cur==="context") return "";
+  let idx=PIPE.indexOf(cur), branch=null;
+  if(idx===-1){                                   // off the happy path
+    if(cur==="needs you"){ idx=1; branch="needs you"; }   // reached "in progress", now on you
+    else if(cur==="failed"){ idx=1; branch="failed"; }
+    else if(cur==="blocked"){ idx=-1; branch="blocked"; }
+    else idx=0;
+  }
+  const steps=idx>=0?PIPE.slice(0,idx+1):[];
+  const pill=(l,on)=>{const c=cssv(LABV[l]||"--none");
+    return `<span class="pstep${on?' cur':''}" style="color:${c};background:${c}1f;border-color:${c}55">${l}</span>`;};
+  const pills=steps.map(l=>pill(l, !branch && l===cur));
+  if(branch) pills.push(pill(branch,true));
+  return `<div class="prow">${pills.join('<span class="parr">→</span>')}</div>`;
+}
+
+// ---- Test-this-branch: boot ONE dev server (the configured dev_command) for a
+// task's worktree, same as the main panel. TESTSRV comes from /api/state.
+let TESTSRV=null;
+async function apiPost(p,b){ return (await fetch(p,{method:"POST",
+  headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})})).json(); }
+async function startTest(path,btn){ if(btn){btn.disabled=true;btn.textContent="Starting…";}
+  await apiPost("/api/testserver/start",{path}); refresh(); }
+async function stopTest(btn){ if(btn) btn.disabled=true; await apiPost("/api/testserver/stop",{}); refresh(); }
+function testBtn(t){
+  if(!t.worktree) return "";                                   // no worktree yet / cleaned up
+  const isTest = TESTSRV && TESTSRV.worktree===t.worktree;
+  if(!isTest) return `<button class="tbtn" onclick='startTest(${JSON.stringify(t.worktree)},this)'>▶ Test this branch</button>`;
+  if(TESTSRV.error) return `<span class="terr">✗ dev server crashed</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
+  if(TESTSRV.web_up) return `<a class="applink" href="${TESTSRV.web_url}" target="_blank" title="${esc(TESTSRV.web_url||"")}">▶ Open app</a> <button class="tbtn gh" onclick="stopTest(this)">Stop test</button>`;
+  return `<span class="tstarting"><span class="pulse"></span>starting dev server… (first boot can take a minute)</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
+}
+
+// ---- Collapsible findings: click a finding's header to shrink it to just the
+// header (severity + state pipeline). Persist collapsed ids across refreshes.
+const COLLAPSED=new Set();
+function toggleFind(id){
+  COLLAPSED.has(id) ? COLLAPSED.delete(id) : COLLAPSED.add(id);
+  const el=document.getElementById("find-"+id);
+  if(el) el.classList.toggle("collapsed", COLLAPSED.has(id));
+}
+
+// ============================ full task controls ==========================
+// Everything the classic panel does, brought onto the review board.
+let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0;
+// REPO + SKILLDIR come from /api/state (the configured target repo and the
+// manager skill's install dir) — used in copy-to-terminal commands.
+let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager";
+let PROGRESS={steps:[],active:false,done:false};
+const REWORK_OPEN=new Set(), TESTPLAN_OPEN=new Set();
+// Live setup feed shown while a /manager run ingests a source (fetch → parse →
+// download → register → triage → dispatch). A clean vertical stepper.
+function setupCard(){
+  const steps=PROGRESS.steps||[]; if(!steps.length) return "";
+  const rows=steps.map(s=>{
+    const ic = s.status==="done" ? `<span class="stp-ic ok">✓</span>`
+      : s.status==="error" ? `<span class="stp-ic err">✕</span>`
+      : `<span class="stp-ic sp"></span>`;
+    return `<div class="stp ${s.status}">${ic}<div class="stp-t"><div class="stp-l">${esc(s.label)}</div>${s.detail?`<div class="stp-d">${esc(s.detail)}</div>`:""}</div></div>`;
+  }).join("");
+  const head = PROGRESS.done ? "✓ Board ready" : "Setting up your board…";
+  return `<div class="setup"><div class="setup-h">${PROGRESS.done?"":`<span class="sp-lg"></span>`}${head}</div><div class="setup-steps">${rows}</div></div>`;
+}
+function progSig(){ return JSON.stringify((PROGRESS.steps||[]).map(s=>[s.label,s.status,s.detail])); }
+function renderControls(s){
+  const cap=s.cap||1;
+  $("#capctl").innerHTML=`<span class="caplbl">concurrency</span>`+
+    `<button class="capb" onclick="setCap(${cap-1})">−</button><b>${cap}</b><button class="capb" onclick="setCap(${cap+1})">+</button>`;
+  const pb=$("#pausebtn"); pb.textContent=PAUSED?"▶ Resume":"⏸ Pause"; pb.className="hbtn"+(PAUSED?" primary":" gh");
+  // Only surface the time-sensitive rate-limit cooldown; the plain "Paused"
+  // state is already shown by the Resume button, so no banner for it.
+  const q=(s.counts&&s.counts.queued)||0; let banner="";
+  if(COOLDOWN>0 && !s.manual_pause){ banner=`<div class="banner">⏳ Rate-limit cooldown — auto-resumes in ~${Math.ceil(COOLDOWN/60)} min (${q} queued). Hit ▶ Resume to override.</div>`; }
+  $("#pausebanner").innerHTML=banner;
+}
+function ago(iso){ const t=Date.parse(iso); if(isNaN(t)) return "";
+  const s=Math.max(0,(Date.now()-t)/1000);
+  if(s<60) return Math.round(s)+"s"; if(s<3600) return Math.round(s/60)+"m";
+  if(s<86400) return Math.round(s/3600)+"h"; return Math.round(s/86400)+"d"; }
+function showModal(t,x){ $("#modal-title").textContent=t; $("#modal-log").textContent=x; $("#modal").style.display="flex"; }
+function closeModal(){ $("#modal").style.display="none"; }
+
+async function answer(qid,text){ if(!text)return; await apiPost(`/api/questions/${qid}/answer`,{answer:text}); refresh(); }
+async function setStatus(tid,status){ await apiPost(`/api/tasks/${tid}/status`,{status}); refresh(); }
+async function togglePause(){ await apiPost(PAUSED?"/api/resume":"/api/pause",{}); refresh(); }
+async function setCap(n){ if(n<1)return; await apiPost("/api/cap",{cap:n}); refresh(); }
+async function clearAll(btn){
+  if(!confirm("Remove ALL tasks, questions and history from the board?\n\nGit worktrees are left untouched — remove those with each task's Delete button. This can't be undone."))return;
+  const label=btn?btn.textContent:""; if(btn){btn.disabled=true;btn.textContent="Clearing…";}
+  try{ await apiPost("/api/reset",{}); }catch(e){ alert("Could not clear the board: "+e); }
+  finally{ if(btn){btn.disabled=false;btn.textContent=label;} refresh(); }
+}
+function toggleRework(tid){ REWORK_OPEN.has(tid)?REWORK_OPEN.delete(tid):REWORK_OPEN.add(tid); renderNotion(); }
+async function sendRework(tid){ const v=($("#rw"+tid)?.value||"").trim(); if(!v)return;
+  REWORK_OPEN.delete(tid); await apiPost(`/api/tasks/${tid}/rework`,{feedback:v}); refresh(); }
+async function resumeTask(tid,btn){ if(btn){btn.disabled=true;btn.textContent="Resuming…";}
+  await apiPost(`/api/tasks/${tid}/resume`,{}); refresh(); }
+async function cleanupTask(tid){
+  if(!confirm("All done with this one?\n\nRemoves its git worktree and deletes the branch (only if merged), then clears the task.\n\nMake sure you've MERGED the PR first.")) return;
+  showModal("🧹 Cleaning up…","▸ stopping dev servers\n▸ removing the worktree\n▸ pruning + de-registering\n▸ deleting the branch (only if merged)\n\nworking…");
+  let r; try{ r=await apiPost(`/api/tasks/${tid}/cleanup`,{}); }catch(e){ r={output:"error: "+e}; }
+  $("#modal-title").textContent="✓ Cleanup complete"; $("#modal-log").textContent=(r.output||"").trim()||"Done."; refresh();
+}
+async function deleteTask(tid){
+  if(!confirm("Delete this task?\n\nAbandons it: stops dev servers, removes the git worktree, and DELETES its branch (even if unmerged). The work is discarded. Cannot be undone.")) return;
+  showModal("🗑 Deleting…","▸ stopping dev servers\n▸ removing the worktree\n▸ deleting the branch\n\nworking…");
+  let r; try{ r=await apiPost(`/api/tasks/${tid}/delete`,{}); }catch(e){ r={output:"error: "+e}; }
+  $("#modal-title").textContent="✓ Deleted"; $("#modal-log").textContent=(r.output||"").trim()||"Done."; refresh();
+}
+function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claude --resume ${sid}`)
+  .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
+function copyTestPlan(ev,id){ ev.preventDefault(); ev.stopPropagation();
+  const txt=document.getElementById(id)?.textContent||"";
+  navigator.clipboard.writeText(txt).then(()=>{const b=ev.target;const o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1200);}); }
+function onTestPlanToggle(id,open){ open?TESTPLAN_OPEN.add(id):TESTPLAN_OPEN.delete(id); }
+function reconnectManager(btn){
+  // Smoothly copy the resume command (falls back to a fresh /manager if the
+  // orchestrator session isn't registered). Button flashes "copied ✓" — no modal.
+  const cmd=MANAGER_SESSION?`cd ${REPO} && claude --resume ${MANAGER_SESSION}`:`cd ${REPO} && claude "/manager"`;
+  navigator.clipboard.writeText(cmd).then(()=>{
+    if(btn){ const o=btn.textContent; btn.textContent=MANAGER_SESSION?"copied resume ✓":"copied ✓"; btn.disabled=true;
+      setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); }
+  }).catch(()=>{ showModal("⧉ Reconnect manager","Copy failed — paste this in a terminal:\n\n  "+cmd); });
+}
+
+// feature-test verdict (recorded by the run) — chip + expandable detail
+function ftParse(t){ try{ const f=JSON.parse(t.featuretest||"null");
+  if(f && !["pass","fail","blocked","skipped"].includes(f.verdict)) f.verdict="fail"; return f; }catch(e){ return null; } }
+function featuretestChip(t){ const f=ftParse(t); if(!f||!f.verdict) return "";
+  return ` <span class="ftchip ft-${f.verdict}">🧪 ${f.verdict}</span>`; }
+function featuretestDetail(t){ const f=ftParse(t); if(!f||!f.verdict) return "";
+  const turns=(f.turns||[]).map(x=>`<li><b>#${x.n??""}</b> ${esc(x.note||"")}${x.result?` → <i>${esc(x.result)}</i>`:""}</li>`).join("");
+  const out=f.output?`<pre class="ftout">${esc(f.output)}</pre>`:"";
+  if(!turns&&!out&&!f.test&&!f.cycles) return "";
+  const head=`feature test: ${f.verdict}${f.cycles?` · ${f.cycles} cycle${f.cycles===1?"":"s"}`:""}${f.test?` · ${esc(f.test)}`:""}`;
+  return `<details class="ftdetail"><summary>🧪 ${esc(head)}</summary>${turns?`<ul class="ftturns">${turns}</ul>`:""}${out}</details>`; }
+
+// The task's action bar. One primary action per state; secondary actions stay
+// quiet; the session chip + a single "Remove" sit to the right.
+function taskActions(t){
+  const tb=testBtn(t);
+  const reworkBtn=t.session_id?`<button class="tbtn gh" onclick="toggleRework(${t.id})">Doesn't work →</button>`:"";
+  const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
+  // ONE removal control on every task: full teardown — stops servers, removes
+  // the worktree, deletes the branch, drops the task. "Delete everything here."
+  const remove=`<button class="tbtn danger" onclick="removeTask(${t.id})" title="stop servers, remove the worktree, delete the branch, and clear this task">🗑 Remove</button>`;
+  let main="";
+  if(t.status==="failed"){
+    const resumeBtn=t.session_id?`<button class="tbtn primary" onclick="resumeTask(${t.id},this)">▶ Resume</button>`:"";
+    const prLink=t.pr_url?`<a class="tbtn gh" href="${esc(t.pr_url)}" target="_blank">partial PR ↗</a>`:"";
+    main=`${resumeBtn} ${prLink} ${reworkBtn} <button class="tbtn gh" onclick="setStatus(${t.id},'queued')">Retry fresh</button>`;
+  } else if(t.status==="blocked"){
+    main=`<button class="tbtn primary" onclick="setStatus(${t.id},'queued')">Queue anyway</button>`;
+  } else if(t.status==="done"){
+    main=`${t.pr_url?`<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`:""} ${tb} ${reworkBtn}`;
+  } else if(t.status==="running"||t.status==="parked"){ main=tb; }
+  return `<div class="tact">${main}<span class="tspacer"></span>${sess}${remove}</div>`;
+}
+// One consolidated removal (replaces the old "clean up" + "delete" pair).
+async function removeTask(tid){
+  if(!confirm("Remove this task?\n\nStops its dev servers, removes the git worktree, deletes its branch, and clears it from the board.\n\nMerge the PR on GitHub first if you want to keep it — the remote PR is unaffected. This can't be undone."))return;
+  showModal("🗑 Removing…","▸ stopping dev servers\n▸ removing the worktree\n▸ deleting the branch\n\nworking…");
+  let r; try{ r=await apiPost(`/api/tasks/${tid}/delete`,{}); }catch(e){ r={output:"error: "+e}; }
+  $("#modal-title").textContent="✓ Removed"; $("#modal-log").textContent=(r.output||"").trim()||"Done."; refresh();
+}
+
+// A task row. Under a finding (`bare`) it's just progress + actions — the
+// finding header already carries the title's context and the state pipeline,
+// so the row doesn't repeat the tool's task title / verdict / pipeline. In the
+// standalone "Other tasks" list (no finding above it) it shows title + pipeline.
+function taskRow(t, bare){
+  const prog=(t.status==="running"||t.status==="parked")&&t.progress?`<div class="nprog"><span class="pulse"></span>${esc(t.progress)}</div>`:"";
+  const stopMsg=(t.status==="failed"&&t.stopped_reason)?`<div class="nprog err">⚠ ${esc(t.stopped_reason)}</div>`:"";
+  const rw=REWORK_OPEN.has(t.id)?`<div class="rwbox"><textarea id="rw${t.id}" rows="3" placeholder="What went wrong when you tested it? This goes to the SAME Claude session — it fixes the same worktree + PR."></textarea><div class="tact"><button class="tbtn primary" onclick="sendRework(${t.id})">Send to Claude →</button> <button class="tbtn gh" onclick="toggleRework(${t.id})">Cancel</button></div></div>`:"";
+  let testplan="";
+  if(t.status==="done"&&t.test_plan){ const id="tp"+t.id;
+    testplan=`<details class="testplan" ${TESTPLAN_OPEN.has(t.id)?'open':''} ontoggle="onTestPlanToggle(${t.id},this.open)"><summary>🧪 Test steps</summary><div class="tpbody"><button class="cp" onclick="copyTestPlan(event,'${id}')">Copy</button><pre id="${id}">${esc(t.test_plan)}</pre></div></details>`;
+  }
+  const head = bare ? "" : `<div class="ntask-h"><span class="tt">${esc(t.title)}</span></div>${pipelineRow(taskState(t).l)}`;
+  return `<div class="ntask">${head}${prog}${stopMsg}${taskActions(t)}${rw}${testplan}</div>`;
+}
+
+function questionCard(q){
+  const opts=(q.options||[]).map(o=>`<button class="tbtn" onclick="answer(${q.id},${JSON.stringify(o).replace(/"/g,'&quot;')})">${esc(o)}</button>`).join("");
+  return `<div class="qcard">
+    <div class="qh"><span class="pulse"></span><b>Needs your input</b> · session ${(q.session_id||'').slice(0,8)}${q.task_id?` · task #${q.task_id}`:""} · ${ago(q.created_at)} ago</div>
+    <div class="qq">${esc(q.question)}</div>
+    ${q.context?`<div class="qctx">${esc(q.context)}</div>`:""}
+    ${opts?`<div class="qopts">${opts}</div>`:""}
+    <textarea id="ta${q.id}" rows="2" placeholder="…or type a custom reply"></textarea>
+    <div class="tact"><button class="tbtn primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>${q.task_id?` <button class="tbtn gh" onclick="deleteTask(${q.task_id})">🗑 Delete task</button>`:""}</div>
+  </div>`;
+}
+
+const PAGEW=520, GAP=10, NOTESW=330, COLGAP=26;
+const STATE={ queued:{l:"queued",v:"--queued"}, running:{l:"in progress",v:"--prog"},
+  parked:{l:"needs you",v:"--wait"}, done:{l:"PR ready",v:"--ready"}, failed:{l:"failed",v:"--fail"},
+  blocked:{l:"blocked",v:"--block"}, needs_input:{l:"needs you",v:"--wait"}, draft:{l:"draft",v:"--queued"} };
+function taskState(t){
+  if(t.status==="running" && /test|vitest|feature[- ]?test|verify/i.test(t.progress||"")) return {l:"testing",v:"--test"};
+  return STATE[t.status]||{l:t.status,v:"--queued"};
+}
+function pagesOf(src){ const m=(src||"").match(/\bpp?\.?\s*([\d][\d,\s–-]*)/i); if(!m) return [];
+  const out=[]; for(const part of m[1].split(",")){ const r=part.trim().match(/^(\d+)\s*[–-]\s*(\d+)$/);
+    if(r){ for(let i=+r[1]; i<=+r[2]&&i<=+r[1]+20; i++) out.push(i); } else if(/^\d+$/.test(part.trim())) out.push(+part.trim()); }
+  return [...new Set(out)]; }
+
+let TASKS=[], PDF=null, MAP=null, UIV=null, BUILT="", LAST_SIG="", LAST_ACTIVE=false, timer=null;
+function pdfPage(n){ return "/api/pdf-page?path="+encodeURIComponent(PDF)+"&page="+n; }
+
+// section state: roll up its tasks; flag findings with no task; context stays neutral
+function secState(sec){
+  const ts=sec._tasks||[];
+  if(ts.length){
+    const has=k=>ts.some(t=>t.status===k);
+    if(has("failed")) return {l:"failed",v:"--fail"};
+    if(has("blocked")) return {l:"blocked",v:"--block"};
+    if(has("parked")||has("needs_input")) return {l:"needs you",v:"--wait"};
+    const run=ts.find(t=>t.status==="running"); if(run) return taskState(run);
+    if(has("queued")) return {l:"queued",v:"--queued"};
+    if(ts.every(t=>t.status==="done")) return {l:"PR ready",v:"--ready"};
+    return taskState(ts[0]);
+  }
+  return sec.kind==="context" ? {l:"context",v:"--ctx"} : {l:"no task",v:"--none"};
+}
+
+function pageTops(){ // cumulative top + display height per page
+  const tops={}, hs={}; let y=0;
+  for(const p of MAP.pages){ const dh=Math.round(PAGEW*p.h/p.w); tops[p.n]=y; hs[p.n]=dh; y+=dh+GAP; }
+  return {tops,hs,total:y};
+}
+
+function buildStage(){
+  const stage=$("#stage");
+  if(!PDF){ stage.innerHTML=`<div class="empty">No source PDF registered for this batch.</div>`; BUILT="none"; return; }
+  if(!MAP || !MAP.pages.length){
+    const cmd=`mkdir -p "${SKILLDIR}/.pdfs" && cp "${PDF}" "${SKILLDIR}/.pdfs/source.pdf" && curl -s -X POST ${location.origin}/api/source-pdf -H 'Content-Type: application/json' -d '{"path":"${SKILLDIR}/.pdfs/source.pdf"}'`;
+    stage.innerHTML=`<div class="banner"><b>Can't read the PDF.</b> It's in a permission-protected folder (<span class="mono">${esc(PDF)}</span>). Run once in your terminal, then it appears automatically:<pre class="cmd">${esc(cmd)}</pre></div>`;
+    BUILT="nomap"; return;
+  }
+  const {tops,hs,total}=pageTops();
+  let pg="";
+  for(const p of MAP.pages) pg+=`<div class="pg" id="pg-${p.n}" style="top:${tops[p.n]}px;width:${PAGEW}px;height:${hs[p.n]}px"><img loading="lazy" src="${esc(pdfPage(p.n))}"></div>`;
+  stage.innerHTML=`<div id="docwrap" style="width:${PAGEW+COLGAP+NOTESW}px;height:${total}px">
+    <div id="pages">${pg}</div>
+    <div id="notes" style="position:absolute;left:${PAGEW+COLGAP}px;top:0;width:${NOTESW}px"></div></div>`;
+  BUILT=PDF+"|"+MAP.pages.length;
+}
+
+function renderAll(){
+  if(!MAP) return;
+  // assign tasks to sections by page-containment (section span = its page → next section's page-1)
+  const secs=MAP.sections.map((s,i)=>({...s,_i:i,_tasks:[]}));
+  const spans=secs.map((s,i)=>({lo:s.page, hi:(i+1<secs.length?secs[i+1].page-1:1e9)}));
+  const live=TASKS.filter(t=>t.status!=="rejected");
+  for(const t of live){ const pg=pagesOf(t.source)[0]||1;
+    let si=spans.findIndex(sp=>pg>=sp.lo&&pg<=sp.hi); if(si<0) si=secs.length-1;
+    if(secs[si]) secs[si]._tasks.push(t); }
+
+  // header coverage
+  const cnt={}; for(const s of secs){ const l=secState(s).l; cnt[l]=(cnt[l]||0)+1; }
+  $("#sub").textContent=(PDF?PDF.split("/").pop()+" · ":"")+secs.length+" sections";
+  const order=["PR ready","in progress","testing","needs you","blocked","failed","no task","queued","context"];
+  const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","no task":"--none","queued":"--queued","context":"--ctx"};
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+
+  // section index
+  $("#index").innerHTML=`<div class="ihead">requirements · ${secs.length}</div>`+secs.map(s=>{
+    const c=cssv(secState(s).v);
+    return `<div class="irow" data-i="${s._i}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(s.title)}">${s._i+1}. ${esc(s.title)}</span></div>`;
+  }).join("");
+
+  if(BUILT==="none"||BUILT==="nomap"||!$("#docwrap")) return;
+  const {tops,hs}=pageTops();
+  // boxes overlaid on the pages
+  document.querySelectorAll(".box").forEach(b=>b.remove());
+  for(const s of secs){ const c=cssv(secState(s).v);
+    for(const b of s.boxes){ const pg=document.getElementById("pg-"+b.page); if(!pg)continue;
+      const d=document.createElement("div"); d.className="box bx-"+s._i; d.dataset.i=s._i;
+      d.style.cssText=`left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%;border-color:${c}`;
+      if(b===s.boxes[0]) d.innerHTML=`<span class="bn" style="background:${c}">${s._i+1}</span>`;
+      pg.appendChild(d); }
+  }
+  // margin note cards, then collision-avoid downward
+  const notes=$("#notes"); notes.innerHTML="";
+  const placed=[];
+  for(const s of secs){ const st=secState(s), c=cssv(st.v);
+    const want=(tops[s.page]||0)+((s.boxes[0]?s.boxes[0].y:0)*(hs[s.page]||0));
+    const tasksHtml = s._tasks.length ? s._tasks.map(t=>{const ts=taskState(t),tc=cssv(ts.v);
+      const prog=(t.status==="running"||t.status==="parked")&&t.progress?`<div class="prog">${esc(t.progress)}</div>`:"";
+      const pr=/^https?:\/\//i.test(t.pr_url||"")?`<div class="acts"><a href="${esc(t.pr_url)}" target="_blank">${t.status==="failed"?"partial PR ↗":"PR ↗"}</a></div>`:"";
+      return `<div class="task"><span class="badge" style="color:${tc};background:${tc}22">${ts.l}</span> <span class="tt">${esc(t.title)}</span>${prog}${pr}</div>`;}).join("")
+      : `<div class="ctxn">${s.kind==="context"?"Reference / setup — not a task.":"No task recorded for this section yet."}</div>`;
+    const el=document.createElement("div"); el.className="note nt-"+s._i; el.dataset.i=s._i;
+    el.style.left="0px"; el.style.width=NOTESW+"px"; el.style.borderLeftColor=c;
+    el.innerHTML=`<div class="nh"><span class="bn" style="background:${c}">${s._i+1}</span><span class="nt">${esc(s.title)}</span>
+        <span class="badge" style="color:${c};background:${c}22">${st.l}</span></div>${tasksHtml}`;
+    notes.appendChild(el);
+    placed.push({el,want});
+  }
+  // place with no overlap
+  placed.sort((a,b)=>a.want-b.want); let cursor=0;
+  for(const p of placed){ const top=Math.max(p.want,cursor); p.el.style.top=top+"px"; cursor=top+p.el.offsetHeight+10; }
+  wireHover();
+}
+
+function wireHover(){
+  const link=(i,on)=>{ document.querySelectorAll(".bx-"+i+",.nt-"+i).forEach(e=>e.classList.toggle("hl",on)); };
+  document.querySelectorAll(".note,.box").forEach(e=>{ const i=e.dataset.i;
+    e.onmouseenter=()=>link(i,true); e.onmouseleave=()=>link(i,false); });
+  document.querySelectorAll(".irow").forEach(r=>{ const i=r.dataset.i;
+    r.onmouseenter=()=>link(i,true); r.onmouseleave=()=>link(i,false);
+    r.onclick=()=>{ const n=document.querySelector(".nt-"+i); if(n){ const stage=$("#stage");
+      stage.scrollTo({top: Math.max(0, parseFloat(n.style.top)-24), behavior:"smooth"}); }
+      document.querySelectorAll(".irow").forEach(x=>x.classList.toggle("on",x===r)); }; });
+}
+
+// ---------- Notion mode: render the doc-map (blocks) with per-finding status ----------
+let NMAP=null;
+function idOf(s){ const m=(s||"").match(/\b(\d+\.\d+(?:\.\d+){0,2})\b/); return m?m[1]:null; }
+// ALL finding ids named in a task's source — a task like "feature 2.1.1 + bug 2.1.2"
+// covers both findings, so it must surface under each (not just the first id).
+function idsOf(s){ return (s||"").match(/\b\d+\.\d+(?:\.\d+){0,2}\b/g) || []; }
+function findTasks(id){ return TASKS.filter(t=>t.status!=="rejected" && idsOf(t.source).includes(id)); }
+function findState(f){
+  const ts=findTasks(f.id);
+  if(!ts.length) return {l:"no task",v:"--none"};
+  const has=k=>ts.some(t=>t.status===k);
+  if(has("failed")) return {l:"failed",v:"--fail"};
+  if(has("blocked")) return {l:"blocked",v:"--block"};
+  if(has("parked")||has("needs_input")) return {l:"needs you",v:"--wait"};
+  const r=ts.find(t=>t.status==="running"); if(r) return taskState(r);
+  if(has("queued")) return {l:"queued",v:"--queued"};
+  if(ts.every(t=>t.status==="done")) return {l:"PR ready",v:"--ready"};
+  return taskState(ts[0]);
+}
+async function refreshNotion(){
+  if(!NMAP){ try{ NMAP=await api("/api/notion-map"); }catch(e){} }
+  const tsSig = TESTSRV ? [TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error] : null;
+  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(),
+    QUESTIONS.map(q=>[q.id,q.status,q.answer]), [...REWORK_OPEN], [...TESTPLAN_OPEN],
+    TASKS.map(t=>[t.id,t.status,t.progress,t.pr_url,t.source,t.worktree,t.stopped_reason,t.featuretest,t.session_id])]);
+  if(sig!==LAST_SIG){ LAST_SIG=sig; renderNotion(); }
+}
+function renderNotion(){
+  const stage=$("#stage");
+  if(!NMAP || !NMAP.blocks){ stage.innerHTML=`<div class="empty">Loading the Notion doc…</div>`; return; }
+  const finds=NMAP.findings||[];
+  const cnt={}; finds.forEach(f=>{const l=findState(f).l; cnt[l]=(cnt[l]||0)+1;});
+  $("#sub").textContent=(NMAP.title||"Notion")+" · "+finds.length+" findings";
+  const order=["PR ready","in progress","testing","needs you","blocked","failed","no task","queued"];
+  const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","no task":"--none","queued":"--queued"};
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+  $("#index").innerHTML=`<div class="ihead">findings · ${finds.length}</div>`+finds.map(f=>{const c=cssv(findState(f).v);
+    return `<div class="irow" data-id="${esc(f.id)}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(f.text)}">${esc(f.id)} ${esc(f.text)}</span></div>`;}).join("");
+  let html="";
+  for(const b of NMAP.blocks){
+    if(b.t==="test") html+=`<h2 class="ntest">${esc(b.text)}</h2>`;
+    else if(b.t==="feature") html+=`<h3 class="nfeat">${esc(b.text)}</h3>`;
+    else if(b.t==="text") html+=`<p class="ntext">${mdi(b.text)}</p>`;
+    else if(b.t==="image"){
+      if(b.img) html+=`<img class="nimg" loading="lazy" src="/api/image?path=${encodeURIComponent(b.img)}">`+(b.caption?`<div class="ncap">${esc(b.caption)}</div>`:"");
+      else if(b.caption) html+=`<div class="nevi"><span class="evi-ic">📷</span><span>${esc(b.caption)}</span></div>`;
+    }
+    else if(b.t==="finding"){ const st=findState(b), c=cssv(st.v), ts=findTasks(b.id);
+      const sevv=b.sev==="bug"?"--fail":b.sev==="feature"?"--prog":"--queued", sc=cssv(sevv);
+      const tasksHtml=ts.length?ts.map(t=>taskRow(t,true)).join(""):`<div class="nnotask">no task recorded yet</div>`;
+      // Screenshot evidence for this finding — the actual image when captured,
+      // otherwise the tester's description, shown right under the finding.
+      const eviHtml=(b.evidence||[]).map(ev=>{
+        const img=ev.img?`<img class="nevi-img" loading="lazy" src="/api/image?path=${encodeURIComponent(ev.img)}">`:"";
+        const id=ev.ref?`<span class="evi-id">image ${esc(ev.ref)}</span> — `:"";
+        const cap=(ev.caption||"")?`<div class="nevi"><span class="evi-ic">📷</span><span>${id}${esc(ev.caption||"")}</span></div>`:"";
+        return cap+img;
+      }).join("");
+      const collapsed = COLLAPSED.has(b.id) ? " collapsed" : "";
+      html+=`<div class="nfind${collapsed}" id="find-${esc(b.id)}" style="border-left-color:${c}">
+        <div class="nfh" onclick="toggleFind('${esc(b.id)}')" title="click to collapse / expand">
+          <span class="chev">▾</span>
+          <span class="sevtag" style="color:${sc};background:${sc}22">${esc(b.sev||b.kind)} ${esc(b.id)}</span>
+          ${pipelineRow(st.l)}</div>
+        <div class="nbody"><div class="nft">${mdi(b.text)}</div>${eviHtml}${tasksHtml}</div></div>`;
+    }
+  }
+  if(NMAP.url) html+=`<div style="text-align:center;margin:22px 0 0"><a href="${esc(NMAP.url)}" target="_blank">open the full doc in Notion ↗</a></div>`;
+
+  // Pending questions ride at the very top — they block a run and need you now.
+  const qHtml=QUESTIONS.length
+    ? `<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>` : "";
+  // Tasks not tied to any finding still surface here, so nothing is hidden.
+  const findIds=new Set((NMAP.findings||[]).map(f=>f.id));
+  const other=TASKS.filter(t=>t.status!=="rejected" && !idsOf(t.source).some(id=>findIds.has(id)));
+  const otherHtml=other.length
+    ? `<div class="ndoc otherdoc"><h2 class="ntest">Other tasks · ${other.length}</h2>${other.map(t=>taskRow(t,false)).join("")}</div>` : "";
+  const setupHtml = PROGRESS.active ? `<div class="setupwrap doc">${setupCard()}</div>` : "";
+  stage.innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`+otherHtml;
+  document.querySelectorAll(".irow").forEach(r=>{ r.onclick=()=>{
+    const id=r.dataset.id, el=document.getElementById("find-"+id), stage=$("#stage");
+    if(!el||!stage) return;
+    if(COLLAPSED.has(id)){ COLLAPSED.delete(id); el.classList.remove("collapsed"); }  // expand target
+    // Scroll the doc pane (offsetParent is #stage) directly — robust regardless
+    // of nested scroll containers.
+    stage.scrollTo({top: Math.max(0, el.offsetTop - 14), behavior:"smooth"});
+    el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 1300);
+    document.querySelectorAll(".irow.on").forEach(x=>x.classList.remove("on")); r.classList.add("on");
+  }; });
+}
+
+async function refresh(){
+  if(uiBusy()) return;
+  let s; try{ s=await api("/api/state"); }catch(e){ return; }
+  if(s.ui_version){ if(UIV===null)UIV=s.ui_version; else if(s.ui_version!==UIV){ location.reload(); return; } }
+  TASKS=s.tasks||[];
+  TESTSRV=s.test_server||null;
+  QUESTIONS=s.pending_questions||[];
+  PAUSED=!!s.paused; MANAGER_SESSION=s.manager_session||null;
+  if(s.repo) REPO=s.repo;
+  if(s.skill_dir) SKILLDIR=s.skill_dir;
+  CAP=s.cap||1; COOLDOWN=s.cooldown_left||0;
+  PROGRESS=s.progress||{steps:[],active:false,done:false};
+  renderControls(s);
+  LAST_ACTIVE=((s.counts&&((s.counts.running||0)+(s.counts.parked||0)))>0) || PROGRESS.active;
+  if(s.notion){ return refreshNotion(); }   // Notion source → Notion mode (PDF stays as fallback)
+  // No doc yet, but a /manager run is loading one — show the live setup feed.
+  if(PROGRESS.steps.length && !s.source_pdf){
+    const sig="setup:"+progSig(); if(sig!==LAST_SIG){ LAST_SIG=sig; $("#stage").innerHTML=`<div class="setupwrap">${setupCard()}</div>`; }
+    return;
+  }
+  const pdf=s.source_pdf||null;
+  if(pdf!==PDF){ PDF=pdf; MAP=null;
+    if(PDF){ try{ MAP=await api("/api/pdf-map?path="+encodeURIComponent(PDF)); }catch(e){ MAP=null; } }
+    buildStage();
+  }
+  const sig=JSON.stringify([PDF,MAP&&MAP.sections.length,TASKS.map(t=>[t.id,t.status,t.progress,t.pr_url,t.source,t.title])]);
+  if(sig!==LAST_SIG){ LAST_SIG=sig; renderAll(); }
+}
+async function loop(){
+  try{ await refresh(); }catch(e){ console.error("review refresh failed:", e); }  // never let one error kill live updates
+  timer=setTimeout(loop, document.hidden?8000:(LAST_ACTIVE?1500:4000));
+}
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ clearTimeout(timer); loop(); } });
+loop();
+</script>
+</body>
+</html>

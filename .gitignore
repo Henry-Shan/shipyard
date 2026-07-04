@@ -1,0 +1,12 @@
+config.json
+manager.db
+manager.db-*
+runs/
+__pycache__/
+*.pyc
+.notion/
+.pdfs/
+.manager_session
+.source_pdf
+.notion_map
+.DS_Store

@@ -1,0 +1,416 @@
+---
+name: manager
+version: 0.2.0
+description: |
+  The autonomous managing agent that sits ABOVE /ship-task. Ingests a messy work
+  source (a Notion page URL, a PDF of QA findings + screenshots, a folder, or a
+  typed list), GROUNDS each item in the repo and the live base branch (never
+  guesses about schema/code), DEDUPES against already-shipped work, CONSOLIDATES
+  duplicates, TRIAGES each to a ship-task tier, then RUNS THE WHOLE BATCH ITSELF —
+  dispatching /ship-task runs in parallel, each taken all the way to a green PR
+  (it stops at PR-ready; the human does the final merge). It behaves like a good
+  intern: when unsure it investigates first (repo, git history, project docs/memory)
+  and only escalates a GENUINE preference it cannot determine from evidence — one
+  plain-language question with a recommendation, surfaced in a localhost panel. It
+  reports what it could not do (blocked / needs-scope) rather than guessing. Use
+  when asked to "run the manager", "process this QA doc", "get these tasks done",
+  or to orchestrate many ship-task runs autonomously.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - Agent
+  - AskUserQuestion
+---
+
+# /manager — orchestrate many /ship-task runs from one grounded, curated queue
+
+The manager is the brain; `/ship-task` is the hands. The manager NEVER writes
+product code itself — it decides *what* to build, proves each task is real and
+not-already-done, and hands well-scoped units to `/ship-task`, which owns all
+landing safety (branch → PR → green CI → human approval → merge).
+
+The invocation argument is the **work source**: a **Notion page URL** (optional —
+requires the user's Notion connector; cleanest extraction when available), a path
+to a PDF / folder of artifacts, or a typed list of tasks. Examples:
+`/manager https://app.notion.com/p/tests-382dbf1afc79806aa5e8c06548895df6`
+`/manager ~/Desktop/task1`
+
+## Paths and settings used below
+
+All project-specific values come from the skill's config (`config.json` next to
+this file; see `config.example.json`). Resolve these once at the start and use
+them everywhere:
+
+```bash
+SKILL_DIR="${SKILL_DIR:-$HOME/.claude/skills/manager}"   # where THIS skill is installed
+[ -f "$SKILL_DIR/managerd.py" ] || SKILL_DIR="$(pwd)/.claude/skills/manager"  # project-level install fallback
+C(){ python3 "$SKILL_DIR/skill_config.py" get "$1"; }
+REPO="$(C repo)"; BASE="$(C base_branch)"; MURL="http://127.0.0.1:$(C panel_port)"
+```
+
+If `python3 "$SKILL_DIR/skill_config.py" check` fails, stop and tell the user to
+create `config.json` (the installer normally writes it).
+
+## The iron rules (this is why the manager exists)
+
+1. **Be autonomous. Get the batch done.** After triage, you queue and dispatch
+   everything you're confident about and run it to a green PR yourself — no
+   per-task approval from the human. Default to acting.
+2. **Investigate before asking — like an intern, not a helpdesk.** When unsure,
+   resolve it yourself first: read the repo, check `git log`, read the project
+   docs (CLAUDE.md, README, ADRs) or the memory MCP if one is configured,
+   dispatch an Explore subagent. The test for whether to escalate is **factual
+   vs. preference**:
+   - **Factual** ("does the 403 still repro on the base branch?", "where is this
+     endpoint wired?", "is this fixed by #265?") → you can look this up. NEVER
+     ask it. Investigate until you know.
+   - **Preference** ("should the export include archived items by default?",
+     "notifications: per-event emails or a daily digest?", "org-wide or
+     team-only visibility?") → only the human knows their intent. Escalate ONE
+     short, plain-language question **with your recommendation**
+     (`core.ask_preference`). One per task, max.
+3. **Never re-dispatch shipped work.** Cross-reference every candidate against
+   the shipped history (`git log origin/<base_branch>`, the manager archive, and
+   the memory MCP if configured). A huge fraction of any QA doc is already fixed
+   by the time you read it; dropping those is the manager's biggest value-add.
+4. **Stop at PR-ready. Never merge.** Each run goes to a green PR against the
+   base branch and stops; the human merges from GitHub. (The merge boundary is
+   configured — current default is PR-ready.)
+5. **Report what you couldn't do.** Anything you can't execute — external blockers,
+   investigate-only, or a feature too big without a scope decision — goes to the
+   `blocked` bucket with a one-line reason, NOT a guess and NOT silence.
+
+## Phase 0 — (Re)start the control panel
+
+**Always restart the daemon at the start of a `/manager` run** so it picks up the
+latest code. `serve` is restart-first: it frees its port (killing any stale
+daemon) before binding, so just run it — no manual stop needed:
+
+```bash
+cd "$SKILL_DIR"
+python3 managerd.py init
+python3 managerd.py serve   # run in background; replaces any running daemon
+```
+
+Port and concurrency come from config (`panel_port`, `dispatch_cap`); env vars
+(`MANAGER_PORT`, `MANAGER_CAP`) still override. `serve` auto-opens the panel in a
+browser on startup. If it doesn't, open it:
+
+```bash
+open "$MURL" 2>/dev/null || xdg-open "$MURL"
+```
+
+Tell the user the URL (`$MURL`). The dashboard, suggestions inbox, worktrees, and
+activity log all live there.
+
+**Register this session for the panel's "⧉ Reconnect" button** (best-effort, so a
+closed window can be resumed with `claude --resume`). Your session id is the newest
+transcript in **this session's own project dir** (Claude Code mangles the startup
+cwd, mapping both `/` and `.` to `-`). Scope the lookup to that dir so a parallel
+ship-task worker's or another project's transcript can't be mistaken for yours, and
+only register a well-formed UUID (the daemon also rejects non-UUIDs):
+
+```bash
+PROJ="$HOME/.claude/projects/$(pwd | sed 's#[/.]#-#g')"   # this session's transcript dir
+SID="$(ls -t "$PROJ"/*.jsonl 2>/dev/null | head -1 | xargs -I{} basename {} .jsonl 2>/dev/null)"
+if printf '%s' "$SID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+  curl -s -X POST "$MURL/api/manager-session" \
+    -H 'Content-Type: application/json' -d '{"session_id":"'"$SID"'"}' >/dev/null
+fi
+```
+
+If it can't determine the id, the Reconnect button still works — the panel shows
+BOTH the `--resume` command (when an id is registered) and a fresh-`/manager`
+command on this same daemon, so the human picks. The queue + all tasks persist
+regardless.
+
+### Progress beacons — show the user the ingest happening live
+
+The board renders a clean, live "Setting up your board…" stepper from progress
+beacons you POST. **Fire one at the start of each phase below** so the user sees
+the process unfold instead of a blank board. Each is a fire-and-forget curl
+(token-light — announce the step as you begin it; a new step auto-completes the
+previous one). Reset the feed once, right after the daemon is up:
+
+```bash
+P(){ curl -s -X POST "$MURL/api/progress" -H 'Content-Type: application/json' -d "$1" >/dev/null; }
+P '{"clear":true}'                                             # start of the run
+P '{"label":"Started the control panel"}'
+```
+
+Then, as you reach each phase, beacon it (put real counts in `detail`):
+
+| When | Beacon |
+|------|--------|
+| Before fetching the source | `P '{"label":"Fetching the source doc"}'` |
+| After `notion_ingest` prints its summary | `P '{"label":"Parsed findings + downloaded screenshots","detail":"4 findings · 7 images"}'` |
+| After registering the map (`/api/source-notion`) | `P '{"label":"Loaded the doc onto the board"}'` |
+| Phase 2 start | `P '{"label":"Grounding in the repo"}'` |
+| Phase 3 start | `P '{"label":"Checking against already-shipped work"}'` |
+| Phase 5–6 start | `P '{"label":"Triaging + queuing tasks"}'` |
+| After all `managerd.py add` | `P '{"label":"Queued N tasks — dispatching","detail":"N runs","status":"done"}'` |
+
+The final beacon with `"status":"done"` flips the header to "✓ Board ready" and
+the stepper hands off to the live task board. On an error, send
+`P '{"status":"error","detail":"what failed"}'` so the user sees where it stopped.
+
+## Phase 1 — Ingest the work source
+
+**A `/manager <source>` invocation ADDS to the existing board — it NEVER wipes
+prior runs or history.** Do NOT reset the queue at the start of a run. The board
+persists across runs; only the human clears it, manually, via the **🗑 Clear all**
+button at the top of the panel (or, from a shell, `python3 managerd.py reset`).
+
+So re-runs don't stack duplicate tasks, dedupe new candidates against what's
+already on the board before adding them:
+
+```bash
+curl -s "$MURL/api/state"    # current tasks — skip any candidate whose
+                             # source finding id / title is already present
+```
+
+(This is on top of the usual dedup against already-shipped work. Git worktrees
+from prior runs are always left alone — they may hold unpushed work; the user
+removes them with the per-worktree button in the panel.)
+
+
+- **Notion page** (the arg is an `app.notion.com` / `notion.so` URL) — **optional
+  path; requires the user's Notion connector/MCP in Claude Code**. When available
+  it's the cleanest source: real headings, per-finding ids + severity, images as
+  URLs, no OCR. If there is no Notion tool available, tell the user and ask for a
+  PDF/folder/typed list instead. Do it token-light — fetch ONCE, then let the
+  script do the parsing + image download:
+  1. `notion-fetch` with `{id: "<the URL>"}` (one call).
+  2. Save the returned page `text` to `$SKILL_DIR/.notion/raw.md`
+     (Write it once), then run the ingest script — it builds a compact doc-map,
+     downloads the images locally, and prints a token-light candidate list (triage from
+     THAT, never re-read the raw blob):
+     ```bash
+     python3 "$SKILL_DIR/notion_ingest.py" \
+       --raw "$SKILL_DIR/.notion/raw.md" \
+       --url "<the URL>" --title "<page title>"
+     # prints:  NOTION_MAP <map.json path>   then  [sev] id  text   per finding
+     ```
+  3. Register the map so the review board renders the Notion source:
+     `curl -s -X POST "$MURL/api/source-notion" -H 'Content-Type: application/json' -d '{"path":"<the map.json path it printed>"}' >/dev/null`
+  4. Triage from the printed findings (each already has an `id` + severity + text). Set
+     each task's `source` to include the finding id (e.g. `"tests — bug 1.1.1"`) so the
+     board links it to that finding by id. **Attach the finding's screenshots as evidence**
+     so both the board AND the ship-task agent get them — the ingest downloaded them into
+     the map. For a finding, pull its evidence image paths from the map and pass them to
+     `--evidence` (JSON list of absolute paths). One-liner to get a finding's image paths:
+     ```bash
+     python3 - "$MAP" 4.1.1 <<'PY'   # $MAP = the map.json path; 2nd arg = finding id
+     import json,os,sys
+     m=json.load(open(sys.argv[1])); base=os.path.dirname(sys.argv[1])
+     for b in m["blocks"]:
+       if b.get("t")=="finding" and b.get("id")==sys.argv[2]:
+         print(json.dumps([os.path.join(base,e["src"]) for e in b.get("evidence",[]) if e.get("src")]))
+     PY
+     ```
+     Skip the PDF/folder steps below.
+- **Folder / PDF** (no Notion URL): first clear any stale Notion source so the board
+  uses the PDF — `curl -s -X POST "$MURL/api/source-notion" -H 'Content-Type: application/json' -d '{}' >/dev/null`. Then: read the PDF with the Read tool (≤20 pages per call), and
+  inventory the asset folder (screenshots, CSVs). The screenshots are often the
+  primary signal (a red error toast, a broken state) — read the relevant ones,
+  don't skip them. Map each candidate finding to the exact evidence image
+  path(s) and a `source` label (e.g. `"QA June 6th p4 Bug 1.1.2"`).
+  - **Make the source PDF viewable on the review board.** COPY it into the manager's
+    own dir first — so the daemon can read it even when the original lives in a
+    TCC-protected folder like `~/Desktop`/`~/Documents`/`~/Downloads` (on macOS a
+    sandboxed daemon gets "Operation not permitted" reading those) — then register
+    the copy:
+    ```bash
+    mkdir -p "$SKILL_DIR/.pdfs"
+    cp "<absolute path to the uploaded PDF>" "$SKILL_DIR/.pdfs/source.pdf"
+    curl -s -X POST "$MURL/api/source-pdf" -H 'Content-Type: application/json' \
+      -d '{"path":"'"$SKILL_DIR"'/.pdfs/source.pdf"}' >/dev/null
+    ```
+    The board renders the whole PDF (poppler `pdftoppm`/`pdfinfo` — optional
+    dependency; PDF ingest still works without the board view) with each task's
+    progress pinned beside the page its `source` label points to.
+- **CSV/XLSX**: read structure; it is usually setup/fixture data, not a task —
+  but note it as context.
+- Produce a raw candidate list. Mark each with the doc's own signal (🔴 bug,
+  🟠 feature, struck-through / "DONE" / "(Fixed)" / "(canceled)" = NOT a task).
+
+## Phase 2 — Ground every candidate (mandatory, before triage)
+
+Never triage from the doc alone — ground each candidate in what the project
+actually is:
+
+- **If a memory MCP is configured** (config `memory_mcp` is set): check its
+  status once, then search it for every subsystem the doc touches. Pull the
+  high-value chunks in full (bug log, backlog, permission matrix, domain model —
+  whatever that memory holds). It tells you what's known, what's planned, and
+  which PRs already fixed what.
+- **Otherwise (the default): ground in the repo itself.** Read `CLAUDE.md` /
+  `README` / docs for the domain model; `git log origin/$BASE --oneline -100`
+  for what shipped recently; grep the code for the features/terms the doc names.
+  Phase 3's dedup pre-filter (git-based) works with no memory server at all.
+
+## Phase 3 — Dedup against what already shipped
+
+**First, run the deterministic pre-filter** — it indexes `origin/<base_branch>` +
+the manager archive once and triages every candidate in a single pass, so you only
+spend reasoning on the uncertain ones (and the likely matches arrive with their
+PR already attached, instead of you grepping per candidate):
+
+```bash
+# candidates = a JSON array of your raw candidate strings (each: a short title)
+echo '["<cand 1>","<cand 2>", …]' | python3 "$SKILL_DIR/dedup_index.py" match --stdin
+```
+
+Verdict per candidate (all **advisory** — you still decide):
+- **auto-drop** — cites a PR# that is on the base branch. The ONLY verdict the
+  script settles itself; trust it, drop, record the PR in the triage note.
+- **likely-dup** — overlaps shipped work; the matching PR(s) are attached.
+  **Confirm with judgment** — the doc may be re-reporting a *regression* in the
+  shipped feature, which the script can't tell. Usually DROP per VERIFY-ONLY
+  below, but that's your call.
+- **novel** — no overlap; carry it into triage.
+
+Then confirm/decide manually as needed:
+
+```bash
+git -C "$REPO" fetch origin "$BASE" --quiet
+# For each PR a memory/doc attributes a fix to, confirm it is on the base branch:
+git -C "$REPO" log "origin/$BASE" --oneline | grep -iE "#<pr>\b"
+```
+
+`/ship-task` lands on the configured base branch, so `origin/<base_branch>` is
+the truth for "already done" — not any other branch. For each candidate decide:
+- **DONE — verifiable** (the dedup script's `auto-drop`: it cites a PR# you
+  confirmed on the base branch) → drop, record the PR in the triage note.
+  Provable, so don't pester the human with it.
+- **LOOKS DONE — not provable** (you *judge* it's probably already fixed — a
+  `likely-dup`, a doc item marked "DONE/(Fixed)", or it seems handled on the base
+  branch but no specific PR confirms it) → do **NOT** silently drop. Create the
+  grounded task, then **surface it for the human to confirm** with `ask_if_fixed`
+  — it lands in **"Needs your input"** asking "is this already fixed?"; answering
+  *already fixed* deletes it, *not fixed* queues it to build:
+  ```python
+  import manager_core as core
+  core.ask_if_fixed(task_id, context="Looks fixed: <why — e.g. matches PR #265 / the doc marks it DONE / behaves correctly on the base branch>. Confirm so I can drop it, or say it's not fixed and I'll build it.")
+  ```
+- **OPEN** → keep.
+- **VERIFY-ONLY** → shipped but this doc is re-testing it; if you're confident it's
+  fine, treat as DONE-verifiable (drop); if unsure, use `ask_if_fixed` rather than
+  guessing. Only enqueue a Tier-0 browse re-test if there's a specific reason to doubt.
+- **BLOCKED** → real but gated on something external (e.g. a third-party OAuth
+  verification); enqueue with status `blocked`, don't dispatch.
+- **INVESTIGATE-ONLY** → the doc explicitly says "don't fix, find out why"; this
+  is an Explore task, not a ship-task.
+
+## Phase 4 — Consolidate
+
+QA docs repeat themes (a "notifications hub", an "invoice flow", an "import
+wizard" each appear many times across tests). Collapse duplicates into one
+task/epic. Splitting one feature into six tiny ship-task runs is worse than one
+correctly-scoped run. If an epic is too big for a single PR, note the split in
+the description; enqueue the first slice.
+
+## Phase 5 — Triage each surviving task to a ship-task tier
+
+Reuse `/ship-task`'s own router, including the **risk override**: anything
+touching auth/JWT, roles/permissions, DB migrations, multi-tenancy isolation,
+secrets, CORS, `.github/workflows`, billing, destructive/irreversible ops, or any
+project-specific term in config `risk_keywords_extra` is **minimum Tier 2**,
+regardless of size. Tiers: 0 trivial · 1 small localized · 2 real feature/bugfix
+or any risk hit · 3 cross-cutting/ambiguous (may need a split or an adversarial
+pass). When unsure, fail up.
+
+Apply the risk floor **deterministically** as a backstop on every task before you
+set `--tier` — the same check `/ship-task` uses, so the two never disagree:
+
+```bash
+python3 "$SKILL_DIR/../ship-task/risk_floor.py" "<task title + description>"
+# exit 2 / {"floor":2} => this task is minimum Tier 2 no matter how small it looks
+```
+
+It only raises the floor; you still pick the real tier (and may go higher).
+
+For each task note any unknown as its `open_question` and attach the evidence
+image paths. You do NOT leave it unresolved — Phase 6 settles every one of them
+(factual → investigate; preference → escalate).
+
+## Phase 6 — Resolve, then route each task autonomously (no draft approval)
+
+For every surviving task, before it can run, settle its `open_question` **yourself**:
+
+1. **Classify it: factual or preference?**
+2. **Factual** → investigate until you know. Dispatch an `Explore` subagent
+   ("does X repro on the base branch?", "where is Y wired?", "which permission
+   gates Z?"), read the repo, or check the docs/memory. Fold the finding into the
+   task's description/acceptance. If the finding is "already shipped" → **drop it**.
+3. **Preference** → escalate exactly one plain-language question with your
+   recommendation, and park the task as `needs_input`:
+   ```python
+   import manager_core as core
+   core.ask_preference(task_id,
+     "Should the CSV export include archived items by default?",
+     options=["Exclude archived (recommended — matches the list view)", "Include everything"],
+     context="The list view hides archived items; the export could reasonably go either way. Pick one.")
+   ```
+4. **No blocking question** → enqueue it straight to `queued` (it dispatches
+   itself). For external/investigate-only/too-big-without-scope, enqueue
+   **`--status blocked`** (NOT `rejected` — rejected means dropped and is hidden
+   from the panel; blocked shows in "Can't be done" with its reason).
+
+```bash
+python3 managerd.py add --title "…" --tier 1 --status queued \
+  --source "QA June 6th p2" --description "…what + acceptance…" \
+  --evidence '["/abs/path/to/evidence/image.png"]'
+# blocked example:
+python3 managerd.py add --title "BLOCKED: third-party OAuth verification" --status blocked \
+  --open-question "Has the OAuth verification been submitted?" --tier 2 --source "…"
+```
+
+Resolve the cheap low-stakes calls yourself instead of asking — e.g. "re-test the
+already-shipped items or trust the base branch?" is yours to make (trust it, drop).
+
+## Phase 7 — Run the batch and monitor (it dispatches itself)
+
+The daemon auto-dispatches `queued` tasks (up to the configured cap), each to a
+green PR, then stops. You stay resident and supervise:
+
+- **Two kinds of questions, two opposite rules:**
+  - **Preference questions YOU raised** via `ask_preference` before dispatch
+    (status `needs_input`) — these are the human's call. **NEVER answer them
+    yourself**, not even with your recommendation. Leave them pending in the
+    panel and wait. (Your recommendation goes in the question's `options`/`context`,
+    not in an answer.)
+  - **Questions a RUNNING ship-task session relays** to `/api/ask` — try to
+    resolve *factual* ones yourself (repo/docs/memory) and answer via the relay;
+    escalate only a genuine preference (leave it pending for the human).
+- **Never merge.** Runs stop at PR-ready; the human merges from GitHub. A task
+  with a green PR settles as `done` (PR-ready), shown in the panel with its PR
+  link and its test URL.
+- **A run that truly stops** settles `failed` with its reason in `runs/`; surface
+  it. A follow-up run can re-queue it.
+
+## Final report (intern handing work back to the manager)
+
+When the batch is dispatched, report tightly:
+- **Done / PR-ready** (N): titles + PR links to merge.
+- **In flight** (N): titles + their test URLs.
+- **Needs your input** (N): the few preference questions, each one line.
+- **Can't be done** (N): blocked / needs-scope, each with the reason.
+- **Dropped as already-shipped** (N): list the PRs, so you can see what it skipped.
+
+## What the manager must never do
+
+- Never write product code or "fix" a task itself — dispatch `/ship-task`.
+- Never **merge** — stop at PR-ready; the human merges (current boundary).
+- Never ask a **factual** question you could look up — investigate instead.
+- Never **answer your own** `ask_preference` question — those are the human's
+  call and must wait in the panel.
+- Never file a can't-do item as `rejected` — use `blocked` so it shows with its reason.
+- Never enqueue a task you couldn't ground, and never silently drop one you
+  couldn't do — put it in `blocked` with a reason.
+- Never dedup against any branch other than the configured base branch
+  (`origin/<base_branch>` is the truth for "already shipped").
