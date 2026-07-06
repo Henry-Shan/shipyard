@@ -1069,10 +1069,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return self._send(200, {"question_id": qid})
         if p == "/api/runinfo":
-            # a running session reports its worktree URL and (once open) its PR
+            # a running session reports its worktree URL, its PR once open, and
+            # optionally real "after" screenshot(s) it actually captured (e.g.
+            # via /browse) — a list of absolute image paths.
             core.set_runinfo(body.get("session_id", ""),
                              body.get("web_url"), body.get("server_url"),
-                             body.get("pr_url"), body.get("test_plan"))
+                             body.get("pr_url"), body.get("test_plan"),
+                             body.get("after_evidence"))
             return self._send(200, {"ok": True})
         if p == "/api/failtest":
             # back-compat: a still-failing exhausted feature test (verdict=fail).

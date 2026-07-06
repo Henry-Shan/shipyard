@@ -539,6 +539,11 @@ When the batch is dispatched, report tightly:
 - **Can't be done** (N): blocked / needs-scope, each with the reason.
 - **Dropped as already-shipped** (N): list the PRs, so you can see what it skipped.
 
+If `has_web_ui` is true, mention once: each PR-ready task's "👀 See the effect"
+view can carry a real before/after screenshot, not just text — click "Test this
+branch" on a task, then ask you to `/browse` the live app and attach the
+screenshot (`POST /api/tasks/<id>/update {"after_evidence":["<path>"]}`).
+
 ## What the manager must never do
 
 - Never write product code or "fix" a task itself — dispatch `/ship-task`.

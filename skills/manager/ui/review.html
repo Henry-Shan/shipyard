@@ -370,6 +370,13 @@ function testBtn(t){
 // truncated NMAP.findings preview) plus any screenshots actually attached to
 // it (first-hand — the original reported evidence), falling back to the
 // task's own evidence images when it isn't tied to a doc finding.
+// Shared thumbnail strip for evidence images — used for both before and after.
+function evImgs(paths){
+  const imgs=(paths||[]).filter(p=>p && /\.(png|jpe?g|gif|webp)$/i.test(p));
+  if(!imgs.length) return "";
+  return `<div class="baimgs">${imgs.map(p=>
+    `<a href="/api/image?path=${encodeURIComponent(p)}" target="_blank" title="Click to view full size"><img class="baimg" loading="lazy" src="/api/image?path=${encodeURIComponent(p)}"></a>`).join("")}</div>`;
+}
 function beforeEvidence(t){
   const ids=idsOf(t.source||"");
   let text=null, imgs=[];
@@ -378,39 +385,40 @@ function beforeEvidence(t){
     if(b){ text=b.text; imgs=(b.evidence||[]).filter(e=>e.img).map(e=>e.img); }
   }
   if(!text) text=t.description || t.title;
-  if(!imgs.length && (t.evidence||[]).length) {
+  if(!imgs.length && (t.evidence||[]).length){
     imgs=t.evidence.filter(p=>/\.(png|jpe?g|gif|webp)$/i.test(p));
   }
   return {text, imgs};
 }
 // "After" evidence: the feature-tester's REAL captured output when one was
 // recorded (genuine first-hand proof — actual pass/fail counts and printed
-// assertions from a real run), not a paraphrase. Only falls back to the test
-// guide's own "✅ Success = ..." line (still the build agent's words, just not
-// raw output) when no captured run output exists.
+// assertions from a real run), PLUS a real screenshot of the fixed behavior
+// when the run actually captured one (task.after_evidence — set via /browse
+// against the live app; never fabricated, so most tasks simply have none).
+// Falls back to the test guide's own "✅ Success = ..." line (still the build
+// agent's words, just not raw output) only when no captured output exists.
 function afterEvidence(t){
+  const imgs=(t.after_evidence||[]).filter(p=>p && /\.(png|jpe?g|gif|webp)$/i.test(p));
   const f=ftParse(t);
-  if(f && f.output) return {kind:"output", text:f.output};
+  if(f && f.output) return {kind:"output", text:f.output, imgs};
   const tp=t.test_plan||"";
   const m=tp.match(/✅\s*success\s*=?\s*(.+)/i);
-  if(m && m[1].trim()) return {kind:"reported", text:m[1].trim()};
+  if(m && m[1].trim()) return {kind:"reported", text:m[1].trim(), imgs};
   const lines=tp.split("\n").map(l=>l.trim()).filter(Boolean);
-  if(lines.length) return {kind:"reported", text:lines[lines.length-1]};
-  if(t.status==="done"||t.status==="failed") return {kind:"reported", text:`Fixed: ${t.title}`};
-  return {kind:"none", text:"Still in progress — no verified outcome yet."};
+  if(lines.length) return {kind:"reported", text:lines[lines.length-1], imgs};
+  if(t.status==="done"||t.status==="failed") return {kind:"reported", text:`Fixed: ${t.title}`, imgs};
+  return {kind:"none", text:"Still in progress — no verified outcome yet.", imgs};
 }
 function viewEffect(tid){
   const t=TASKS.find(x=>x.id===tid); if(!t) return;
   const before=beforeEvidence(t), after=afterEvidence(t);
-  const beforeImgs=before.imgs.length?`<div class="baimgs">${before.imgs.map(p=>
-    `<a href="/api/image?path=${encodeURIComponent(p)}" target="_blank"><img class="baimg" loading="lazy" src="/api/image?path=${encodeURIComponent(p)}"></a>`).join("")}</div>`:"";
   const afterLabel=after.kind==="output"?"✅ After — actual test output (first-hand)":"✅ After — reported outcome";
-  const afterHtml=after.kind==="output"?`<pre class="bacode">${esc(after.text)}</pre>`:`<div class="batext">${esc(after.text)}</div>`;
+  const afterBody=after.kind==="output"?`<pre class="bacode">${esc(after.text)}</pre>`:`<div class="batext">${esc(after.text)}</div>`;
   $("#modal-title").textContent="Before → After";
   $("#modal-log").innerHTML=`<div class="bawrap">
-    <div class="barow before"><div class="balabel">🔴 Before — the problem</div><div class="batext">${esc(before.text)}</div>${beforeImgs}</div>
+    <div class="barow before"><div class="balabel">🔴 Before — the problem</div><div class="batext">${esc(before.text)}</div>${evImgs(before.imgs)}</div>
     <div class="baarrow">↓ fixed by this task ↓</div>
-    <div class="barow after"><div class="balabel">${afterLabel}</div>${afterHtml}</div>
+    <div class="barow after"><div class="balabel">${afterLabel}</div>${afterBody}${evImgs(after.imgs)}</div>
   </div>`;
   $("#modal").style.display="flex";
 }

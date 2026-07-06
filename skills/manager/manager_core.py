@@ -125,7 +125,13 @@ def _migrate(c):
                       ("failtest_info", "TEXT"),
                       # feature-tester: the full verdict record for the card —
                       # {verdict,test,cycles,output,turns}; ALL outcomes, not just fail
-                      ("featuretest", "TEXT")):
+                      ("featuretest", "TEXT"),
+                      # real screenshot(s) of the FIXED behavior (json list of paths),
+                      # captured by the run itself (e.g. via /browse) once the feature
+                      # is verified — shown as first-hand "after" evidence next to the
+                      # finding's original "before" screenshots. Never fabricated:
+                      # stays '[]' unless the run actually captured one.
+                      ("after_evidence", "TEXT NOT NULL DEFAULT '[]'")):
         if col not in have:
             c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {decl}")
     # questions table: a `kind` discriminates a plain preference question from a
@@ -173,6 +179,8 @@ def update_task(task_id, **fields):
         return
     if "evidence" in fields and not isinstance(fields["evidence"], str):
         fields["evidence"] = json.dumps(fields["evidence"])
+    if "after_evidence" in fields and not isinstance(fields["after_evidence"], str):
+        fields["after_evidence"] = json.dumps(fields["after_evidence"])
     fields["updated_at"] = _now()
     cols = ", ".join(f"{k}=?" for k in fields)
     vals = list(fields.values()) + [task_id]
@@ -224,6 +232,7 @@ def active_count():
 def _task_dict(row):
     d = dict(row)
     d["evidence"] = json.loads(d.get("evidence") or "[]")
+    d["after_evidence"] = json.loads(d.get("after_evidence") or "[]")
     return d
 
 
@@ -346,10 +355,15 @@ def poll_answer(session_id):
         return row["answer"]
 
 
-def set_runinfo(session_id, web_url=None, server_url=None, pr_url=None, test_plan=None):
+def set_runinfo(session_id, web_url=None, server_url=None, pr_url=None, test_plan=None,
+                 after_evidence=None):
     """A dispatched ship-task run reports the localhost URL its worktree is
-    serving on (so the human can test that task's branch), its PR once open, and
-    a copyable step-by-step manual-test guide for that change."""
+    serving on (so the human can test that task's branch), its PR once open,
+    a copyable step-by-step manual-test guide for that change, and — only when
+    it genuinely captured one (e.g. via /browse against the live app) —
+    screenshot(s) of the FIXED behavior, shown as first-hand "after" evidence
+    next to the finding's original "before" screenshots. Never fabricated: a
+    run with nothing to show simply omits after_evidence."""
     with connect() as c:
         row = c.execute("SELECT id, test_plan FROM tasks WHERE session_id=?",
                         (session_id,)).fetchone()
@@ -368,6 +382,8 @@ def set_runinfo(session_id, web_url=None, server_url=None, pr_url=None, test_pla
         # the original steps they were testing against.
         if test_plan and not (row["test_plan"] or "").strip():
             fields.append("test_plan=?"); vals.append(test_plan)
+        if after_evidence:
+            fields.append("after_evidence=?"); vals.append(json.dumps(after_evidence))
         if not fields:
             return
         fields.append("updated_at=?"); vals.append(_now())

@@ -62,6 +62,22 @@ override for dispatched runs).
 - `GET  /api/answer?session_id=…` — the run polls for the human's reply (delivered once)
 - `POST /api/questions/<id>/answer` `{answer}` — the human replies from the panel
 - `GET  /api/state` — everything the UI needs (tasks, counts, inbox, activity)
+- `GET  /api/tasks/<id>/changes` — the task's captured diff (files/added/deleted/full diff text)
+
+### Attaching a real "after" screenshot
+
+The "See the effect" before/after view shows the finding's original screenshots
+as "before" evidence automatically. It never fabricates an "after" screenshot —
+dispatched runs can't safely boot a browser mid-batch (many run in parallel and
+would fight over ports), so there's no automatic capture. To attach a real one:
+1. Click **"Test this branch"** on a PR-ready task (boots that one worktree's
+   dev server — the panel already serializes this to one at a time).
+2. Ask Claude to open the live URL with `/browse`, drive to the fixed behavior,
+   and screenshot it.
+3. Attach the screenshot: `POST /api/tasks/<id>/update {"after_evidence": ["<abs path to the screenshot>"]}`.
+
+It then appears in "See the effect" right alongside the actual test output,
+as genuine first-hand proof — never a placeholder.
 
 ## Guarantees it keeps from ship-task
 
