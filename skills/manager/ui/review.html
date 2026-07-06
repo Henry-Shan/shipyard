@@ -222,6 +222,27 @@
   .baimg{height:96px;width:auto;border:2px solid var(--ink);border-radius:7px;object-fit:cover;cursor:pointer;display:block}
   .bacode{margin:0;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
     line-height:1.5;background:#0d0d0d;color:#e6e6e6;border:2px solid var(--ink);border-radius:8px;padding:10px 12px}
+  /* example task-doc preview — embedded INSIDE the intake question card,
+     between its context text and the reply box: small, scrollable, like
+     flipping through a PDF, so the whole card still fits on screen.
+     Read-only — no "use this" action, just showing what a source doc looks like. */
+  .exbox{margin:10px 0 2px}
+  .exbar{font-size:11px;font-weight:900;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px}
+  .exframe{height:190px;overflow-y:auto;background:var(--paper);border:2.5px solid var(--ink);
+    border-radius:var(--r);box-shadow:3px 3px 0 var(--ink);padding:14px 16px;scrollbar-width:thin;
+    -webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%);
+    mask-image:linear-gradient(to bottom,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%)}
+  .exframe::-webkit-scrollbar{width:7px}
+  .exframe::-webkit-scrollbar-thumb{background:var(--ink);border-radius:999px}
+  .exframe::-webkit-scrollbar-track{background:transparent}
+  .exframe .ntest{font-size:14px;margin:14px 0 4px;border-bottom-width:2px} .exframe .ntest:first-child{margin-top:0}
+  .exframe .nfeat{font-size:12px;margin:10px 0 4px;border-left-width:3px}
+  .exframe .nfind{padding:8px 10px;margin:7px 0;border-width:2px;box-shadow:2px 2px 0 var(--ink)}
+  .exframe .nfh{cursor:default}         /* not collapsible here — just reading */
+  .exframe .nft{font-size:12px}
+  .exframe .ntext{font-size:12px}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -652,10 +673,15 @@ function questionCard(q){
   const sid=q.session_id||"";
   const run=(sid && !sid.startsWith("manager") && !sid.startsWith("agent-task"))?` · run ${esc(sid.slice(0,8))}`:"";
   const when=ago(q.created_at);
+  // The intake question shows the demo doc INLINE, right between the context
+  // text and the reply box — a small scrollable, read-only preview so a new
+  // user can see what a source doc looks like without leaving this one card.
+  const example=sid==="manager-intake"?exampleInline():"";
   return `<div class="qcard">
     <div class="qh"><span class="pulse"></span>${q.task_id?`task #${q.task_id}`:"Claude asks"}${run}${when?` · ${when}`:""}</div>
     <div class="qq">${esc(q.question)}</div>
     ${q.context?`<div class="qctx">${esc(q.context)}</div>`:""}
+    ${example}
     ${opts?`<div class="qopts">${opts}</div>`:""}
     <textarea id="ta${q.id}" rows="2" placeholder="…or type a custom reply"></textarea>
     <div class="tact"><button class="tbtn primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>${q.task_id?` <button class="tbtn gh" onclick="deleteTask(${q.task_id})">🗑 Delete task</button>`:""}</div>
@@ -886,13 +912,57 @@ function renderNotion(){
   }; });
 }
 
+// ---------- Example task-doc viewer: embedded INSIDE the intake question
+// card (between its context text and the reply box) so the user sees what a
+// task doc looks like without leaving that one card — small, scrollable, like
+// flipping through a PDF, never pushing the card off-screen. Read-only: no
+// "use this" action, just a preview.
+let EXAMPLES=null, EXAMPLES_REQ=false;
+async function loadExamples(){
+  if(EXAMPLES||EXAMPLES_REQ) return; EXAMPLES_REQ=true;
+  try{ EXAMPLES=await api("/api/examples"); }catch(e){ EXAMPLES={findings:[]}; }
+  LAST_SIG="";   // re-render now that it's loaded
+}
+const SEVV={bug:"--fail",feature:"--prog",minor:"--wait",done:"--ready",note:"--queued"};
+// Render the demo doc's blocks the SAME way the real doc view does (test/feature
+// headings, finding blocks with a severity tag, plain text, image captions) —
+// so it reads as one continuous document inside the scrollable frame, not a
+// disconnected preview format.
+function exampleDocHtml(){
+  let html="";
+  for(const b of (EXAMPLES.blocks||[])){
+    if(b.t==="test") html+=`<h2 class="ntest">${esc(b.text)}</h2>`;
+    else if(b.t==="feature") html+=`<h3 class="nfeat">${esc(b.text)}</h3>`;
+    else if(b.t==="text") html+=`<p class="ntext">${mdi(b.text)}</p>`;
+    else if(b.t==="image" && b.caption) html+=`<div class="nevi"><span class="evi-ic">📷</span><span>${esc(b.caption)}</span></div>`;
+    else if(b.t==="finding"){
+      const c=cssv(SEVV[b.sev]||"--queued");
+      const evi=(b.evidence||[]).filter(e=>e.caption).map(e=>
+        `<div class="nevi"><span class="evi-ic">📷</span><span><span class="evi-id">image ${esc(b.id)}</span> — ${esc(e.caption)}</span></div>`).join("");
+      html+=`<div class="nfind" style="border-left-color:${c}">
+        <div class="nfh"><span class="sevtag" style="color:${c};background:${c}22">${esc(b.sev||b.kind)} ${esc(b.id)}</span></div>
+        <div class="nbody"><div class="nft">${mdi(b.text)}</div>${evi}</div></div>`;
+    }
+  }
+  return html;
+}
+// Called only for the intake question (session_id "manager-intake"). Returns
+// "" (and kicks off the load) until the demo doc is fetched — read-only
+// preview, no click-to-send action.
+function exampleInline(){
+  if(!EXAMPLES){ loadExamples(); return ""; }
+  if(!(EXAMPLES.findings||[]).length) return "";
+  return `<div class="exbox">
+    <div class="exbar">📄 ${esc(EXAMPLES.title||"Example task doc")} — what a source doc looks like</div>
+    <div class="exframe">${exampleDocHtml()}</div></div>`;
+}
 
 // ---------- Plain mode: no doc-map and no PDF (typed-list source, or a file
 // the ingest couldn't parse). The board still shows everything that matters:
 // the live setup feed, pending questions, and every task grouped by state.
 function renderPlain(){
   const live=TASKS.filter(t=>t.status!=="rejected");
-  const sig=JSON.stringify(["plain",progSig(),PAUSED,CAP,COOLDOWN>0,HASWEB,
+  const sig=JSON.stringify(["plain",progSig(),!!EXAMPLES,PAUSED,CAP,COOLDOWN>0,HASWEB,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]),[...REWORK_OPEN],[...TESTPLAN_OPEN],
     TESTSRV&&[TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error],
     live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
