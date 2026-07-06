@@ -16,8 +16,7 @@ Setup & example accounts (do NOT file these as tasks — reference only):
 🔴 Bug 1.1.1 — Uploading an episode over 200MB fails silently: the progress bar
 reaches 100%, then the episode never appears in the drafts list. No error toast,
 nothing in the activity feed. Repro 3/3 with a 212MB WAV.
-image 1.1.1 — progress bar stuck at 100% with no draft created
-\^ the upload modal after completion — note the empty drafts list behind it
+image 1.1.1 — the upload modal after completion: progress bar stuck at 100% with no draft created, empty drafts list visible behind it
 
 🟡 Bug 1.1.2 — The upload dropzone says "Drop you're file here". Typo: should be
 "your". Cosmetic only.
@@ -55,8 +54,7 @@ email, since big uploads are often left running unattended.
 🔴 Bug 3.1.1 — A Guest editor can open the show's Billing page by navigating
 directly to /settings/billing. The nav item is hidden but the route is not
 protected — they can see the card's last four digits and the invoice history.
-image 3.1.1 — billing page rendered while logged in as demo.guest
-\^ guest editor session showing the owner's invoice list
+image 3.1.1 — billing page rendered while logged in as demo.guest, showing the owner's invoice list
 
 🟡 Bug 3.1.2 — The "Invite teammate" modal lets you submit an empty role
 dropdown; the invite email then says "joined as undefined".

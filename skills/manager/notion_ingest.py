@@ -22,7 +22,7 @@ import argparse, json, os, re, sys, hashlib, urllib.request
 # a finding line: optional severity emoji, a kind word, an X.Y[.Z[.W]] id, then text
 SEV = {"🔴": "bug", "🟠": "feature", "🟡": "minor", "🟢": "done", "⚪": "note", "✅": "done"}
 FIND = re.compile(r'^\s*([🔴🟠🟡🟢⚪✅])?\s*(bug|feature|issue|test|problem|note)\b[^\dA-Za-z]*'
-                  r'(\d+(?:\.\d+){1,3})\s*[-:–]?\s*(.*)$', re.I)
+                  r'(\d+(?:\.\d+){1,3})\s*[-:–—]?\s*(.*)$', re.I)
 IMG = re.compile(r'!\[[^\]]*\]\((https?://[^)]+)\)')
 # a screenshot-evidence line: "image 4.1.1 — <what it shows>". The doc export
 # often carries these as plain text (no embed), so we attach them to finding
@@ -56,9 +56,15 @@ def parse(raw, url, title, outdir, do_images=True):
     last_find = None    # most recent finding, for un-labelled image embeds
     img_id = None       # finding id the current run of images belongs to (from an "image N.N.N" label)
     pending = []        # evidence dicts awaiting the caption line that follows them
+    # True right after a finding line, until a blank line or another block type
+    # ends it. A plain text line while this is true is the SAME sentence
+    # wrapped onto the next physical line (common in QA docs), not new
+    # standalone context — merge it into the finding instead of orphaning it.
+    just_after_find = False
     for line in raw.splitlines():
         s = line.strip()
         if not s or s == "<empty-block/>":
+            just_after_find = False
             continue
         # A "\^ ..." line captions the image(s) that just preceded it.
         cm = CAPLINE.match(s)
@@ -67,6 +73,7 @@ def parse(raw, url, title, outdir, do_images=True):
             for ev in pending:
                 ev["caption"] = cap
             pending = []
+            just_after_find = False
             continue
         m = IMG.search(s)
         if m:
@@ -83,16 +90,17 @@ def parse(raw, url, title, outdir, do_images=True):
                 ev = {"t": "image", "src": ev["src"], "caption": ""}
                 blocks.append(ev)
             pending.append(ev)
+            just_after_find = False
             continue
         if s.startswith("## "):
             test = s[3:].strip(); feature = ""; last_find = None; img_id = None; pending = []
-            blocks.append({"t": "test", "text": test}); continue
+            blocks.append({"t": "test", "text": test}); just_after_find = False; continue
         if s.startswith("### "):
             feature = s[4:].strip(); last_find = None; img_id = None; pending = []
-            blocks.append({"t": "feature", "text": feature}); continue
+            blocks.append({"t": "feature", "text": feature}); just_after_find = False; continue
         if s.startswith("#"):
             last_find = None; img_id = None
-            blocks.append({"t": "feature", "text": s.lstrip("# ").strip()}); continue
+            blocks.append({"t": "feature", "text": s.lstrip("# ").strip()}); just_after_find = False; continue
         fm = FIND.match(s)
         if fm:
             emoji, kind, fid, txt = fm.groups()
@@ -102,6 +110,7 @@ def parse(raw, url, title, outdir, do_images=True):
             blocks.append(f); by_id[fid] = f; last_find = f; img_id = None; pending = []
             findings.append({"id": fid, "kind": f["kind"], "sev": sev,
                              "text": txt.strip()[:200], "test": test, "feature": feature})
+            just_after_find = True
             continue
         # "image N.N.N [— text]": a label saying the next embeds belong to N.N.N.
         im = IMGLINE.match(s)
@@ -114,6 +123,12 @@ def parse(raw, url, title, outdir, do_images=True):
                 ev = {"caption": cap, "src": None, "ref": fid}
                 (target.setdefault("evidence", []).append(ev) if target
                  else blocks.append({"t": "image", "src": None, "caption": s}))
+            just_after_find = False
+            continue
+        if just_after_find and last_find is not None:
+            last_find["text"] = (last_find["text"] + " " + s).strip()
+            if findings and findings[-1]["id"] == last_find["id"]:
+                findings[-1]["text"] = last_find["text"][:200]
             continue
         blocks.append({"t": "text", "text": s})
     return {"source": "notion", "url": url, "title": title, "blocks": blocks, "findings": findings}
