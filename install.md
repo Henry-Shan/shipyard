@@ -57,11 +57,32 @@ each other by relative path). Updating is the same step re-run: the pull brings
 new code and any newly added skills; user state (`config.json`, `manager.db`,
 run history) is gitignored inside the clone and survives every pull.
 
+**Prove the update actually happened — don't just assume `pull` worked.**
+Capture the commit before and after, and treat a failed fast-forward as a
+real failure, not something to silently continue past (an install that
+*looks* done but is still running old code is worse than one that visibly
+stopped):
+
 ```bash
 WAREHOUSE=~/.claude/agent-warehouse
 if [ -d "$WAREHOUSE/.git" ]; then
-  git -C "$WAREHOUSE" log --oneline HEAD..origin/main 2>/dev/null | head  # show the user what's new
-  git -C "$WAREHOUSE" pull --ff-only
+  OLD_SHA="$(git -C "$WAREHOUSE" rev-parse --short HEAD)"
+  git -C "$WAREHOUSE" fetch origin main --quiet
+  git -C "$WAREHOUSE" log --oneline HEAD..origin/main 2>/dev/null | head  # preview what's new
+  if ! git -C "$WAREHOUSE" pull --ff-only; then
+    echo "UPDATE FAILED — $WAREHOUSE has local changes blocking a fast-forward pull." >&2
+    echo "Report this to the user and STOP here; do not continue as if updated." >&2
+    echo "Show them: git -C \"$WAREHOUSE\" status" >&2
+    echo "Then ask before running either: git -C \"$WAREHOUSE\" stash   (keep the changes)" >&2
+    echo "                             or: git -C \"$WAREHOUSE\" reset --hard origin/main   (discard them)" >&2
+    exit 1
+  fi
+  NEW_SHA="$(git -C "$WAREHOUSE" rev-parse --short HEAD)"
+  if [ "$OLD_SHA" = "$NEW_SHA" ]; then
+    echo "Already up to date at $NEW_SHA"
+  else
+    echo "Updated $OLD_SHA -> $NEW_SHA"
+  fi
 else
   git clone https://github.com/Henry-Shan/agent-warehouse.git "$WAREHOUSE"
 fi
@@ -74,6 +95,9 @@ chmod +x "$WAREHOUSE"/skills/*/*.sh
 ls -l ~/.claude/skills/    # report which skills are now linked (note any NEW ones to the user)
 ```
 
+Report the actual `Updated <old> -> <new>` / `Already up to date at <sha>` line
+to the user verbatim — that's the proof it truly updated, not just a claim.
+
 Handle these cases:
 - **Old copy-based install** (`~/.claude/skills/manager` is a real directory,
   not a symlink): preserve the user's state first —
@@ -83,9 +107,14 @@ Handle these cases:
 - **A skill folder exists but is neither a symlink into the warehouse nor the
   old install**: name-collision with something else the user has — ask before
   touching it.
-- **Update run** (clone already existed): after pulling, skip straight to
-  Step 3's smoke checks, tell the user what changed and whether any NEW
-  skills were linked, and stop.
+- **Update run** (clone already existed): still run Step 2's prerequisite
+  checks — don't skip straight to Step 3. They're cheap and usually all
+  green, but skipping them is exactly how a real gap (no git identity
+  configured, `gh` never set up) stops being caught here and instead
+  surfaces later, mid-`/manager`-run, on a machine that's been running this
+  skill for a while but never got the checks run against it. After Step 2 +
+  Step 3, tell the user what changed and whether any NEW skills were linked,
+  and stop — still no project interview on an update.
 
 (If `git` is unavailable, fall back to the tarball:
 `curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
