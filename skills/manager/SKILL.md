@@ -34,15 +34,15 @@ product code itself — it decides *what* to build, proves each task is real and
 not-already-done, and hands well-scoped units to `/ship-task`, which owns all
 landing safety (branch → PR → green CI → human approval → merge).
 
-The invocation argument is the **work source**: a **Notion page URL** (optional —
-requires the user's Notion connector; cleanest extraction when available), a path
-to a PDF / folder / markdown file, or a typed list of tasks. Examples:
-`/manager https://app.notion.com/p/tests-382dbf1afc79806aa5e8c06548895df6`
-`/manager ~/Desktop/task1`
+**Bare `/manager` (no argument) is the normal way to start it.** Bring the
+panel up immediately (Phase 0 Step 1), then ask for the work source ON THE
+PANEL, not in chat (Phase 0 Step 3) — never stall, never open an empty panel
+and stop.
 
-**A bare `/manager` (no argument) is fine** — never stall and never open an
-empty panel and stop: bring the panel up (Phase 0 Step 1), then ask for the
-work source in chat AND on the panel simultaneously (Phase 0 Step 3).
+An invocation argument is also accepted and skips that question: the **work
+source** directly — a Notion page URL (optional, needs the user's Notion
+connector), a path to a PDF/folder/markdown file, or a typed list of tasks,
+e.g. `/manager ~/Desktop/task1`.
 
 ## Paths and settings used below
 
@@ -183,62 +183,58 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
    P '{"label":"Repo configured","detail":"<the repo path>"}'
    ```
 3. `python3 "$SKILL_DIR/skill_config.py" check` must now pass before Phase 1.
+4. Add the run artifacts to **this repo's** `.gitignore` (ship-task commits
+   with `git add -A` inside the worktree, so unignored artifacts would ride
+   into PRs): `.ship-task/` and `.feature-test-result.json`. Also offer to
+   fill in `$SKILL_DIR/../ship-task/BUILDER_PLAYBOOK.md` by reading this repo
+   — a filled-in playbook markedly improves every implement agent.
 
-### Step 3 — no work source given? Collect the first things, in BOTH places
+### Step 3 — no work source given? Collect the first things, panel only
 
-Every batch starts from these inputs — ask for them by these names:
+**Panel only — never `AskUserQuestion` for this.** The panel is already open
+(Step 1); post the question(s) there and wait. Do not also interrupt the chat
+with a tool-call question for the same thing — say one short sentence in chat
+("I've posted N quick questions to the panel — answer there when ready") and
+poll, nothing more.
+
+Every batch starts from these inputs:
 
 1. **Task docs (Notion URL, PDF, .md)** — or the tasks typed directly.
 2. **Working directory** — where the work happens. Default to the **current
    directory** when it's a git repo; the configured repo is the fallback.
 3. **Web frontend, ONLY the first time** (config `has_web_ui` is still `null`
-   — once answered it's a project fact, never re-asked): "Does this project
-   have a web frontend you can open in a browser? If yes, what command starts
-   it (and on what port)?" Options: **Yes — `<the configured dev_command>` on
-   `:<dev_port>` (confirm)** · **Yes — different command** (Other: give the
-   real command + port) · **No web frontend (backend/CLI/library only)**.
-   This single fact decides whether the panel ever offers a "Test this
-   branch"/"Open app" button at all — get it right once instead of a broken
-   button showing up on every task guessing wrong. Persist the answer:
-   ```bash
-   # "No": curl ... -d '{"has_web_ui":false}'
-   # "Yes": curl ... -d '{"has_web_ui":true,"dev_command":"<cmd>","dev_port":<port>}'
-   curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' -d '{"has_web_ui":<true|false>...}'
-   ```
+   — once answered it's a project fact, never re-asked): does this project
+   have a web frontend you can open in a browser, and if so what command +
+   port serves it? This single fact decides whether the panel ever offers a
+   "Test this branch"/"Open app" button at all — get it right once instead of
+   a broken button showing up on every task guessing wrong.
 
-Ask without stalling — the user may be looking at the terminal OR the panel:
+Post ONE question to the panel inbox covering all of it in one card (re-posts
+are deduped server-side — never post it twice yourself):
 
-1. Post ONE question to the panel inbox (re-posts are deduped server-side —
-   never post it twice yourself). Fold in the web-frontend question too when
-   it still needs asking:
-   ```bash
-   curl -s -X POST "$MURL/api/ask" -H 'Content-Type: application/json' -d '{
-     "session_id":"manager-intake",
-     "question":"Task docs (Notion URL, PDF, .md) — or just type the tasks",
-     "options":[],
-     "context":"Working directory: <the default you resolved> — include \"dir: /other/path\" in your reply to change it. Tasks can be typed one per line."}'
-   ```
-2. Ask in chat with ONE **AskUserQuestion** call carrying the questions still
-   needed (task docs + working dir always; web-frontend only if `has_web_ui`
-   is null):
-   - header `Task docs`: "Task docs (Notion URL, PDF, .md) — where is the
-     work?" — options: **I answered on the panel** · **No doc — I'll type the
-     tasks** (Other = paste the URL/path/tasks right here).
-   - header `Working dir`: "Where should the work happen?" — options:
-     **`<cwd>` (current directory) (Recommended)** when it's a git repo ·
-     **`<configured repo>`** when different (Other = another path).
-   - header `Web frontend` (first run only): as described above.
-3. First answer wins. If they clicked "I answered on the panel", poll
-   `GET $MURL/api/answer?session_id=manager-intake` every ~5s until `answer`
-   is non-null (a `dir: /path` inside it overrides the working directory).
-4. If the chosen working directory differs from the configured repo, save it —
+```bash
+curl -s -X POST "$MURL/api/ask" -H 'Content-Type: application/json' -d '{
+  "session_id":"manager-intake",
+  "question":"Task docs (Notion URL, PDF, .md) — or just type the tasks",
+  "options":[],
+  "context":"Working directory: <the default you resolved> — include \"dir: /other/path\" to change it.\nHas a web frontend to test in a browser? Include \"web: yes <command> <port>\" or \"web: no\" — only asked once, first run.\nTasks can be typed one per line."}'
+```
+
+(Omit the "Has a web frontend" line from `context` once `has_web_ui` is
+already set — nothing left to ask there.)
+
+Then:
+1. Poll `GET $MURL/api/answer?session_id=manager-intake` every ~5s until
+   `answer` is non-null.
+2. Parse it: a `dir: /path` segment overrides the working directory; a
+   `web: yes <cmd> <port>` / `web: no` segment sets `has_web_ui` (only look
+   for this if it was still unset). Everything else is the task docs.
+3. If the working directory differs from the configured repo, save it —
    `curl -s -X POST "$MURL/api/config" -d '{"repo":"<dir>"}'` (the daemon
-   restarts itself; your `P` helper keeps working, same URL). Save the
-   web-frontend answer the same way (see above) — this one does NOT restart
-   the daemon by itself.
-5. Close the loop on the other side (if chat answered, clear the panel question
-   via `POST $MURL/api/questions/<qid>/answer {"answer":"(answered in chat)"}`),
-   then proceed to Phase 1 with the task docs exactly as if they had been the
+   restarts itself; your `P` helper keeps working, same URL). Save a decided
+   web-frontend answer the same way — `{"has_web_ui":true,"dev_command":"<cmd>","dev_port":<port>}`
+   or `{"has_web_ui":false}` (this one does NOT restart the daemon).
+4. Proceed to Phase 1 with the task docs exactly as if they had been the
    invocation argument.
 
 ### Progress beacons — show the user the ingest happening live

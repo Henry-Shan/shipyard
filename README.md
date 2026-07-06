@@ -52,8 +52,10 @@ set up https://raw.githubusercontent.com/Henry-Shan/agent-warehouse/main/install
 
 The agent copies the three skills into `~/.claude/skills/`, checks prerequisites
 (python3 ≥ 3.9, git, `gh` auth, the `claude` CLI; poppler only for PDF ingest),
-**offers to install anything missing**, interviews you for your project's
-settings, and writes `config.json`.
+and **offers to install anything missing**. That's it — no project questions
+here. Open a real target repo and run `/manager`; the first run there asks
+the few project-specific questions (repo path, base branch, web frontend or
+not, PR vs. local mode) and writes `config.json` for that project.
 
 Also works with [`npx skills add Henry-Shan/agent-warehouse`](https://github.com/vercel-labs/skills)
 thanks to the standard `skills/<name>/SKILL.md` layout (then copy
@@ -110,17 +112,19 @@ it's the orientation doc every implement agent reads first.
 
 ```
 cd /your/repo && claude
-
-/manager https://notion.so/your-qa-page        # Notion (needs your Notion connector)
-/manager ~/Desktop/qa-findings.pdf             # PDF + screenshots (poppler for the board view)
-/manager "fix the 403 on upload; add CSV export; investigate slow search"
-
-/ship-task "add a CSV export button to the items table"   # single task, no orchestration
+/manager             # opens the control panel and asks what to work on — right there
 ```
 
-The control panel opens at `http://127.0.0.1:4317` — watch the batch run, answer
-the occasional preference question, click "Test this branch" to boot any run's
-worktree, and merge finished PRs from GitHub.
+The panel opens at `http://127.0.0.1:4317`; answer its one question (a Notion
+URL, a PDF/markdown path, or just type the tasks) and the batch starts. You can
+also skip that question by passing the source directly:
+`/manager ~/Desktop/qa-findings.pdf`.
+
+Watch the batch run, answer the occasional preference question from the panel,
+click "Test this branch" to boot any run's worktree, and merge finished PRs
+from GitHub.
+
+Single task, no orchestration: `/ship-task "add a CSV export button to the items table"`
 
 ## ⚠ Security — read before first use
 
