@@ -36,25 +36,24 @@ landing safety (branch → PR → green CI → human approval → merge).
 
 The invocation argument is the **work source**: a **Notion page URL** (optional —
 requires the user's Notion connector; cleanest extraction when available), a path
-to a PDF / folder of artifacts, or a typed list of tasks. Examples:
+to a PDF / folder / markdown file, or a typed list of tasks. Examples:
 `/manager https://app.notion.com/p/tests-382dbf1afc79806aa5e8c06548895df6`
 `/manager ~/Desktop/task1`
 
-## Paths and settings used below
+**A bare `/manager` (no argument) is fine** — never stall and never open an
+empty panel and stop: bring the panel up (Phase 0 Step 1), then ask for the
+work source in chat AND on the panel simultaneously (Phase 0 Step 3).
 
-All project-specific values come from the skill's config (`config.json` next to
-this file; see `config.example.json`). Resolve these once at the start and use
-them everywhere:
+## Paths and settings used below
 
 ```bash
 SKILL_DIR="${SKILL_DIR:-$HOME/.claude/skills/manager}"   # where THIS skill is installed
 [ -f "$SKILL_DIR/managerd.py" ] || SKILL_DIR="$(pwd)/.claude/skills/manager"  # project-level install fallback
-C(){ python3 "$SKILL_DIR/skill_config.py" get "$1"; }
-REPO="$(C repo)"; BASE="$(C base_branch)"; MURL="http://127.0.0.1:$(C panel_port)"
 ```
 
-If `python3 "$SKILL_DIR/skill_config.py" check` fails, do NOT stop with an
-error — run the first-run setup below (Phase 0) before anything else.
+Everything else (repo, base branch, panel URL, push mode, config validity) is
+printed by `panel-up.sh` in Phase 0 Step 1 — do not run separate commands to
+gather them.
 
 ## The iron rules (this is why the manager exists)
 
@@ -91,33 +90,40 @@ error — run the first-run setup below (Phase 0) before anything else.
 
 ## Phase 0 — Panel up FIRST (instant feedback), then configure if needed
 
-### Step 1 — start the daemon immediately, every run, before anything else
+### Step 1 — ONE command brings the panel up. Run it FIRST, before anything else
 
-Do this within your first seconds, even when no repo is configured yet — the
-daemon boots into a friendly **setup mode** and the panel appears in the user's
-browser right away, instead of them staring at a silent terminal. `serve` is
-restart-first (it frees its port, killing any stale daemon) so just run it:
+Your very first tool call of a `/manager` run — before reading config, before
+thinking about the source, even when nothing is configured yet (the daemon
+boots into a friendly setup mode):
 
 ```bash
-cd "$SKILL_DIR"
-python3 managerd.py init
-python3 managerd.py serve   # run in background; replaces any running daemon
+bash "$SKILL_DIR/panel-up.sh"
 ```
 
-Port and concurrency come from config (`panel_port`, `dispatch_cap`); env vars
-(`MANAGER_PORT`, `MANAGER_CAP`) still override. `serve` auto-opens the panel
-itself and **skips opening when a panel tab is already connected** — so do NOT
-open `$MURL` with your own `open`/`xdg-open` command (that's how users end up
-with duplicate tabs). Just tell the user the URL (`$MURL`); the open tab always
-auto-reloads to the latest state.
+That single script deterministically does all of Phase 0's mechanics: init DB →
+restart-first daemon (latest code) → wait for the API → open the browser tab
+(skipping if one is already connected — NEVER run your own `open`/`xdg-open`) →
+clear + start the live progress feed → register this session for the panel. It
+prints everything you need:
 
-Then immediately start the live feed so the tab is never blank:
+```
+PANEL_URL=http://127.0.0.1:4317
+CONFIG_OK=yes|no
+REPO=/path/or/empty
+BASE_BRANCH=main
+PUSH_MODE=pr|local
+```
+
+Set `MURL=<PANEL_URL>`, tell the user the URL, and define the two helpers you'll
+use for the rest of the run:
 
 ```bash
 P(){ curl -s -X POST "$MURL/api/progress" -H 'Content-Type: application/json' -d "$1" >/dev/null; }
-P '{"clear":true}'
-P '{"label":"Started the control panel"}'
+S(){ curl -s -X POST "$MURL/api/say" -H 'Content-Type: application/json' -d "$1" >/dev/null; }
 ```
+
+Route from the printed values: `CONFIG_OK=no` → Step 2. No invocation argument
+→ Step 3. Otherwise → Phase 1 directly.
 
 ### Step 2 — first-run setup (only when `skill_config.py check` fails)
 
@@ -135,8 +141,10 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
    - **A different repo** — then ask for the absolute path.
    - **Create a new repo for me** — confirm a path, then `git init -b main`,
      make an initial commit, and offer `gh repo create --private --source . --push`
-     (ship-task opens PRs with `gh`; without a GitHub remote, runs stop at the
-     push step — say so plainly if they decline).
+     (ship-task opens PRs with `gh`; without a GitHub remote, use
+     `push_mode: "local"` instead). If the user wants PR mode but `gh` is
+     missing, install it with one click — no sudo:
+     `bash "$SKILL_DIR/install-gh.sh"`, then have them run `! gh auth login`.
 2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
    (`package.json` scripts, `Makefile`, CI workflows) — keep the
    `config.example.json` defaults when unsure. Save everything through the
@@ -150,26 +158,58 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
    ```
 3. `python3 "$SKILL_DIR/skill_config.py" check` must now pass before Phase 1.
 
-**Register this session for the panel's "⧉ Reconnect" button** (best-effort, so a
-closed window can be resumed with `claude --resume`). Your session id is the newest
-transcript in **this session's own project dir** (Claude Code mangles the startup
-cwd, mapping both `/` and `.` to `-`). Scope the lookup to that dir so a parallel
-ship-task worker's or another project's transcript can't be mistaken for yours, and
-only register a well-formed UUID (the daemon also rejects non-UUIDs):
+### Step 3 — no work source given? Collect the TWO first things, in BOTH places
+
+Every batch starts from exactly two inputs — ask for them by these names:
+
+1. **Task docs (Notion URL, PDF, .md)** — or the tasks typed directly.
+2. **Working directory** — where the work happens. Default to the **current
+   directory** when it's a git repo; the configured repo is the fallback.
+
+Ask without stalling — the user may be looking at the terminal OR the panel:
+
+1. Post ONE question to the panel inbox (re-posts are deduped server-side —
+   never post it twice yourself):
+   ```bash
+   curl -s -X POST "$MURL/api/ask" -H 'Content-Type: application/json' -d '{
+     "session_id":"manager-intake",
+     "question":"Task docs (Notion URL, PDF, .md) — or just type the tasks",
+     "options":[],
+     "context":"Working directory: <the default you resolved> — include \"dir: /other/path\" in your reply to change it. Tasks can be typed one per line."}'
+   ```
+2. Ask in chat with ONE **AskUserQuestion** call carrying BOTH questions:
+   - header `Task docs`: "Task docs (Notion URL, PDF, .md) — where is the
+     work?" — options: **I answered on the panel** · **No doc — I'll type the
+     tasks** (Other = paste the URL/path/tasks right here).
+   - header `Working dir`: "Where should the work happen?" — options:
+     **`<cwd>` (current directory) (Recommended)** when it's a git repo ·
+     **`<configured repo>`** when different (Other = another path).
+3. First answer wins. If they clicked "I answered on the panel", poll
+   `GET $MURL/api/answer?session_id=manager-intake` every ~5s until `answer`
+   is non-null (a `dir: /path` inside it overrides the working directory).
+4. If the chosen working directory differs from the configured repo, save it —
+   `curl -s -X POST "$MURL/api/config" -d '{"repo":"<dir>"}'` (the daemon
+   restarts itself; your `P`/`S` helpers keep working, same URL).
+5. Close the loop on the other side (if chat answered, clear the panel question
+   via `POST $MURL/api/questions/<qid>/answer {"answer":"(answered in chat)"}`),
+   mirror the outcome with `S`, then proceed to Phase 1 with the task docs
+   exactly as if they had been the invocation argument.
+
+### Mirror the conversation onto the panel
+
+The panel has a **💬 Conversation** feed. Whenever you exchange something
+meaningful with the user in chat during a `/manager` run — you ask, they
+decide, you announce a judgment call — POST one short line per side (the `S`
+helper from Step 1) so someone watching only the browser can follow along:
 
 ```bash
-PROJ="$HOME/.claude/projects/$(pwd | sed 's#[/.]#-#g')"   # this session's transcript dir
-SID="$(ls -t "$PROJ"/*.jsonl 2>/dev/null | head -1 | xargs -I{} basename {} .jsonl 2>/dev/null)"
-if printf '%s' "$SID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
-  curl -s -X POST "$MURL/api/manager-session" \
-    -H 'Content-Type: application/json' -d '{"session_id":"'"$SID"'"}' >/dev/null
-fi
+S '{"who":"manager","text":"Which repo should I target? (asked in chat)"}'
+S '{"who":"you","text":"Use ~/projects/acme"}'
 ```
 
-If it can't determine the id, the Reconnect button still works — the panel shows
-BOTH the `--resume` command (when an id is registered) and a fresh-`/manager`
-command on this same daemon, so the human picks. The queue + all tasks persist
-regardless.
+Keep each line to one sentence; don't mirror your internal tool calls (the
+progress beacons cover mechanics). Questions relayed through `/api/ask` appear
+in the feed automatically — do not double-post those.
 
 ### Progress beacons — show the user the ingest happening live
 
