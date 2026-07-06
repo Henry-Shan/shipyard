@@ -161,41 +161,32 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
      Whichever label is shown, **never** start the sub-flow (never run
      `git init`, never touch GitHub) before this question itself is answered.
 
-   **"Create a new repo for me" sub-flow — act on the label just shown, don't
-   re-ask it:**
+   **"Create a new repo for me" sub-flow — one call does all of it, the same
+   logic the panel's own repo field uses when someone pastes a path there
+   directly:**
    1. Confirm a path.
-   2. Proceed straight to GitHub-linked or Fully local per the label the user
-      just clicked (re-read `gh_available` if you need the value again — do
-      not ask a second question). Do not mention gh, do not offer to install
-      it, do not display any further GitHub-related prompt.
-      - Only in the empty/unset fallback case: ask *"Should this repo be
-        linked to GitHub (PR mode), or fully local (nothing ever leaves this
-        machine)?"* Options: **GitHub-linked (PR mode)** · **Fully local
-        (local mode)**. Persist the answer immediately —
-        `curl -s -X POST "$MURL/api/config" -d '{"gh_available":true|false}'`
-        — so it's never asked again on this machine.
-   3. `git init -b main`. Before committing anything, check identity is
-      already configured — `git config user.name` and `git config user.email`
-      (plain, no `--global`/`--local` flag, so it reads whatever's already
-      effective). **This should already be true** — install.md's prerequisite
-      check fixes this once, up front, specifically so it never has to
-      interrupt a `/manager` run. If it's somehow still missing anyway (the
-      skill was installed by hand, or identity was unset since), **STOP — do
-      not commit, and above all do NOT run `git config` yourself to set one,
-      not even a guess.** Tell the user exactly:
-      `git isn't configured with an identity yet — run this yourself, then
-      say "continue": git config --global user.name "Your Name" && git config
-      --global user.email "you@example.com"` — then wait. This is the same
-      "never touch git config" rule that applies to you everywhere else; it
-      applies here too, with no exception for a fresh repo.
-   4. Make the initial commit.
-   5. **GitHub-linked** → `gh repo create --private --source . --push`; set
-      config `push_mode: "pr"`. (If this is the rare fallback path and `gh`
-      turns out not to be installed after all, install it now with
-      `bash "$SKILL_DIR/install-gh.sh"`, no sudo, then have them run
-      `! gh auth login` before retrying.)
-      **Fully local** → stop here. Do NOT run any `gh`/git-remote command; set
-      config `push_mode: "local"`.
+   2. Only in the empty/unset `gh_available` fallback case, ask *"Should this
+      repo be linked to GitHub (PR mode), or fully local (nothing ever leaves
+      this machine)?"* Options: **GitHub-linked (PR mode)** · **Fully local
+      (local mode)**, and persist it —
+      `curl -s -X POST "$MURL/api/config" -d '{"gh_available":true|false}'` —
+      so it's never asked again. Otherwise (the normal case) skip straight to
+      step 3, silently, per the label already shown.
+   3. Just save the path — the daemon does the rest:
+      ```bash
+      curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' -d '{"repo":"<abs path>"}'
+      ```
+      When the directory isn't a git checkout yet, the daemon itself creates
+      it: `git init`, checks identity is configured (**never guesses one —
+      this should already be true from install.md's prerequisite check; if
+      it's somehow still missing, the call fails with the exact command for
+      the user to run themselves — relay that verbatim and wait, then retry**),
+      makes the initial commit, and — only if `gh_available` is `true` —
+      `gh repo create --private --source . --push`. It responds `{"ok":false,
+      "error":"..."}` on any real problem (relay `error` to the user verbatim)
+      or `{"ok":true}` once the repo exists and `push_mode` is set correctly.
+      Never run `git init`/`git commit`/`gh repo create` yourself here — this
+      one call replaces all of that.
 2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
    (`package.json` scripts, `Makefile`, CI workflows) — keep the
    `config.example.json` defaults when unsure. Save everything through the
