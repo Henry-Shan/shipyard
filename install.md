@@ -82,7 +82,7 @@ pdftoppm -v             # poppler — OPTIONAL: only needed for PDF ingest / the
 |---|---|---|
 | `python3` ≥ 3.9 | every script (stdlib only — **macOS's built-in Python qualifies**) | see fix flow below |
 | `git` | worktrees, dedup, branches | install git (macOS: `xcode-select --install`) |
-| `gh` + logged in | opening PRs | `brew install gh` / `apt install gh`, then `gh auth login` |
+| `gh` + logged in | opening PRs — **only needed in PR mode**; in local mode (`push_mode: "local"`, nothing pushed) skip it entirely | `brew install gh` / `apt install gh`, then `gh auth login` |
 | `claude` CLI | dispatching headless runs | install Claude Code |
 | poppler (`pdftoppm`) | **optional** — PDF ingest + panel PDF view | `brew install poppler` / `apt install poppler-utils` |
 
@@ -122,7 +122,12 @@ repo first so your suggested answers are informed (e.g. read `package.json` /
    every ship-task run must pass before committing.
 7. **Env files** (default none) — repo-relative gitignored files (e.g. `.env`,
    `apps/web/.env.local`) to symlink into each worktree.
-8. **Optional**: extra risk keywords (project terms that must force extra rigor,
+8. **Push mode** (default `pr`) — where finished work lands: `pr` pushes each
+   branch and opens a GitHub PR (needs `gh`); `local` stops at a committed
+   local branch — no push, no PR, no `gh`, nothing leaves the machine. If the
+   user has no GitHub remote or declined installing `gh`, recommend `local`
+   (they can toggle any time from the panel's PR/Local button).
+9. **Optional**: extra risk keywords (project terms that must force extra rigor,
    e.g. a tenancy column name), and a memory MCP server name if they have one.
 
 Then write the answers to `~/.claude/skills/manager/config.json` using

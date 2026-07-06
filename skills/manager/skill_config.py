@@ -58,6 +58,10 @@ DEFAULTS = {
     # Extra project-specific risk keywords appended to risk_floor.py's universal
     # set (any task matching one is minimum Tier 2).
     "risk_keywords_extra": [],
+    # Where finished work lands: "pr" = push the branch + open a GitHub PR
+    # (needs gh); "local" = stop at a committed local branch — no push, no PR,
+    # no gh needed. Toggleable live from the panel.
+    "push_mode": "pr",
     # Optional memory MCP server name (e.g. "my-project-memory"). null = ground
     # via git history + repo docs instead.
     "memory_mcp": None,
@@ -75,6 +79,7 @@ _ENV = {
     "dev_command": "MANAGER_DEV_CMD",
     "dev_port": "MANAGER_DEV_PORT",
     "verify_command": "MANAGER_VERIFY_CMD",
+    "push_mode": "MANAGER_PUSH_MODE",
 }
 
 _INT_KEYS = ("panel_port", "dispatch_cap", "dev_port")
@@ -102,6 +107,8 @@ def load():
     for k in _PATH_KEYS:
         if cfg.get(k):
             cfg[k] = os.path.expanduser(str(cfg[k]))
+    # normalize: anything that isn't explicitly "local" means the default PR flow
+    cfg["push_mode"] = "local" if str(cfg.get("push_mode", "")).lower() == "local" else "pr"
     return cfg
 
 

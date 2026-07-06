@@ -78,9 +78,13 @@ error — run the first-run setup below (Phase 0) before anything else.
    the shipped history (`git log origin/<base_branch>`, the manager archive, and
    the memory MCP if configured). A huge fraction of any QA doc is already fixed
    by the time you read it; dropping those is the manager's biggest value-add.
-4. **Stop at PR-ready. Never merge.** Each run goes to a green PR against the
-   base branch and stops; the human merges from GitHub. (The merge boundary is
-   configured — current default is PR-ready.)
+4. **Stop at the mode's finish line. Never merge.** In PR mode (config
+   `push_mode: "pr"`, the default) each run goes to a green PR against the base
+   branch and stops; the human merges from GitHub. In **local mode**
+   (`push_mode: "local"`) each run stops at a committed local branch — nothing
+   is pushed, no `gh` needed; the human reviews and merges locally. Either way,
+   merging is always the human's action. The mode is read live at each
+   dispatch, so the panel's PR/Local toggle applies to the next run.
 5. **Report what you couldn't do.** Anything you can't execute — external blockers,
    investigate-only, or a feature too big without a scope decision — goes to the
    `blocked` bucket with a one-line reason, NOT a guess and NOT silence.
@@ -482,7 +486,8 @@ green PR, then stops. You stay resident and supervise:
 ## Final report (intern handing work back to the manager)
 
 When the batch is dispatched, report tightly:
-- **Done / PR-ready** (N): titles + PR links to merge.
+- **Done / PR-ready** (N): titles + PR links to merge — or, in local mode,
+  branch names + the one-line local review/merge command.
 - **In flight** (N): titles + their test URLs.
 - **Needs your input** (N): the few preference questions, each one line.
 - **Can't be done** (N): blocked / needs-scope, each with the reason.

@@ -90,9 +90,16 @@ committed template):
   "verify_command": "npm run lint && npm test",
   "env_files": [],
   "risk_keywords_extra": [],
+  "push_mode": "pr",
   "memory_mcp": null
 }
 ```
+
+`push_mode` picks the finish line: **`pr`** (default) pushes each branch and
+opens a GitHub PR (needs `gh`); **`local`** stops at a committed local branch —
+no push, no PR, no `gh`, nothing leaves your machine, and you merge locally.
+Toggle it live from the panel's **⇧ PR mode / 💻 Local mode** button (applies to
+the next dispatched run).
 
 Env vars (`MANAGER_REPO`, `MANAGER_PORT`, `MANAGER_CAP`, `MANAGER_BASE_BRANCH`,
 …) override the file. Optionally fill in

@@ -11,5 +11,6 @@
   "verify_command": "npm run lint && npm test",
   "env_files": [],
   "risk_keywords_extra": [],
+  "push_mode": "pr",
   "memory_mcp": null
 }

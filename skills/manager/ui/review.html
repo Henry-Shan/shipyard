@@ -204,6 +204,7 @@
   <div class="spacer"></div>
   <div class="cov" id="cov"></div>
   <span id="capctl" class="capctl"></span>
+  <button id="modebtn" class="hbtn gh" onclick="toggleMode(this)"></button>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
   <button class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
@@ -278,10 +279,20 @@ function toggleFind(id){
 
 // ============================ full task controls ==========================
 // Everything the classic panel does, brought onto the review board.
-let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0;
+let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0, PUSHMODE="pr";
+// Toggle where finished work lands: "pr" (push + GitHub PR, needs gh) vs
+// "local" (committed local branch only — nothing leaves the machine). Applies
+// to the NEXT dispatched run; in-flight runs keep the mode they started with.
+async function toggleMode(btn){
+  if(btn) btn.disabled=true;
+  const next=PUSHMODE==="local"?"pr":"local";
+  try{ await apiPost("/api/config",{push_mode:next}); }catch(e){}
+  if(btn) btn.disabled=false;
+  refresh();
+}
 // REPO + SKILLDIR come from /api/state (the configured target repo and the
 // manager skill's install dir) — used in copy-to-terminal commands.
-let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager";
+let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager", BASEBR="main";
 let PROGRESS={steps:[],active:false,done:false};
 const REWORK_OPEN=new Set(), TESTPLAN_OPEN=new Set();
 // Live setup feed shown while a /manager run ingests a source (fetch → parse →
@@ -302,6 +313,11 @@ function renderControls(s){
   const cap=s.cap||1;
   $("#capctl").innerHTML=`<span class="caplbl">concurrency</span>`+
     `<button class="capb" onclick="setCap(${cap-1})">−</button><b>${cap}</b><button class="capb" onclick="setCap(${cap+1})">+</button>`;
+  const mb=$("#modebtn");
+  if(mb){ mb.textContent=PUSHMODE==="local"?"💻 Local mode":"⇧ PR mode";
+    mb.title=PUSHMODE==="local"
+      ?"Finished work stays as LOCAL branches — no push, no PRs, no gh needed. Click to switch to PR mode."
+      :"Finished work is pushed and opened as GitHub PRs (needs gh). Click to switch to local-only mode (nothing leaves this machine)."; }
   const pb=$("#pausebtn"); pb.textContent=PAUSED?"▶ Resume":"⏸ Pause"; pb.className="hbtn"+(PAUSED?" primary":" gh");
   // Only surface the time-sensitive rate-limit cooldown; the plain "Paused"
   // state is already shown by the Resume button, so no banner for it.
@@ -345,6 +361,9 @@ async function deleteTask(tid){
 }
 function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claude --resume ${sid}`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
+function copyBranchReview(branch,btn){
+  navigator.clipboard.writeText(`cd ${REPO} && git diff ${BASEBR}...${branch}   # review; merge when happy: git merge --squash ${branch} && git commit`)
+  .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1400);} }); }
 function copyTestPlan(ev,id){ ev.preventDefault(); ev.stopPropagation();
   const txt=document.getElementById(id)?.textContent||"";
   navigator.clipboard.writeText(txt).then(()=>{const b=ev.target;const o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1200);}); }
@@ -419,7 +438,12 @@ function taskActions(t){
   } else if(t.status==="blocked"){
     main=`<button class="tbtn primary" onclick="setStatus(${t.id},'queued')">Queue anyway</button>`;
   } else if(t.status==="done"){
-    main=`${t.pr_url?`<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`:""} ${tb} ${reworkBtn}`;
+    // PR mode: link to the PR. Local mode (no pr_url): show the local branch
+    // with a copyable review command — the work never left the machine.
+    const finished = t.pr_url
+      ? `<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`
+      : (t.branch ? `<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick="copyBranchReview(${JSON.stringify(t.branch)},this)">⎇ ${esc(t.branch)} · copy review cmd</button>` : "");
+    main=`${finished} ${tb} ${reworkBtn}`;
   } else if(t.status==="running"||t.status==="parked"){ main=tb; }
   return `<div class="tact">${main}<span class="tspacer"></span>${sess}${remove}</div>`;
 }
@@ -721,6 +745,8 @@ async function refresh(){
   PAUSED=!!s.paused; MANAGER_SESSION=s.manager_session||null;
   if(s.repo) REPO=s.repo;
   if(s.skill_dir) SKILLDIR=s.skill_dir;
+  if(s.base_branch) BASEBR=s.base_branch;
+  PUSHMODE=s.push_mode||"pr";
   CAP=s.cap||1; COOLDOWN=s.cooldown_left||0;
   PROGRESS=s.progress||{steps:[],active:false,done:false};
   renderControls(s);

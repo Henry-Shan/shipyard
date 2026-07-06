@@ -41,18 +41,28 @@ sibling manager skill; see its `config.example.json`). Resolve once:
 SKILL_DIR="${SKILL_DIR:-$HOME/.claude/skills/ship-task}"   # where THIS skill is installed
 [ -f "$SKILL_DIR/verify.sh" ] || SKILL_DIR="$(pwd)/.claude/skills/ship-task"  # project-level fallback
 C(){ python3 "$SKILL_DIR/../manager/skill_config.py" get "$1"; }
-REPO="$(C repo)"; BASE="$(C base_branch)"
+REPO="$(C repo)"; BASE="$(C base_branch)"; MODE="$(C push_mode)"
 ```
 
 `$BASE` (the configured `base_branch`) is the integration branch everywhere
 below: the worktree base, the dedup truth, and the PR target.
+
+`$MODE` (config `push_mode`) picks the finish line — resolve it once at start
+and announce it with your routing decision:
+- **`pr`** (default): commit → push → open a PR to `$BASE` → hand off. Needs `gh`.
+- **`local`**: commit on the local feature branch and STOP. **No push, no PR, no
+  `gh`, no network** — the user reviews and merges locally. Everything before
+  the finish line (worktree, tests, verify gate, feature-tester) is identical.
 
 ## Invariants — true at EVERY tier, no exceptions
 
 The router changes how much *authoring* work happens. It NEVER relaxes landing safety:
 
 - **NEVER** push to, commit to, or merge into any protected branch.
-- **NEVER** push directly to `$BASE`. The only path to `$BASE` is a merged PR.
+- **NEVER** push directly to `$BASE`. The only path to `$BASE` is a merged PR
+  (or, in local mode, the user's own local merge).
+- **In local mode, NEVER push or open a PR at all** — the boundary moves
+  earlier, never later. A mode can only make the run touch LESS, not more.
 - **ship-task STOPS at PR-ready and HANDS OFF.** It pushes the branch, opens the PR,
   and reports immediately — it does **not** block waiting for CI, and it does **not**
   merge. The user watches CI, tests the branch, and merges when green + satisfied.
@@ -342,10 +352,15 @@ git -C "$WT" rev-parse --abbrev-ref HEAD   # sanity check: must be feature/$slug
 "$SKILL_DIR/../feature-tester/feature-test-gate.sh" --root "$WT" || { echo "feature-test gate failed — STOP"; exit 1; }
 git -C "$WT" add -A
 git -C "$WT" commit -m "<type>: <short imperative summary>"
+# PR mode only — in local mode ($MODE = local) do NOT run this line:
 git -C "$WT" push -u origin "feature/$slug"
 ```
 
-## Step 7 — Open the PR to the base branch
+**Local mode short-circuit:** after the commit, skip Steps 7–9 entirely and go
+straight to the hand-off report (Step 8's local variant). Do not push, do not
+touch `gh`.
+
+## Step 7 — Open the PR to the base branch (PR mode only)
 
 ```bash
 cd "$WT"
@@ -368,7 +383,22 @@ EOF
 )"
 ```
 
-## Step 8 — Submit & hand off (ALL tiers; do NOT wait for CI)
+## Step 8 — Hand off (ALL tiers)
+
+**Local mode variant** (`$MODE` = local): the finish line is the committed
+branch. Report immediately:
+
+- **What shipped** — one line + tier + `Mode: local (no push)`.
+- **The branch** — `feature/$slug`, living in worktree `$WT`. Review it with:
+  `git -C "$REPO" diff "$BASE"..."feature/$slug"`.
+- **How to test** — same as below (the worktree's dev server / commands).
+- **Merge when ready** — the user's action, locally:
+  `git -C "$REPO" merge --squash "feature/$slug" && git -C "$REPO" commit`
+  (then the teardown command from Step 11 removes the worktree + branch).
+- Nothing left the machine. If they later want a PR instead, one command from
+  the worktree does it: `git -C "$WT" push -u origin "feature/$slug" && cd "$WT" && gh pr create --base "$BASE"`.
+
+Then the run is **done**. The rest of this step is the **PR-mode variant**:
 
 The branch is pushed and the PR is open. **Do NOT block on `gh pr checks --watch`.**
 CI runs on GitHub and takes a few minutes; you don't sit and wait for it, and you
@@ -404,9 +434,10 @@ Then the run is **done**. Do not poll CI, do not call `AskUserQuestion`, do not 
 
 ## Step 9 — (the user merges)
 
-Merging is the **user's** action, from the report's instructions, after CI is green
-and they've tested: `gh pr merge <#> --squash --delete-branch`. ship-task never runs
-it. (CI being red, or the branch needing changes, is also the user's call — a
+Merging is the **user's** action, from the report's instructions — after CI is
+green and they've tested (PR mode: `gh pr merge <#> --squash --delete-branch`;
+local mode: the local `merge --squash` from the report). ship-task never runs
+either. (CI being red, or the branch needing changes, is also the user's call — a
 follow-up `/ship-task` run can address requested changes on the same branch.)
 
 ## Step 10 — Report

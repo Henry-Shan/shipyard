@@ -28,6 +28,7 @@ MANAGER_URL="${4:-http://127.0.0.1:$(cfg panel_port)}"
 REPO="$(cfg repo)"
 BASE_BRANCH="$(cfg base_branch)"
 MEMORY_MCP="$(cfg memory_mcp)"
+PUSH_MODE="$(cfg push_mode)"   # "pr" (push + PR, needs gh) | "local" (committed local branch, no GitHub)
 
 # Permission posture for an unattended run. ship-task is authorized to
 # branch/push/PR under the manager; without skipping prompts a headless run
@@ -57,13 +58,22 @@ else
   GROUNDING="read the repo, check git history (git log origin/$BASE_BRANCH), and the project docs (CLAUDE.md, README)"
 fi
 
-read -r -d '' RELAY <<EOF
-─────────────────────────────────────────────────────────────────────
-MANAGER-MODE: AUTONOMOUS, STOP AT PR-READY (overrides ship-task's gates)
-
-You are running headless under the manager orchestrator. There is NO terminal,
-so AskUserQuestion hangs forever — never call it.
-
+# The stop line depends on push_mode: PR-ready (push + open a PR) vs
+# local-branch-ready (commit only — no push, no PR, no gh, no GitHub at all).
+if [ "$PUSH_MODE" = "local" ]; then
+  read -r -d '' STOP_BLOCK <<EOF
+STOP LINE = LOCAL-BRANCH-READY (local mode). Run the full ship-task pipeline up
+to: branch -> verified, feature-tested commit on the feature branch inside the
+worktree. Do NOT push, do NOT open a PR, do NOT use gh, do NOT merge. When the
+branch is committed and green, report a copyable MANUAL-TEST GUIDE:
+  curl -s -X POST ${MANAGER_URL}/api/runinfo -H 'Content-Type: application/json' \\
+    -d '{"session_id":"${SESSION_ID}","test_plan":"<guide>"}'
+(no pr_url in local mode — the panel picks the branch up from your worktree).
+Then finish with a one-line summary naming the branch. A committed, verified
+local branch = success.
+EOF
+else
+  read -r -d '' STOP_BLOCK <<EOF
 STOP LINE = PR-READY. Run the full ship-task pipeline up to: branch -> commit ->
 push -> open PR to ${BASE_BRANCH}. Then STOP and HAND OFF — do NOT wait for CI and
 do NOT merge (ship-task already hands off at PR-ready; the human watches CI + merges
@@ -71,6 +81,17 @@ from GitHub). As soon as the PR is open, report it + a copyable MANUAL-TEST GUID
   curl -s -X POST ${MANAGER_URL}/api/runinfo -H 'Content-Type: application/json' \\
     -d '{"session_id":"${SESSION_ID}","pr_url":"<PR url>","test_plan":"<guide>"}'
 Then finish with a one-line summary. Reaching a green PR = success.
+EOF
+fi
+
+read -r -d '' RELAY <<EOF
+─────────────────────────────────────────────────────────────────────
+MANAGER-MODE: AUTONOMOUS (overrides ship-task's gates)
+
+You are running headless under the manager orchestrator. There is NO terminal,
+so AskUserQuestion hangs forever — never call it.
+
+${STOP_BLOCK}
 
 THE TEST GUIDE (test_plan) is for a non-engineer to verify your change by hand.
 Make it CONCISE and CONCRETE — numbered steps, each naming: which ACCOUNT/ROLE to
