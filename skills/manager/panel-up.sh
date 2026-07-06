@@ -60,9 +60,19 @@ if [ -z "$up" ]; then
   fi
 fi
 
-# fresh progress feed for this run
-curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"clear":true}' >/dev/null
-curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"label":"Started the control panel"}' >/dev/null
+# Reset the progress feed ONLY when reconnecting to an empty board. Every
+# /manager run restarts the daemon (restart-first), and the daemon's own
+# progress state is otherwise untouched by a restart — but blindly resetting
+# it here would flash "Setting up your board..." over an existing populated
+# board every single time the daemon restarts, even long after ingest finished.
+TASK_COUNT="$(curl -s -m 2 "$URL/api/state" 2>/dev/null | python3 -c '
+import json,sys
+try: print(len([t for t in json.load(sys.stdin).get("tasks",[]) if t.get("status")!="rejected"]))
+except Exception: print(0)' 2>/dev/null || echo 0)"
+if [ "${TASK_COUNT:-0}" = "0" ]; then
+  curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"clear":true}' >/dev/null
+  curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"label":"Started the control panel"}' >/dev/null
+fi
 
 # Best-effort: register the calling Claude session for the panel (resume info).
 # The transcript dir is derived from this shell's cwd (Claude Code mangles both
@@ -82,3 +92,4 @@ echo "CONFIG_OK=$CONFIG_OK"
 echo "REPO=$(cfg repo)"
 echo "BASE_BRANCH=$(cfg base_branch)"
 echo "PUSH_MODE=$(cfg push_mode)"
+echo "HAS_WEB_UI=$(cfg has_web_ui)"   # empty = not asked yet; True/False once decided

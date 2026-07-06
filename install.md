@@ -133,19 +133,28 @@ repo first so your suggested answers are informed (e.g. read `package.json` /
    worktree base, and PR target. Check `git -C <repo> remote show origin` for
    the default branch.
 3. **Setup command** (default `npm install`) — run once in each fresh worktree.
-4. **Dev command** (default `npm run dev`) — starts the app for manual testing.
-5. **Dev port** (default `3000`) — where the dev command serves; the panel
-   health-checks it.
-6. **Verify command** (default `npm run lint && npm test`) — the quality gate
+4. **Does this project have a web frontend you can open in a browser?** This
+   decides whether the panel ever offers a "Test this branch"/"Open app"
+   button — get it right once here rather than a broken button showing up
+   later. Look at `package.json`/README to propose an informed default before
+   asking (a `dev`/`start` script that boots a UI vs. one that's clearly an
+   API/CLI/worker with nothing to browse to).
+   - **Yes** → ask **Dev command** (default `npm run dev`) and **Dev port**
+     (default `3000`) — the command + port that serve the browsable app.
+     Set config `has_web_ui: true`.
+   - **No** (API/library/CLI/backend-only) → skip dev command/port entirely;
+     set config `has_web_ui: false`. The panel will show a plain-language
+     before/after of each fix instead of a live-app button.
+5. **Verify command** (default `npm run lint && npm test`) — the quality gate
    every ship-task run must pass before committing.
-7. **Env files** (default none) — repo-relative gitignored files (e.g. `.env`,
+6. **Env files** (default none) — repo-relative gitignored files (e.g. `.env`,
    `apps/web/.env.local`) to symlink into each worktree.
-8. **Push mode** (default `pr`) — where finished work lands: `pr` pushes each
+7. **Push mode** (default `pr`) — where finished work lands: `pr` pushes each
    branch and opens a GitHub PR (needs `gh`); `local` stops at a committed
    local branch — no push, no PR, no `gh`, nothing leaves the machine. If the
    user has no GitHub remote or declined installing `gh`, recommend `local`
    (they can toggle any time from the panel's PR/Local button).
-9. **Optional**: extra risk keywords (project terms that must force extra rigor,
+8. **Optional**: extra risk keywords (project terms that must force extra rigor,
    e.g. a tenancy column name), and a memory MCP server name if they have one.
 
 Then write the answers to `~/.claude/skills/manager/config.json` using

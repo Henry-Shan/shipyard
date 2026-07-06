@@ -970,6 +970,7 @@ class Handler(BaseHTTPRequestHandler):
             # read live (not from the import-time CFG): the panel toggle writes it
             # without a restart, and each dispatch reads it fresh anyway.
             st["push_mode"] = skill_config.get("push_mode")
+            st["has_web_ui"] = skill_config.get("has_web_ui")   # null=not yet asked, true/false=decided
             st["base_branch"] = BASE_BRANCH
             st["skill_dir"] = HERE           # for panel-shown shell snippets (e.g. PDF copy)
             st["manual_pause"] = os.path.exists(PAUSE_FILE)
@@ -1060,16 +1061,6 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         p = u.path
         body = self._body()
-        if p == "/api/say":
-            # The orchestrator mirrors its chat conversation here (one short
-            # line per turn) so the panel shows the dialogue, not just
-            # mechanical progress. {"text": "...", "who": "manager"|"you"}
-            txt = (body.get("text") or "").strip()[:500]
-            who = (body.get("who") or "manager").strip()[:24] or "manager"
-            if txt:
-                with core.connect() as c:
-                    core.log_event(c, f"say.{who}", txt)
-            return self._send(200, {"ok": True})
         if p == "/api/ask":
             # a running session relays a question into the inbox
             qid = core.add_question(
@@ -1191,7 +1182,7 @@ class Handler(BaseHTTPRequestHandler):
             allowed = {"repo", "base_branch", "setup_command", "dev_command",
                        "dev_port", "verify_command", "panel_port", "dispatch_cap",
                        "env_files", "risk_keywords_extra", "memory_mcp",
-                       "worktree_dir", "archive_dir", "push_mode"}
+                       "worktree_dir", "archive_dir", "push_mode", "has_web_ui"}
             updates = {k: v for k, v in body.items() if k in allowed}
             if not updates:
                 return self._send(400, {"ok": False, "error": "no recognized config keys"})
@@ -1213,7 +1204,7 @@ class Handler(BaseHTTPRequestHandler):
             # push_mode is read live (state endpoint + each dispatch), so a
             # mode toggle needs no restart — mid-batch toggles must not bounce
             # the daemon. Everything else is import-time config: re-exec.
-            needs_restart = bool(set(updates) - {"push_mode"})
+            needs_restart = bool(set(updates) - {"push_mode", "has_web_ui"})
             if needs_restart:
                 threading.Timer(0.6, _reexec).start()  # respond first, then restart
             return self._send(200, {"ok": True, "restarting": needs_restart})
@@ -1429,7 +1420,21 @@ def main():
     if args.cmd == "init":
         print("ok")
     elif args.cmd == "reset":
-        print(f"cleared {core.reset_queue()} task(s)")
+        n = core.reset_queue()
+        # Best-effort: also clear the LIVE daemon's in-memory progress feed (a
+        # separate process; this CLI call can't touch its memory directly). If
+        # a fresh run's queue is cleared but the daemon's stale progress banner
+        # from a prior run isn't, refresh gets stuck showing "Setting up your
+        # board..." forever even though the queue is empty.
+        try:
+            import urllib.request
+            urllib.request.urlopen(
+                urllib.request.Request(f"{URL}/api/progress", data=b'{"clear":true}',
+                                       headers={"Content-Type": "application/json"}, method="POST"),
+                timeout=2)
+        except Exception:
+            pass
+        print(f"cleared {n} task(s)")
     elif args.cmd == "add":
         tid = core.add_task(
             args.title, args.description, args.source, json.loads(args.evidence),

@@ -62,6 +62,13 @@ DEFAULTS = {
     # (needs gh); "local" = stop at a committed local branch — no push, no PR,
     # no gh needed. Toggleable live from the panel.
     "push_mode": "pr",
+    # Does this project have a browsable web frontend at dev_command/dev_port?
+    # null = not yet asked (the intake flow asks once and persists the answer).
+    # true  -> the panel offers "Test this branch" / "Open app".
+    # false -> no live-app button is ever shown (many projects — APIs, CLIs,
+    #          libraries — have nothing to open in a browser); the panel shows
+    #          a plain-language before/after of the fix instead.
+    "has_web_ui": None,
     # Optional memory MCP server name (e.g. "my-project-memory"). null = ground
     # via git history + repo docs instead.
     "memory_mcp": None,
