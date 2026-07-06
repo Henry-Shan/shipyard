@@ -1264,7 +1264,10 @@ def open_panel():
     if os.environ.get("MANAGER_NO_OPEN"):
         return
     try:
-        if time.time() - os.path.getmtime(LAST_POLL_FILE) < 30:
+        # A REAL tab polls /api/state every 1-8s, so a fresh marker means a tab
+        # is alive right now. (Scripted health checks must probe "/" instead —
+        # a probe that touched /api/state would suppress this open forever.)
+        if time.time() - os.path.getmtime(LAST_POLL_FILE) < 12:
             print(f"panel already open (tab polling) — not opening another: {URL}")
             return
     except OSError:

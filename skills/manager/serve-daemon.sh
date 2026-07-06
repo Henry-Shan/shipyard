@@ -25,7 +25,9 @@ OUTLOG="$LOG_DIR/daemon.out"
 PORT="$(python3 "$HERE/skill_config.py" get panel_port)"   # env MANAGER_PORT overrides via the loader
 mkdir -p "$LOG_DIR"
 
-is_up() { curl -s -m 3 "http://127.0.0.1:${PORT}/api/state" >/dev/null 2>&1; }
+# probe "/" not /api/state: state polls mark "a panel tab is alive", which
+# would suppress the daemon's own browser auto-open (see managerd.open_panel)
+is_up() { curl -s -m 3 -o /dev/null "http://127.0.0.1:${PORT}/" 2>/dev/null; }
 
 case "${1:-start}" in
   stop)
@@ -53,7 +55,7 @@ fi
 KEEPAWAKE=""
 command -v caffeinate >/dev/null 2>&1 && KEEPAWAKE="caffeinate -dimsu"
 # shellcheck disable=SC2086
-nohup $KEEPAWAKE python3 "$HERE/managerd.py" serve >"$OUTLOG" 2>&1 &
+nohup $KEEPAWAKE python3 -u "$HERE/managerd.py" serve >"$OUTLOG" 2>&1 &
 echo $! > "$PIDFILE"
 disown || true
 

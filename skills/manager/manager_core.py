@@ -230,9 +230,17 @@ def _task_dict(row):
 # ---------------------------------------------------------------- relay / inbox
 
 def add_question(session_id, question, options=None, context="", task_id=None, kind=""):
-    """A running ship-task session relays a question to the human."""
+    """A running ship-task session relays a question to the human. Idempotent
+    for identical pending questions: re-posting the same (session, question)
+    returns the existing row instead of stacking duplicates on the board."""
     options = options or []
     with connect() as c:
+        dup = c.execute(
+            "SELECT id FROM questions WHERE session_id=? AND question=? AND status='pending'",
+            (session_id, question),
+        ).fetchone()
+        if dup:
+            return dup["id"]
         if task_id is None:
             r = c.execute("SELECT id FROM tasks WHERE session_id=?", (session_id,)).fetchone()
             task_id = r["id"] if r else None
