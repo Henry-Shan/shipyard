@@ -94,6 +94,7 @@ re-check. Only poppler is optional.
 ```bash
 python3 -c 'import sys; assert sys.version_info >= (3,9), sys.version; print("python3 OK:", sys.version.split()[0])'
 git --version
+git config user.name && git config user.email   # identity for commits ship-task/manager make
 gh auth status          # must show a logged-in account — ship-task opens PRs with gh
 claude --version        # the Claude Code CLI — dispatch.sh launches headless runs with it
 pdftoppm -v             # poppler — OPTIONAL: only needed for PDF ingest / the panel's PDF view
@@ -103,9 +104,21 @@ pdftoppm -v             # poppler — OPTIONAL: only needed for PDF ingest / the
 |---|---|---|
 | `python3` ≥ 3.9 | every script (stdlib only — **macOS's built-in Python qualifies**) | see fix flow below |
 | `git` | worktrees, dedup, branches | install git (macOS: `xcode-select --install`) |
+| git identity (`user.name`+`user.email`) | every commit ship-task/manager makes, in EITHER mode | have the user run it themselves — see below; **never run `git config` for them** |
 | `gh` + logged in | opening PRs — **only needed in PR mode**; in local mode (`push_mode: "local"`, nothing pushed) skip it entirely | `brew install gh` / `apt install gh`, then `gh auth login` |
 | `claude` CLI | dispatching headless runs | install Claude Code |
 | poppler (`pdftoppm`) | **optional** — PDF ingest + panel PDF view | `brew install poppler` / `apt install poppler-utils` |
+
+**Fix git identity FIRST, before anything else on this list, if it's missing —
+this is the one check that matters no matter which mode the user ends up in,
+and getting it out of the way here means `/manager` never has to stop mid-run
+to ask for it.** Tell the user exactly (never run this for them, never guess a
+name/email):
+> Type this here (fill in your real name/email) — then tell me to continue:
+> `git config --global user.name "Your Name" && git config --global user.email "you@example.com"`
+
+Then re-run `git config user.name && git config user.email` yourself to
+confirm before moving on to the rest of this step.
 
 **Fix flow** (after presenting the report). Never dump manual instructions and
 stop — always end with ONE clickable question (AskUserQuestion) whose options

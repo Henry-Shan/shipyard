@@ -177,9 +177,12 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
    3. `git init -b main`. Before committing anything, check identity is
       already configured — `git config user.name` and `git config user.email`
       (plain, no `--global`/`--local` flag, so it reads whatever's already
-      effective). **If either is empty, STOP — do not commit, and above all
-      do NOT run `git config` yourself to set one, not even a guess.** Tell
-      the user exactly:
+      effective). **This should already be true** — install.md's prerequisite
+      check fixes this once, up front, specifically so it never has to
+      interrupt a `/manager` run. If it's somehow still missing anyway (the
+      skill was installed by hand, or identity was unset since), **STOP — do
+      not commit, and above all do NOT run `git config` yourself to set one,
+      not even a guess.** Tell the user exactly:
       `git isn't configured with an identity yet — run this yourself, then
       say "continue": git config --global user.name "Your Name" && git config
       --global user.email "you@example.com"` — then wait. This is the same
