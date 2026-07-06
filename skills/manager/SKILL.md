@@ -137,35 +137,43 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
 ```
 
 1. Check whether the current directory is a git repo
-   (`git rev-parse --git-dir 2>/dev/null`). Then ask ONE question with
-   **AskUserQuestion**, so the user just clicks:
+   (`git rev-parse --git-dir 2>/dev/null`), and read the gh decision that
+   install.md already made — **before** building the question, so it can be
+   shown right there instead of hidden behind another click:
+   ```bash
+   python3 "$SKILL_DIR/skill_config.py" get gh_available
+   ```
+   Then ask ONE question with **AskUserQuestion**, so the user just clicks —
+   the "create a new repo" option's own label already states the mode that
+   was decided at install, nothing further to choose:
    - **Use this repo: `<pwd>` (recommended)** — only offered when pwd IS a git repo.
    - **A different repo** — then ask for the absolute path.
-   - **Create a new repo for me** — see the sub-flow below. **Never** start it
-     (never run `git init`, never touch GitHub) before that sub-flow's own
-     first question is answered.
+   - **Create a new repo for me** — label it from `gh_available`:
+     - `True` → **"Create a new repo for me — pushes to GitHub (PR mode, as
+       set up at install)"**.
+     - `False` → **"Create a new repo for me — local only, no GitHub (as set
+       up at install)"**.
+     - empty/unset (only if the skill was copied by hand without ever running
+       `install.md`) → plain **"Create a new repo for me"** — the one
+       fallback case where the sub-flow below still asks GitHub-vs-local
+       inline, once, and persists the answer so it's never asked again.
 
-   **"Create a new repo for me" sub-flow — read the gh decision, never re-ask
-   it:**
+     Whichever label is shown, **never** start the sub-flow (never run
+     `git init`, never touch GitHub) before this question itself is answered.
+
+   **"Create a new repo for me" sub-flow — act on the label just shown, don't
+   re-ask it:**
    1. Confirm a path.
-   2. **Never ask the GitHub-linked-vs-local question here — that decision was
-      already made once, at install time.** Read it before touching git at all:
-      ```bash
-      python3 "$SKILL_DIR/skill_config.py" get gh_available
-      ```
-      - `True` → this machine has a working `gh` — proceed **GitHub-linked**
-        below, silently.
-      - `False` → install.md already recorded there's no `gh` (or the user
-        chose local) — proceed **Fully local** below, silently. Do not
-        mention gh, do not offer to install it, do not display any
-        GitHub-related question here.
-      - empty/unset (only happens if the skill was copied by hand without
-        running `install.md`) → this is the one fallback case where you ask:
-        *"Should this repo be linked to GitHub (PR mode), or fully local
-        (nothing ever leaves this machine)?"* Options: **GitHub-linked (PR
-        mode)** · **Fully local (local mode)**. Also persist the answer via
+   2. Proceed straight to GitHub-linked or Fully local per the label the user
+      just clicked (re-read `gh_available` if you need the value again — do
+      not ask a second question). Do not mention gh, do not offer to install
+      it, do not display any further GitHub-related prompt.
+      - Only in the empty/unset fallback case: ask *"Should this repo be
+        linked to GitHub (PR mode), or fully local (nothing ever leaves this
+        machine)?"* Options: **GitHub-linked (PR mode)** · **Fully local
+        (local mode)**. Persist the answer immediately —
         `curl -s -X POST "$MURL/api/config" -d '{"gh_available":true|false}'`
-        so it's never asked again on this machine.
+        — so it's never asked again on this machine.
    3. `git init -b main`. Before committing anything, check identity is
       already configured — `git config user.name` and `git config user.email`
       (plain, no `--global`/`--local` flag, so it reads whatever's already
