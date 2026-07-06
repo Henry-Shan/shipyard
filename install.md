@@ -19,6 +19,13 @@ moment it finishes, don't wait until the end to report everything at once:
 [3/3] Running smoke tests…     ✓
 ```
 
+**The checklist above IS the step-by-step report — do not also build a table
+recapping it at the end.** Wide multi-column tables wrap and garble in a
+terminal; more importantly, the user just watched these steps happen and
+doesn't need them repeated. The one thing you print after `[3/3]` is Step 4's
+short "how to use" message — nothing else, unless something is still broken
+(then say what, in one line, before the how-to-use block).
+
 This package contains three Claude Code skills that work together:
 
 - **manager** — orchestrates a batch of tasks: ingests a work source, dedupes
@@ -197,29 +204,27 @@ bash ../ship-task/verify.sh --selftest          # verify harness (expects 1 PASS
 All four must succeed (verify.sh's selftest intentionally shows one simulated
 FAIL and exits 1 — that IS the pass condition for the harness).
 
-## Step 4 — Print "how to use"
+## Step 4 — Print "how to use" (this is the ENTIRE final message)
 
-Tell the user:
+Print exactly this shape, filled in — nothing before it, nothing after it. No
+table, no step-by-step recap, no restating what's installed or what passed:
 
 ```
-Installed. Nothing project-specific was asked or configured — that happens
-next, automatically, the first time you run /manager inside a real project.
+Installed ✓ — manager, ship-task, feature-tester.
 
-To use it:
+  1. cd <your target repo> && claude
+  2. /manager
+     (first run there asks its own quick setup: repo, base branch, web
+     frontend or not, PR vs. local — one time per project)
 
-  1. Open Claude Code in your target repo:   cd <repo> && claude
-  2. Run:   /manager
-     First run in a new repo, it asks a few quick setup questions right there
-     (repo path, base branch, whether there's a web frontend to test, PR vs.
-     local mode) — then every run after that just works.
-  3. A control panel opens at http://127.0.0.1:<panel_port> — watch runs,
-     answer the few questions that need you, and merge the finished PRs
-     from GitHub. Runs always stop at PR-ready; nothing merges itself.
+  Single task, no orchestration:  /ship-task "add a CSV export button"
 
-  Single tasks (no orchestration): /ship-task "add a CSV export button"
-
-  ⚠ Dispatched runs use `claude --dangerously-skip-permissions` (headless
-  agents that edit files, run commands, push branches, open PRs in your
-  configured repo — and never merge). Read
+  ⚠ Runs use `claude --dangerously-skip-permissions` — read
   ~/.claude/skills/manager/dispatch.sh before your first batch.
 ```
+
+If gh ended up unavailable/deferred (`gh_available: false`), append exactly
+ONE line: `Local mode for now — no gh, nothing pushes. Say the word if you
+want PR mode set up later.` If something is still genuinely broken (a real
+prerequisite that couldn't be fixed), say that in one line above the block
+instead — never silently print success.
