@@ -6,181 +6,251 @@
 <title>Review · requirement coverage</title>
 <style>
   :root{
-    --canvas:#eceef1; --paper:#ffffff; --ink:#1f2328; --dim:#656d76; --line:#d8dce0;
-    --queued:#6e7781; --prog:#0969da; --test:#8250df; --ready:#1a7f37;
-    --wait:#9a6700; --block:#bc4c00; --fail:#cf222e; --none:#8b949e; --ctx:#57606a;
+    /* neo-brutalism: warm paper canvas, near-black ink/borders, saturated-but-
+       readable accents (each doubles as solid-button bg AND as text-on-tint via
+       the existing `color:X;background:X22` pattern used throughout the JS) */
+    --canvas:#F3EFE4; --paper:#ffffff; --ink:#141414; --dim:#54524A; --line:#141414;
+    --queued:#5B6472; --prog:#1E48E0; --test:#6B2FE0; --ready:#178A46;
+    --wait:#B27B00; --block:#C1440E; --fail:#C4183C; --none:#6B7280; --ctx:#4B5563;
+    --shadow:#141414; --r:8px; --rl:14px;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--canvas);color:var(--ink);
-    font:13.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  a{color:var(--prog);text-decoration:none} a:hover{text-decoration:underline}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  body{margin:0;color:var(--ink);
+    background:
+      radial-gradient(circle at 1px 1px, rgba(20,20,20,.07) 1px, transparent 0) 0 0/18px 18px,
+      var(--canvas);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--prog);font-weight:700;text-decoration:none} a:hover{text-decoration:underline;text-decoration-thickness:2px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
 
   header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;
-    padding:9px 18px;background:var(--paper);border-bottom:1px solid var(--line)}
-  header .title{font-size:15px;font-weight:650} header .sub{color:var(--dim);font-size:12px}
+    padding:10px 18px;background:var(--paper);border-bottom:3px solid var(--ink)}
+  header .title{font-size:15px;font-weight:900;letter-spacing:-.01em;display:inline-block;
+    background:#FFE14D;border:2.5px solid var(--ink);border-radius:6px;padding:2px 10px;
+    box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg)}
+  header .sub{color:var(--dim);font-size:12px;font-weight:700}
   header .spacer{flex:1}
-  .cov{display:flex;gap:5px;flex-wrap:wrap}
-  .pillc{font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px}
-  .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
-  .live i{width:7px;height:7px;border-radius:50%;background:var(--ready);animation:pulse 1.4s infinite}
+  .cov{display:flex;gap:6px;flex-wrap:wrap}
+  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;
+    border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em}
+  .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;font-weight:700}
+  .live i{width:8px;height:8px;border-radius:50%;background:var(--ready);border:1.5px solid var(--ink);animation:pulse 1.4s infinite}
   @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 
-  #shell{display:grid;grid-template-columns:212px 1fr;height:calc(100vh - 47px)}
-  #index{background:var(--paper);border-right:1px solid var(--line);overflow-y:auto;padding:8px 0}
-  #index .ihead{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);padding:6px 13px 4px}
-  .irow{display:flex;align-items:center;gap:8px;padding:6px 13px;cursor:pointer;border-left:3px solid transparent}
-  .irow:hover{background:#f3f5f7} .irow.on{background:#eef4ff;border-left-color:var(--prog)}
-  .irow .sd{width:8px;height:8px;border-radius:50%;flex:none}
+  #shell{display:grid;grid-template-columns:212px 1fr;height:calc(100vh - 49px)}
+  #index{background:var(--paper);border-right:3px solid var(--ink);overflow-y:auto;padding:10px 0}
+  #index .ihead{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink);font-weight:900;padding:8px 14px 6px}
+  .irow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;border-left:4px solid transparent;font-weight:600}
+  .irow:hover{background:#FFF3B0} .irow.on{background:#E3EBFF;border-left-color:var(--ink);font-weight:800}
+  .irow .sd{width:9px;height:9px;border-radius:50%;flex:none;border:1.5px solid var(--ink)}
   .irow .it{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   #stage{overflow-y:auto;position:relative}
   #docwrap{position:relative;margin:24px auto 140px}
   /* continuous pages — no per-page chrome, one flowing document */
-  .pg{position:absolute;left:0;background:var(--paper);box-shadow:0 1px 4px rgba(0,0,0,.10);overflow:hidden}
+  .pg{position:absolute;left:0;background:var(--paper);border:2.5px solid var(--ink);
+    border-radius:6px;box-shadow:5px 5px 0 var(--ink);overflow:hidden}
   .pg img{display:block;width:100%;height:100%}
-  .box{position:absolute;border:2px dashed var(--none);border-radius:7px;pointer-events:auto;cursor:pointer;
+  .box{position:absolute;border:2.5px dashed var(--ink);border-radius:8px;pointer-events:auto;cursor:pointer;
     transition:box-shadow .12s,border-color .12s,background .12s}
-  .box:hover,.box.hl{border-style:solid;background:rgba(9,105,218,.06);box-shadow:0 0 0 3px rgba(9,105,218,.16)}
-  .box .bn{position:absolute;top:-10px;left:8px;font-size:10px;font-weight:700;color:#fff;border-radius:5px;padding:0 6px}
+  .box:hover,.box.hl{border-style:solid;background:rgba(30,72,224,.08);box-shadow:0 0 0 3px rgba(30,72,224,.25)}
+  .box .bn{position:absolute;top:-12px;left:8px;font-size:10px;font-weight:900;color:#fff;border-radius:6px;padding:1px 7px;border:1.5px solid var(--ink)}
 
   /* right-margin note cards (Google-Docs style), absolutely placed beside their section */
-  .note{position:absolute;background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--none);
-    border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:9px 11px;transition:box-shadow .12s}
-  .note.hl{box-shadow:0 0 0 3px rgba(9,105,218,.16)}
+  .note{position:absolute;background:var(--paper);border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--none);
+    border-radius:10px;box-shadow:4px 4px 0 var(--ink);padding:10px 12px;transition:box-shadow .12s,transform .12s}
+  .note.hl{box-shadow:4px 4px 0 var(--prog);transform:translate(-1px,-1px)}
   .note .nh{display:flex;align-items:center;gap:7px}
-  .note .bn{font-size:10px;font-weight:700;color:#fff;border-radius:5px;min-width:18px;text-align:center;padding:1px 0}
-  .note .nt{font-weight:600;font-size:12.5px;line-height:1.3;flex:1}
-  .badge{font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 8px}
-  .note .task{margin-top:7px;padding-top:7px;border-top:1px solid #eef0f2;font-size:12px}
+  .note .bn{font-size:10px;font-weight:900;color:#fff;border-radius:6px;min-width:20px;text-align:center;padding:2px 0;border:1.5px solid var(--ink)}
+  .note .nt{font-weight:700;font-size:12.5px;line-height:1.3;flex:1}
+  .badge{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 8px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
+  .note .task{margin-top:7px;padding-top:7px;border-top:2px solid var(--ink);font-size:12px}
   .note .task:first-of-type{border-top:0;margin-top:5px;padding-top:0}
-  .note .tt{color:var(--ink)} .note .prog{margin-top:4px;color:#3d4450;background:#f6f8fa;
-    border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:11.5px;line-height:1.4}
+  .note .tt{color:var(--ink)} .note .prog{margin-top:4px;color:#222;background:#F6F4EE;
+    border:2px solid var(--ink);border-radius:7px;padding:5px 7px;font-size:11.5px;line-height:1.4}
   .note .ctxn{color:var(--dim);font-size:12px;margin-top:5px}
   .note .acts{margin-top:5px;font-size:11.5px}
 
-  .empty{max-width:740px;margin:60px auto;text-align:center;color:var(--dim)}
-  .banner{max-width:900px;margin:24px auto;background:#fff8c5;border:1px solid #d4c66a;border-radius:8px;
-    padding:14px 16px;color:#54470f;font-size:13px;line-height:1.5}
+  .empty{max-width:740px;margin:60px auto;text-align:center;color:var(--dim);font-weight:700}
+  .banner{max-width:900px;margin:24px auto;background:#FFF3B0;border:3px solid var(--ink);border-radius:var(--rl);
+    padding:16px 18px;color:var(--ink);font-size:13px;line-height:1.6;box-shadow:5px 5px 0 var(--ink)}
   .banner .mono{font-size:12px;word-break:break-all}
-  .cmd{margin:10px 0 0;padding:11px 12px;background:#1f2328;color:#e8f0ea;border-radius:7px;
+  .cmd{margin:10px 0 0;padding:12px 14px;background:var(--ink);color:#FFE14D;border:2.5px solid var(--ink);border-radius:9px;
     font-family:ui-monospace,Menlo,monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-all;user-select:all}
-  .skel{height:300px;margin:24px auto;max-width:520px;border-radius:6px;background:linear-gradient(90deg,#e6e9ec,#f2f4f6,#e6e9ec);
+  .skel{height:300px;margin:24px auto;max-width:520px;border:3px solid var(--ink);border-radius:var(--rl);
+    background:linear-gradient(90deg,#e6e2d6,#f2efe6,#e6e2d6);box-shadow:5px 5px 0 var(--ink);
     background-size:200% 100%;animation:sh 1.4s infinite}@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
   /* Notion mode: the doc rendered from blocks */
-  .ndoc{max-width:840px;margin:24px auto 120px;background:var(--paper);border:1px solid var(--line);
-    border-radius:8px;box-shadow:0 1px 5px rgba(0,0,0,.08);padding:30px 42px}
-  .ntest{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1a2029;margin:28px 0 6px;border-bottom:2px solid var(--line);padding-bottom:6px}
+  .ndoc{max-width:840px;margin:24px auto 120px;background:var(--paper);border:3px solid var(--ink);
+    border-radius:var(--rl);box-shadow:7px 7px 0 var(--ink);padding:34px 42px}
+  .ntest{font-size:20px;font-weight:900;letter-spacing:-.01em;color:var(--ink);margin:28px 0 6px;border-bottom:3px solid var(--ink);padding-bottom:7px}
   .ntest:first-child{margin-top:0}
-  .nfeat{font-size:14.5px;font-weight:650;color:#3a414c;margin:20px 0 6px}
-  .ntext{font-size:13.5px;color:#4a525e;margin:6px 0;line-height:1.6}
-  .nimg{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin:10px 0 2px}
+  .nfeat{font-size:14.5px;font-weight:800;color:var(--ink);margin:20px 0 6px;padding-left:9px;border-left:4px solid var(--prog)}
+  .ntext{font-size:13.5px;color:#3A3934;margin:6px 0;line-height:1.6}
+  .nimg{display:block;max-width:100%;border:2px solid var(--ink);border-radius:8px;margin:10px 0 2px}
   .ncap{color:var(--dim);font-size:11px;margin:0 0 12px}
-  .nfind{border:1px solid var(--line);border-left:3px solid var(--none);border-radius:8px;
-    padding:12px 14px;margin:12px 0;background:#fbfcfd;scroll-margin-top:60px}
+  .nfind{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--none);border-radius:10px;
+    padding:13px 15px;margin:14px 0;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink);scroll-margin-top:60px}
   .nfh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .sevtag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;text-transform:uppercase;letter-spacing:.02em}
-  .nft{margin-top:8px;font-size:14px;font-weight:500;color:#1f2733;line-height:1.55}
+  .sevtag{font-size:11px;font-weight:800;border-radius:6px;padding:2px 8px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em}
+  .nft{margin-top:8px;font-size:14px;font-weight:600;color:var(--ink);line-height:1.55}
   /* screenshot evidence attached to a finding — shown together with it */
-  .nevi{margin-top:8px;display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:#5a6472;line-height:1.5}
-  .nevi .evi-ic{flex:0 0 auto;opacity:.75}
-  .nevi .evi-id{font-weight:700;color:#3d4450}
-  .nevi-img{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin:7px 0 2px}
-  .ntask{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px}
-  .nprog{margin-top:4px;color:#3d4450;background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:11.5px;line-height:1.4}
+  .nevi{margin-top:8px;display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:#4A5462;line-height:1.5}
+  .nevi .evi-ic{flex:0 0 auto;opacity:.85}
+  .nevi .evi-id{font-weight:800;color:var(--ink)}
+  .nevi-img{display:block;max-width:100%;border:2px solid var(--ink);border-radius:8px;margin:7px 0 2px}
+  .ntask{margin-top:8px;padding-top:8px;border-top:2px solid var(--ink);font-size:12.5px}
+  .nprog{margin-top:4px;color:#222;background:#F6F4EE;border:2px solid var(--ink);border-radius:7px;padding:5px 7px;font-size:11.5px;line-height:1.4}
   .nnotask{margin-top:8px;color:var(--dim);font-size:12px;font-style:italic}
-  .ndoc strong{font-weight:700;color:#2b3440}
+  .ndoc strong{font-weight:800;color:var(--ink)}
   /* cumulative pipeline breadcrumb of task/finding states */
   .prow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:2px}
-  .pstep{font-size:10.5px;font-weight:600;border:1px solid;border-radius:999px;padding:1px 8px;opacity:.5}
-  .pstep.cur{opacity:1;font-weight:750}
+  .pstep{font-size:10.5px;font-weight:700;border:1.5px solid;border-radius:999px;padding:1px 8px;opacity:.55}
+  .pstep.cur{opacity:1;font-weight:900;border-width:2.5px;box-shadow:2px 2px 0 var(--ink)}
   .parr{color:var(--none);font-size:10px;opacity:.7}
   /* collapsible finding: click the header to shrink to just the header row */
   .nfh{cursor:pointer;user-select:none}
   .chev{display:inline-block;font-size:11px;color:var(--dim);transition:transform .15s;flex:0 0 auto}
   .nfind.collapsed .chev{transform:rotate(-90deg)}
   .nfind.collapsed .nbody{display:none}
-  .nfind.flash{outline:2px solid var(--prog);outline-offset:2px}
+  .nfind.flash{outline:3px solid var(--prog);outline-offset:2px}
   /* Test-this-branch (boots the localhost app for a PR-ready task's worktree) */
   .tact{margin-top:9px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
   .tspacer{flex:1 1 auto}                    /* pushes session + Remove to the right */
-  /* neutral, quiet default button; color is reserved for the ONE primary + live app */
-  .tbtn{font:inherit;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:4px 10px;line-height:1.5;white-space:nowrap;transition:background .12s,border-color .12s}
-  .tbtn:hover{background:#f2f4f6;border-color:#c4cad0} .tbtn:disabled{opacity:.55;cursor:default}
-  .tbtn.primary{border-color:var(--prog);background:var(--prog);color:#fff;font-weight:600}
-  .tbtn.primary:hover{background:var(--prog);filter:brightness(1.06)}
-  .tbtn.gh{border-color:transparent;background:transparent;color:var(--dim)}
-  .tbtn.gh:hover{background:#f0f2f4;border-color:transparent}
-  .tbtn.danger{border-color:transparent;background:transparent;color:var(--fail)}
-  .tbtn.danger:hover{background:#fdecec;border-color:transparent}
+  /* chunky bordered button, hard offset shadow, presses down on click */
+  .tbtn{font:inherit;font-size:12px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);
+    background:var(--paper);color:var(--ink);border-radius:var(--r);padding:5px 12px;line-height:1.4;
+    white-space:nowrap;box-shadow:3px 3px 0 var(--ink);
+    transition:transform .08s ease,box-shadow .08s ease,background .12s ease}
+  .tbtn:hover{background:#FFF6C7} .tbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .tbtn:disabled{opacity:.5;cursor:default;transform:none;box-shadow:1px 1px 0 var(--ink)}
+  .tbtn.primary{background:var(--prog);color:#fff}
+  .tbtn.primary:hover{background:#1B3EC4}
+  .tbtn.gh{border-color:var(--ink);background:transparent;color:var(--ink);box-shadow:none;font-weight:700}
+  .tbtn.gh:hover{background:rgba(20,20,20,.06)} .tbtn.gh:active{transform:none}
+  .tbtn.danger{background:var(--fail);color:#fff;border-color:var(--ink)}
+  .tbtn.danger:hover{background:#A31230}
   .tbtn.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px}
-  .applink{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--ready);color:#fff;border-radius:6px;padding:4px 11px}
-  .applink:hover{text-decoration:none;filter:brightness(1.06)}
-  .terr{font-size:12px;color:var(--fail);font-weight:600}
-  .tstarting{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
-  .pulse{width:7px;height:7px;border-radius:50%;background:var(--prog);display:inline-block;animation:pulse 1.4s infinite}
+  .applink{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;background:var(--ready);
+    color:#fff;border:2.5px solid var(--ink);border-radius:var(--r);padding:5px 12px;box-shadow:3px 3px 0 var(--ink)}
+  .applink:hover{text-decoration:none;background:#136E3A}
+  .terr{font-size:12px;color:var(--fail);font-weight:800}
+  .tstarting{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);font-weight:700}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--prog);border:1.5px solid var(--ink);display:inline-block;animation:pulse 1.4s infinite}
   /* ---- migrated panel controls ---- */
-  .hbtn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:7px;padding:5px 11px}
-  .hbtn:hover{background:#f3f5f7}
-  .hbtn.primary{background:var(--ready);border-color:var(--ready);color:#fff}
-  .hbtn.gh{color:var(--dim)}
-  .hbtn.danger{color:#b42318;border-color:#f0c2bd;background:#fff}
-  .hbtn.danger:hover{background:#fdf0ee}
-  .capctl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
-  .caplbl{font-size:11px;text-transform:uppercase;letter-spacing:.4px}
-  .capb{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:6px;width:22px;height:22px;line-height:1;color:var(--ink)}
-  .capb:hover{background:#f3f5f7} .capctl b{min-width:14px;text-align:center;font-size:13px;color:var(--ink)}
+  .hbtn{font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);
+    background:var(--paper);color:var(--ink);border-radius:var(--r);padding:6px 13px;box-shadow:3px 3px 0 var(--ink);
+    transition:transform .08s ease,box-shadow .08s ease}
+  .hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+  .hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .hbtn.primary{background:var(--ready);border-color:var(--ink);color:#fff}
+  .hbtn.gh{color:var(--ink);background:transparent;box-shadow:none}
+  .hbtn.gh:hover{background:rgba(20,20,20,.06);transform:none;box-shadow:none}
+  .hbtn.danger{color:#fff;border-color:var(--ink);background:var(--fail)}
+  .hbtn.danger:hover{background:#A31230}
+  .capctl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);font-weight:700}
+  .caplbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:900}
+  .capb{font:inherit;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:7px;
+    width:24px;height:24px;line-height:1;color:var(--ink);font-weight:900;box-shadow:2px 2px 0 var(--ink);
+    transition:transform .08s ease,box-shadow .08s ease}
+  .capb:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .capb:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+  .capctl b{min-width:16px;text-align:center;font-size:13px;color:var(--ink);font-weight:900}
   #pausebanner:empty{display:none}
-  .banner{background:#fff8e6;border-bottom:1px solid #f0e0b0;color:#7a5b00;font-size:12.5px;padding:8px 22px}
+  .banner{background:var(--wait);border-top:3px solid var(--ink);border-bottom:3px solid var(--ink);color:#fff;font-size:12.5px;font-weight:800;padding:9px 22px}
   /* needs-your-input questions */
-  .qwrap{max-width:840px;margin:18px auto 0;display:flex;flex-direction:column;gap:12px}
-  .qhead{font-size:11px;font-weight:700;color:var(--wait);text-transform:uppercase;letter-spacing:.5px}
-  .qcard{background:#fffdf5;border:1px solid #f0dfae;border-left:3px solid var(--wait);border-radius:10px;padding:13px 15px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
-  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim)}
-  .qq{margin:7px 0 4px;font-weight:600;font-size:14px}
+  .qwrap{max-width:840px;margin:18px auto 0;display:flex;flex-direction:column;gap:14px}
+  .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px}
+  .qcard{background:#FFF8DC;border:3px solid var(--ink);border-left-width:9px;border-left-color:var(--wait);
+    border-radius:var(--rl);padding:15px 17px;box-shadow:5px 5px 0 var(--ink)}
+  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-weight:800}
+  .qq{margin:7px 0 4px;font-weight:900;font-size:14.5px;color:var(--ink)}
   .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px;white-space:pre-wrap}
   .qopts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
-  .qcard textarea,.rwbox textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:13px;resize:vertical;margin-top:6px}
+  .qcard textarea,.rwbox textarea{width:100%;box-sizing:border-box;border:2.5px solid var(--ink);border-radius:var(--r);
+    padding:8px 10px;font:inherit;font-size:13px;resize:vertical;margin-top:8px;background:var(--paper)}
+  .qcard textarea:focus,.rwbox textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
   /* task action bar / feature-test / test-plan / modal */
   .ntask-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .ntask-h .tt{font-weight:600;color:var(--ink);font-size:13.5px}
-  .nprog.err{background:#fdf0ee;border-color:#f0c2bd;color:#b42318}
+  .ntask-h .tt{font-weight:800;color:var(--ink);font-size:13.5px}
+  .nprog.err{background:#FFE3E9;border-color:var(--ink);color:#7A0E28}
   .rwbox{margin-top:8px}
-  .testplan{margin-top:8px;font-size:12px}
-  .testplan>summary{cursor:pointer;color:var(--dim);font-weight:600;list-style:none}
-  .tpbody{position:relative;margin-top:6px}
-  .testplan pre{white-space:pre-wrap;background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:10px 12px;padding-right:64px;margin:0;font-size:11.5px;line-height:1.5}
-  /* clean, modern floating Copy button pinned to the box's top-right corner */
-  .testplan .cp{position:absolute;top:7px;right:7px;font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--dim);border-radius:6px;padding:2px 9px;box-shadow:0 1px 2px rgba(0,0,0,.06);opacity:.9;transition:color .12s,border-color .12s,box-shadow .12s,opacity .12s}
-  .testplan .cp:hover{color:var(--ink);border-color:#c4cad0;opacity:1;box-shadow:0 1px 4px rgba(0,0,0,.12)}
-  .ftchip{font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px}
-  .ft-pass{color:var(--ready);background:#e6f4ea} .ft-fail{color:var(--fail);background:#fde8e8}
-  .ft-blocked{color:var(--block);background:#fdeee2} .ft-skipped{color:var(--dim);background:#eef0f2}
-  .ftdetail{margin-top:6px;font-size:12px} .ftdetail>summary{cursor:pointer;color:var(--dim)}
-  .ftturns{margin:6px 0;padding-left:18px;font-size:12px;color:#3d4450}
-  .ftout{white-space:pre-wrap;background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:11px;margin-top:6px}
+  .testplan{margin-top:9px;font-size:12px}
+  .testplan>summary{cursor:pointer;color:var(--ink);font-weight:800;list-style:none;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
+  .tpbody{position:relative;margin-top:7px}
+  .testplan pre{white-space:pre-wrap;background:var(--ink);color:#FFE14D;border:2.5px solid var(--ink);border-radius:9px;
+    padding:11px 13px;padding-right:66px;margin:0;font-size:11.5px;line-height:1.5}
+  /* chunky floating Copy button pinned to the box's top-right corner */
+  .testplan .cp{position:absolute;top:8px;right:8px;font:inherit;font-size:10.5px;font-weight:800;cursor:pointer;
+    border:2px solid var(--ink);background:#FFE14D;color:var(--ink);border-radius:6px;padding:3px 10px;
+    box-shadow:2px 2px 0 var(--ink);transition:transform .08s ease,box-shadow .08s ease}
+  .testplan .cp:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .ftchip{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
+  .ft-pass{color:#0B6B3A;background:#B9F6CA} .ft-fail{color:#7A1330;background:#FFD0DA}
+  .ft-blocked{color:#7A3B00;background:#FFE0B2} .ft-skipped{color:var(--dim);background:#ECEAE3}
+  .ftdetail{margin-top:6px;font-size:12px} .ftdetail>summary{cursor:pointer;color:var(--ink);font-weight:700}
+  .ftturns{margin:6px 0;padding-left:18px;font-size:12px;color:var(--ink)}
+  .ftout{white-space:pre-wrap;background:var(--ink);color:#E8F0EA;border:2px solid var(--ink);border-radius:8px;padding:9px;font-size:11px;margin-top:7px}
   .otherdoc{margin-top:16px}
-  #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:20px}
-  .modal-box{background:var(--paper);border-radius:10px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
+  #modal{display:none;position:fixed;inset:0;background:rgba(20,20,20,.55);z-index:100;align-items:center;justify-content:center;padding:20px}
+  .modal-box{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);max-width:560px;width:100%;
+    max-height:80vh;overflow:auto;box-shadow:8px 8px 0 var(--ink)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-bottom:2.5px solid var(--ink);font-weight:800}
   #modal-log{white-space:pre-wrap;padding:14px 16px;margin:0;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,monospace}
+  /* example task-doc preview — embedded INSIDE the intake question card,
+     between its context text and the reply box: small, scrollable, like
+     flipping through a PDF, so the whole card still fits on screen */
+  .exbox{margin:10px 0 2px}
+  .exbar{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:900;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px}
+  .exbar .tbtn{margin-left:auto;text-transform:none;letter-spacing:0;padding:3px 10px;font-size:11px}
+  .exframe{height:190px;overflow-y:auto;background:var(--paper);border:2.5px solid var(--ink);
+    border-radius:var(--r);box-shadow:3px 3px 0 var(--ink);padding:14px 16px;scrollbar-width:thin;
+    -webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%);
+    mask-image:linear-gradient(to bottom,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%)}
+  .exframe::-webkit-scrollbar{width:7px}
+  .exframe::-webkit-scrollbar-thumb{background:var(--ink);border-radius:999px}
+  .exframe::-webkit-scrollbar-track{background:transparent}
+  .exframe .ntest{font-size:14px;margin:14px 0 4px;border-bottom-width:2px} .exframe .ntest:first-child{margin-top:0}
+  .exframe .nfeat{font-size:12px;margin:10px 0 4px;border-left-width:3px}
+  .exframe .nfind{padding:8px 10px;margin:7px 0;border-width:2px;box-shadow:2px 2px 0 var(--ink)}
+  .exframe .nfh{cursor:default}         /* not collapsible here — just reading */
+  .exframe .nft{font-size:12px}
+  .exframe .ntext{font-size:12px}
+  /* conversation feed — the Claude<->user dialogue mirrored onto the board */
+  .convo{max-width:840px;margin:14px auto 0;background:var(--paper);border:2.5px solid var(--ink);
+    border-radius:var(--rl);padding:11px 15px;box-shadow:4px 4px 0 var(--ink)}
+  .convo>summary{cursor:pointer;font-weight:900;font-size:11px;color:var(--ink);list-style:none;text-transform:uppercase;letter-spacing:.5px}
+  .convo>summary::-webkit-details-marker{display:none}
+  .cvbody{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+  .cvrow{display:flex;gap:9px;font-size:12.5px;line-height:1.5}
+  .cvwho{flex:0 0 54px;font-weight:900;font-size:10.5px;color:var(--ink);text-transform:uppercase;padding-top:2px}
+  .cvrow.you .cvwho{color:var(--prog)}
+  .cvtxt{white-space:pre-wrap;color:var(--ink)}
+  .cvrow.mgr .cvtxt{color:#333}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
-  .setup{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:0 2px 14px rgba(0,0,0,.06)}
-  .setup-h{font-size:14.5px;font-weight:650;color:var(--ink);display:flex;align-items:center;gap:9px;margin-bottom:12px}
-  .setup-steps{display:flex;flex-direction:column}
-  .stp{display:flex;align-items:flex-start;gap:11px;padding:6px 0 6px 14px;margin-left:7px;border-left:2px solid var(--line)}
+  .setup{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);padding:18px 20px;box-shadow:6px 6px 0 var(--ink)}
+  .setup-h{font-size:14.5px;font-weight:900;color:var(--ink);display:flex;align-items:center;gap:9px;
+    margin-bottom:11px;padding-bottom:11px;border-bottom:2px solid var(--ink)}
+  .setup-steps{display:flex;flex-direction:column;gap:1px}
+  .stp{display:flex;align-items:center;gap:11px;padding:5px 0 5px 14px;margin-left:7px;border-left:3px solid var(--ink)}
   .stp.active{border-left-color:var(--prog)} .stp.done{border-left-color:var(--ready)} .stp.error{border-left-color:var(--fail)}
-  .stp-ic{flex:0 0 auto;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;margin-top:1px}
+  .stp-ic{flex:0 0 auto;width:18px;height:18px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:900;color:#fff;border:1.5px solid var(--ink)}
   .stp-ic.ok{background:var(--ready)} .stp-ic.err{background:var(--fail)}
-  .stp-ic.sp{background:transparent;border:2px solid var(--prog);border-top-color:transparent;animation:spin .7s linear infinite}
-  .sp-lg{width:15px;height:15px;border-radius:50%;border:2px solid var(--prog);border-top-color:transparent;display:inline-block;animation:spin .7s linear infinite}
-  .stp-l{font-size:13px;font-weight:500;color:var(--ink);line-height:1.35}
-  .stp.done .stp-l{color:var(--dim);font-weight:400}
+  /* active step: a solid pulsing dot — same rounded-square badge shape as ok/err,
+     just animated, instead of a spinning ring (which reads as a broken circle
+     in a still screenshot) */
+  .stp-ic.sp{background:var(--prog);animation:pulse 1.1s ease-in-out infinite}
+  .pulse-lg{width:11px;height:11px;border-radius:50%;background:var(--prog);border:2px solid var(--ink);
+    display:inline-block;animation:pulse 1.1s ease-in-out infinite}
+  .stp-l{font-size:13px;font-weight:700;color:var(--ink);line-height:1.35}
+  .stp.done .stp-l{color:var(--dim);font-weight:500}
   .stp-d{font-size:11.5px;color:var(--dim);margin-top:2px}
-  @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ---- phone ---- */
   @media (max-width:640px){
@@ -191,9 +261,9 @@
     #shell{grid-template-columns:1fr;height:calc(100vh - 86px)}
     #index{display:none}
     #stage{overflow-x:auto}                 /* let the PDF pixel-board pan if used */
-    .ndoc{padding:18px 15px;margin:14px auto 90px;border-radius:8px}
+    .ndoc{padding:18px 15px;margin:14px auto 90px;border-radius:10px;box-shadow:5px 5px 0 var(--ink)}
     .ntest{font-size:18px} .nfeat{font-size:14px}
-    .nfind{padding:11px 12px} a{word-break:break-word}
+    .nfind{padding:11px 12px;box-shadow:3px 3px 0 var(--ink)} a{word-break:break-word}
   }
 </style>
 </head>
@@ -306,7 +376,7 @@ function setupCard(){
     return `<div class="stp ${s.status}">${ic}<div class="stp-t"><div class="stp-l">${esc(s.label)}</div>${s.detail?`<div class="stp-d">${esc(s.detail)}</div>`:""}</div></div>`;
   }).join("");
   const head = PROGRESS.done ? "✓ Board ready" : "Setting up your board…";
-  return `<div class="setup"><div class="setup-h">${PROGRESS.done?"":`<span class="sp-lg"></span>`}${head}</div><div class="setup-steps">${rows}</div></div>`;
+  return `<div class="setup"><div class="setup-h">${PROGRESS.done?"":`<span class="pulse-lg"></span>`}${head}</div><div class="setup-steps">${rows}</div></div>`;
 }
 function progSig(){ return JSON.stringify((PROGRESS.steps||[]).map(s=>[s.label,s.status,s.detail])); }
 function renderControls(s){
@@ -325,10 +395,14 @@ function renderControls(s){
   if(COOLDOWN>0 && !s.manual_pause){ banner=`<div class="banner">⏳ Rate-limit cooldown — auto-resumes in ~${Math.ceil(COOLDOWN/60)} min (${q} queued). Hit ▶ Resume to override.</div>`; }
   $("#pausebanner").innerHTML=banner;
 }
-function ago(iso){ const t=Date.parse(iso); if(isNaN(t)) return "";
-  const s=Math.max(0,(Date.now()-t)/1000);
-  if(s<60) return Math.round(s)+"s"; if(s<3600) return Math.round(s/60)+"m";
-  if(s<86400) return Math.round(s/3600)+"h"; return Math.round(s/86400)+"d"; }
+function ago(t){ // accepts epoch seconds (what the API sends) or an ISO string
+  let ms; if(typeof t==="number") ms=t*1000;
+  else if(!isNaN(+t)) ms=(+t)*1000;
+  else ms=Date.parse(t);
+  if(isNaN(ms)) return "";
+  const s=Math.max(0,(Date.now()-ms)/1000);
+  if(s<60) return "just now"; if(s<3600) return Math.round(s/60)+"m ago";
+  if(s<86400) return Math.round(s/3600)+"h ago"; return Math.round(s/86400)+"d ago"; }
 function showModal(t,x){ $("#modal-title").textContent=t; $("#modal-log").textContent=x; $("#modal").style.display="flex"; }
 function closeModal(){ $("#modal").style.display="none"; }
 
@@ -384,7 +458,7 @@ function renderSetup(s){
     <p class="ntext">Paste the absolute path of a <b>git repo</b> on this machine. Or just answer the
     question in your Claude session — Claude can also <b>create a new repo</b> for you.</p>
     <input id="repoIn" value="${esc(s.repo||"")}" placeholder="/absolute/path/to/your/repo"
-      style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:7px;padding:9px 11px;font:inherit;font-size:13px;margin:8px 0">
+      style="width:100%;box-sizing:border-box;border:2.5px solid var(--ink);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;margin:8px 0">
     <div class="tact"><button id="repoSave" class="tbtn primary" onclick="saveRepo(this)">Use this repo →</button>
       <span id="setupmsg" class="ntext"></span></div>
     <p class="ntext" style="color:var(--dim);margin-top:10px">Saved to <span class="mono">${esc(s.config_path||"config.json")}</span> —
@@ -473,10 +547,19 @@ function taskRow(t, bare){
 
 function questionCard(q){
   const opts=(q.options||[]).map(o=>`<button class="tbtn" onclick="answer(${q.id},${JSON.stringify(o).replace(/"/g,'&quot;')})">${esc(o)}</button>`).join("");
+  // Meta line stays minimal: internal session ids (manager-intake, agent-task-N)
+  // are noise — only a real dispatched run's id is worth showing.
+  const sid=q.session_id||"";
+  const run=(sid && !sid.startsWith("manager") && !sid.startsWith("agent-task"))?` · run ${esc(sid.slice(0,8))}`:"";
+  const when=ago(q.created_at);
+  // The intake question shows the demo doc INLINE, right between the context
+  // text and the reply box — a small scrollable preview, not a separate section.
+  const example=sid==="manager-intake"?exampleInline(q.id):"";
   return `<div class="qcard">
-    <div class="qh"><span class="pulse"></span><b>Needs your input</b> · session ${(q.session_id||'').slice(0,8)}${q.task_id?` · task #${q.task_id}`:""} · ${ago(q.created_at)} ago</div>
+    <div class="qh"><span class="pulse"></span>${q.task_id?`task #${q.task_id}`:"Claude asks"}${run}${when?` · ${when}`:""}</div>
     <div class="qq">${esc(q.question)}</div>
     ${q.context?`<div class="qctx">${esc(q.context)}</div>`:""}
+    ${example}
     ${opts?`<div class="qopts">${opts}</div>`:""}
     <textarea id="ta${q.id}" rows="2" placeholder="…or type a custom reply"></textarea>
     <div class="tact"><button class="tbtn primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>${q.task_id?` <button class="tbtn gh" onclick="deleteTask(${q.task_id})">🗑 Delete task</button>`:""}</div>
@@ -628,7 +711,7 @@ function findState(f){
 async function refreshNotion(){
   if(!NMAP){ try{ NMAP=await api("/api/notion-map"); }catch(e){} }
   const tsSig = TESTSRV ? [TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error] : null;
-  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(),
+  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(), convoSig(),
     QUESTIONS.map(q=>[q.id,q.status,q.answer]), [...REWORK_OPEN], [...TESTPLAN_OPEN],
     TASKS.map(t=>[t.id,t.status,t.progress,t.pr_url,t.source,t.worktree,t.stopped_reason,t.featuretest,t.session_id])]);
   if(sig!==LAST_SIG){ LAST_SIG=sig; renderNotion(); }
@@ -684,7 +767,7 @@ function renderNotion(){
   const otherHtml=other.length
     ? `<div class="ndoc otherdoc"><h2 class="ntest">Other tasks · ${other.length}</h2>${other.map(t=>taskRow(t,false)).join("")}</div>` : "";
   const setupHtml = PROGRESS.active ? `<div class="setupwrap doc">${setupCard()}</div>` : "";
-  stage.innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`+otherHtml;
+  stage.innerHTML=setupHtml+qHtml+convoFeed()+`<div class="ndoc">${html}</div>`+otherHtml;
   document.querySelectorAll(".irow").forEach(r=>{ r.onclick=()=>{
     const id=r.dataset.id, el=document.getElementById("find-"+id), stage=$("#stage");
     if(!el||!stage) return;
@@ -697,16 +780,97 @@ function renderNotion(){
   }; });
 }
 
+// ---------- Example task-doc viewer: embedded INSIDE the intake question
+// card (between its context text and the reply box) so the user sees what a
+// task doc looks like without leaving that one card — small, scrollable, like
+// flipping through a PDF, never pushing the card off-screen.
+let EXAMPLES=null, EXAMPLES_REQ=false;
+async function loadExamples(){
+  if(EXAMPLES||EXAMPLES_REQ) return; EXAMPLES_REQ=true;
+  try{ EXAMPLES=await api("/api/examples"); }catch(e){ EXAMPLES={findings:[]}; }
+  LAST_SIG="";   // re-render now that it's loaded
+}
+const SEVV={bug:"--fail",feature:"--prog",minor:"--wait",done:"--ready",note:"--queued"};
+// Render the demo doc's blocks the SAME way the real doc view does (test/feature
+// headings, finding blocks with a severity tag, plain text, image captions) —
+// so it reads as one continuous document inside the scrollable frame, not a
+// disconnected preview format.
+function exampleDocHtml(){
+  let html="";
+  for(const b of (EXAMPLES.blocks||[])){
+    if(b.t==="test") html+=`<h2 class="ntest">${esc(b.text)}</h2>`;
+    else if(b.t==="feature") html+=`<h3 class="nfeat">${esc(b.text)}</h3>`;
+    else if(b.t==="text") html+=`<p class="ntext">${mdi(b.text)}</p>`;
+    else if(b.t==="image" && b.caption) html+=`<div class="nevi"><span class="evi-ic">📷</span><span>${esc(b.caption)}</span></div>`;
+    else if(b.t==="finding"){
+      const c=cssv(SEVV[b.sev]||"--queued");
+      const evi=(b.evidence||[]).filter(e=>e.caption).map(e=>
+        `<div class="nevi"><span class="evi-ic">📷</span><span><span class="evi-id">image ${esc(b.id)}</span> — ${esc(e.caption)}</span></div>`).join("");
+      html+=`<div class="nfind" style="border-left-color:${c}">
+        <div class="nfh"><span class="sevtag" style="color:${c};background:${c}22">${esc(b.sev||b.kind)} ${esc(b.id)}</span></div>
+        <div class="nbody"><div class="nft">${mdi(b.text)}</div>${evi}</div></div>`;
+    }
+  }
+  return html;
+}
+// Called only for the intake question (session_id "manager-intake"). Returns
+// "" (and kicks off the load) until the demo doc is fetched.
+function exampleInline(qid){
+  if(!EXAMPLES){ loadExamples(); return ""; }
+  if(!(EXAMPLES.findings||[]).length) return "";
+  return `<div class="exbox">
+    <div class="exbar">✨ ${esc(EXAMPLES.title||"Example task doc")}
+      <button class="tbtn primary" onclick="useDemo(this,${qid})">▶ Try this demo</button></div>
+    <div class="exframe">${exampleDocHtml()}</div></div>`;
+}
+async function useDemo(btn,qid){
+  if(!EXAMPLES||!EXAMPLES.path) return;
+  if(btn){btn.disabled=true;btn.textContent="Sending…";}
+  await answer(qid, EXAMPLES.path);   // replies to the intake with the demo doc's path
+}
+
+// ---------- Conversation feed: the Claude<->user dialogue on the board.
+// Sources: /api/say lines (kind "say.manager" / "say.you" in the event log)
+// plus every inbox question with its answer — merged chronologically.
+let EVENTS=[], QALL=[];
+function convoItems(){
+  const ev=EVENTS.filter(e=>(e.kind||"").startsWith("say."))
+    .map(e=>({t:e.created_at,who:e.kind.slice(4)==="you"?"you":"mgr",text:e.message}));
+  // Only ANSWERED questions belong in the history — pending ones are already
+  // live cards above; echoing them here just duplicated every open question.
+  const qa=[];
+  for(const q of QALL){
+    if(!q.answer) continue;
+    qa.push({t:q.created_at,who:"mgr",text:"❓ "+(q.question||"")});
+    qa.push({t:q.answered_at||q.created_at,who:"you",text:q.answer});
+  }
+  return ev.concat(qa).sort((a,b)=>a.t-b.t).slice(-16);
+}
+function convoSig(){ const it=convoItems(); return it.length+":"+(it.length?it[it.length-1].t:0); }
+function convoFeed(){
+  const it=convoItems(); if(!it.length) return "";
+  const rows=it.map(m=>`<div class="cvrow ${m.who}"><span class="cvwho">${m.who==="you"?"You":"Claude"}</span><span class="cvtxt">${esc(m.text)}</span></div>`).join("");
+  return `<details class="convo" open><summary>💬 Conversation</summary><div class="cvbody">${rows}</div></details>`;
+}
+
 // ---------- Plain mode: no doc-map and no PDF (typed-list source, or a file
 // the ingest couldn't parse). The board still shows everything that matters:
 // the live setup feed, pending questions, and every task grouped by state.
 function renderPlain(){
   const live=TASKS.filter(t=>t.status!=="rejected");
-  const sig=JSON.stringify(["plain",progSig(),PAUSED,CAP,COOLDOWN>0,
+  const sig=JSON.stringify(["plain",progSig(),convoSig(),!!EXAMPLES,PAUSED,CAP,COOLDOWN>0,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]),[...REWORK_OPEN],[...TESTPLAN_OPEN],
     TESTSRV&&[TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error],
     live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
   if(sig===LAST_SIG) return; LAST_SIG=sig;
+  // Waiting on the user with nothing running yet? Show ONLY the question
+  // card(s) — the intake card embeds its own example-doc preview inline.
+  if(QUESTIONS.length && !live.length){
+    $("#sub").textContent="waiting for you";
+    $("#cov").innerHTML=""; $("#index").innerHTML=`<div class="ihead">tasks · 0</div>`;
+    $("#stage").innerHTML=`<div class="qwrap">${QUESTIONS.map(questionCard).join("")}</div>`;
+    return;
+  }
   $("#sub").textContent=live.length?live.length+" tasks":"getting started…";
   const cnt={}; live.forEach(t=>{const l=taskState(t).l; cnt[l]=(cnt[l]||0)+1;});
   const order=["PR ready","in progress","testing","needs you","blocked","failed","queued","draft"];
@@ -728,7 +892,7 @@ function renderPlain(){
   if(!html) html=`<p class="ntext" style="color:var(--dim)">No tasks yet — they'll appear here as Claude finishes triage.</p>`;
   const setupHtml=(PROGRESS.steps||[]).length?`<div class="setupwrap doc">${setupCard()}</div>`:"";
   const qHtml=QUESTIONS.length?`<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>`:"";
-  $("#stage").innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`;
+  $("#stage").innerHTML=setupHtml+qHtml+convoFeed()+`<div class="ndoc">${html}</div>`;
   document.querySelectorAll("#index .irow").forEach(r=>{ r.onclick=()=>{ const el=document.getElementById("task-"+r.dataset.t);
     if(el) $("#stage").scrollTo({top:Math.max(0,el.offsetTop-14),behavior:"smooth"});
     document.querySelectorAll(".irow.on").forEach(x=>x.classList.remove("on")); r.classList.add("on"); }; });
@@ -742,6 +906,8 @@ async function refresh(){
   TASKS=s.tasks||[];
   TESTSRV=s.test_server||null;
   QUESTIONS=s.pending_questions||[];
+  EVENTS=s.events||[];
+  QALL=s.questions||[];
   PAUSED=!!s.paused; MANAGER_SESSION=s.manager_session||null;
   if(s.repo) REPO=s.repo;
   if(s.skill_dir) SKILLDIR=s.skill_dir;
