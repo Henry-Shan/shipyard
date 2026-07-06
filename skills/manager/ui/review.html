@@ -268,7 +268,7 @@
   <span id="capctl" class="capctl"></span>
   <button id="modebtn" class="hbtn gh" onclick="toggleMode(this)"></button>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
-  <button class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
+  <button id="clearallbtn" class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
 <div id="pausebanner"></div>
 <div id="shell">
@@ -447,6 +447,9 @@ function setupCard(){
 }
 function progSig(){ return JSON.stringify((PROGRESS.steps||[]).map(s=>[s.label,s.status,s.detail])); }
 function renderControls(s){
+  // Pause/PR-Local/Clear-all are meaningless before a repo is configured
+  // (renderSetup hides them); make sure they're back once there's a real board.
+  $("#modebtn").style.display=$("#pausebtn").style.display=$("#clearallbtn").style.display="";
   const cap=s.cap||1;
   $("#capctl").innerHTML=`<span class="caplbl">concurrency</span>`+
     `<button class="capb" onclick="setCap(${cap-1})">−</button><b>${cap}</b><button class="capb" onclick="setCap(${cap+1})">+</button>`;
@@ -531,6 +534,8 @@ function onTestPlanToggle(id,open){ open?TESTPLAN_OPEN.add(id):TESTPLAN_OPEN.del
 // and the normal poll loop picks the board back up automatically.
 function renderSetup(s){
   PROGRESS=s.progress||{steps:[],active:false,done:false};   // live feed works in setup mode too
+  // Nothing to pause, no push mode, nothing to clear yet — hide, don't show blank pills.
+  $("#modebtn").style.display=$("#pausebtn").style.display=$("#clearallbtn").style.display="none";
   const sig="setup:"+(s.repo||"")+":"+(s.config_path||"")+":"+progSig();
   if(sig===LAST_SIG) return; LAST_SIG=sig;
   $("#sub").textContent="setup";
