@@ -565,9 +565,11 @@ function renderSetup(s){
   const live=(PROGRESS.steps||[]).length?`<div style="margin-bottom:12px">${setupCard()}</div>`:"";
   $("#stage").innerHTML=`<div class="setupwrap">${live}<div class="setup">
     <div class="setup-h">👋 One thing before we start — which repo should the manager work on?</div>
-    <p class="ntext">Paste the absolute path of a <b>git repo</b> on this machine. Or just answer the
-    question in your Claude session — Claude can also <b>create a new repo</b> for you.</p>
+    <p class="ntext">Paste an absolute path — an existing git repo, or a plain folder and one
+    will be created there for you (local by default). Or just answer the question in your
+    Claude session instead.</p>
     <input id="repoIn" value="${esc(s.repo||"")}" placeholder="/absolute/path/to/your/repo"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();$('#repoSave').click();}"
       style="width:100%;box-sizing:border-box;border:2.5px solid var(--ink);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;margin:8px 0">
     <div class="tact"><button id="repoSave" class="tbtn primary" onclick="saveRepo(this)">Use this repo →</button>
       <span id="setupmsg" class="ntext"></span></div>
