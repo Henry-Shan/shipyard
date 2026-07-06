@@ -65,9 +65,13 @@ fi
 # progress state is otherwise untouched by a restart — but blindly resetting
 # it here would flash "Setting up your board..." over an existing populated
 # board every single time the daemon restarts, even long after ingest finished.
-TASK_COUNT="$(curl -s -m 2 "$URL/api/state" 2>/dev/null | python3 -c '
+# IMPORTANT: hits /api/task-count, NOT /api/state — /api/state's response is
+# also how the daemon detects "a real browser tab is alive" (LAST_POLL_FILE);
+# a script polling it here would falsely mark every restart as already-open
+# and open_panel() would never auto-open the browser again.
+TASK_COUNT="$(curl -s -m 2 "$URL/api/task-count" 2>/dev/null | python3 -c '
 import json,sys
-try: print(len([t for t in json.load(sys.stdin).get("tasks",[]) if t.get("status")!="rejected"]))
+try: print(json.load(sys.stdin).get("count",0))
 except Exception: print(0)' 2>/dev/null || echo 0)"
 if [ "${TASK_COUNT:-0}" = "0" ]; then
   curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"clear":true}' >/dev/null

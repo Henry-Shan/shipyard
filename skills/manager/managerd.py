@@ -66,6 +66,36 @@ def read_source_pdf():
 # the review board renders the Notion source instead of the PDF.
 NOTION_MAP_FILE = os.path.join(HERE, ".notion_map")
 
+# The packaged example task doc, shown read-only on the intake card so a new
+# user can SEE what the manager eats, before they've pasted their own source.
+# realpath: the skill dir is usually a symlink into the warehouse clone;
+# examples/ lives at the clone root.
+DEMO_DOC = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "..", "..", "examples", "demo-qa-findings.md"))
+_EXAMPLES = None
+
+
+def demo_examples():
+    """The packaged demo doc, parsed into the SAME block shape the Notion doc
+    view renders (so the intake card can show it as a continuous, scrollable
+    document rather than a card grid). Cached; {} shape on any failure."""
+    global _EXAMPLES
+    if _EXAMPLES is not None:
+        return _EXAMPLES
+    out = {"path": None, "title": "", "findings": [], "blocks": []}
+    try:
+        import notion_ingest
+        raw = open(DEMO_DOC, encoding="utf-8", errors="replace").read()
+        m = notion_ingest.parse(raw, "", "demo", tempfile.gettempdir(), do_images=False)
+        if m.get("findings"):
+            out = {"path": DEMO_DOC, "title": "Example task doc",
+                   "findings": m["findings"][:20], "blocks": m.get("blocks", [])}
+    except Exception:
+        pass
+    _EXAMPLES = out
+    return out
+
+
 def notion_map_path():
     try:
         p = open(NOTION_MAP_FILE).read().strip()
@@ -926,6 +956,15 @@ class Handler(BaseHTTPRequestHandler):
         # The review board IS the panel now — serve it at the root too.
         if p in ("/", "/index.html", "/review", "/review.html"):
             return self._serve_file("review.html", "text/html")
+        if p == "/api/task-count":
+            # A scripted health check's non-tab equivalent of /api/state's task
+            # count (panel-up.sh's stale-banner guard) — deliberately does NOT
+            # touch LAST_POLL_FILE, unlike /api/state below. That marker means
+            # "a real browser tab is polling"; a script hitting it here would
+            # convince open_panel() a tab is already alive on every single
+            # restart and it would stop ever auto-opening the browser.
+            n = len([t for t in core.snapshot().get("tasks", []) if t.get("status") != "rejected"])
+            return self._send(200, {"count": n})
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
@@ -1011,6 +1050,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, pdf_map((qs.get("path") or [""])[0]))
         if p == "/api/notion-map":
             return self._send(200, read_notion_map() or {})
+        if p == "/api/examples":
+            return self._send(200, demo_examples())
         if p == "/api/answer":
             # the dispatched ship-task session polls here for the human's reply
             sid = (qs.get("session_id") or [""])[0]
@@ -1163,8 +1204,10 @@ class Handler(BaseHTTPRequestHandler):
             if "repo" in updates:
                 updates["repo"] = os.path.expanduser(str(updates["repo"]).strip())
                 if not os.path.exists(os.path.join(updates["repo"], ".git")):
-                    return self._send(400, {"ok": False,
-                        "error": f"not a git repo: {updates['repo']} — run `git init` there first, or ask Claude to create one"})
+                    ok, err, push_mode = init_local_repo(updates["repo"])
+                    if not ok:
+                        return self._send(400, {"ok": False, "error": err})
+                    updates.setdefault("push_mode", push_mode)
             cfgp = skill_config.CONFIG_PATH
             try:
                 cur = json.load(open(cfgp))
@@ -1286,6 +1329,50 @@ def open_panel():
             subprocess.run(["xdg-open", URL], capture_output=True)
     except Exception:
         pass
+
+
+def init_local_repo(repo_path):
+    """The panel's direct equivalent of SKILL.md's "create a new repo for me"
+    chat sub-flow — used by /api/config when the saved repo path doesn't exist
+    yet or isn't a git checkout, so pasting a fresh path into the panel works
+    end to end instead of dead-ending on "not a git repo".
+
+    Same safety rules as the chat flow: NEVER guess a git identity (stop and
+    hand back the exact command if one isn't configured) and NEVER decide
+    GitHub linkage here — that was already decided once at install time
+    (config `gh_available`); an HTTP handler has no interactive channel to ask
+    it fresh, so an unset gh_available just means "stay local".
+
+    Returns (ok, error_or_None, push_mode_or_None)."""
+    try:
+        os.makedirs(repo_path, exist_ok=True)
+    except OSError as e:
+        return False, f"couldn't create {repo_path}: {e}", None
+    name = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True).stdout.strip()
+    email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout.strip()
+    if not name or not email:
+        return False, (
+            "git isn't configured with an identity yet — run this yourself, "
+            'then try again: git config --global user.name "Your Name" && '
+            'git config --global user.email "you@example.com"'), None
+    r = subprocess.run(["git", "init", "-b", "main", repo_path], capture_output=True, text=True)
+    if r.returncode != 0:
+        return False, f"git init failed: {r.stderr.strip()}", None
+    if not any(f != ".git" for f in os.listdir(repo_path)):
+        with open(os.path.join(repo_path, "README.md"), "w") as f:
+            f.write(f"# {os.path.basename(repo_path.rstrip('/')) or 'project'}\n")
+    subprocess.run(["git", "-C", repo_path, "add", "-A"], capture_output=True)
+    r = subprocess.run(["git", "-C", repo_path, "commit", "-m", "Initial commit"],
+                       capture_output=True, text=True)
+    if r.returncode != 0 and "nothing to commit" not in (r.stdout + r.stderr):
+        return False, f"initial commit failed: {r.stderr.strip()}", None
+    if skill_config.get("gh_available") is True:
+        r = subprocess.run(["gh", "repo", "create", "--private", "--source", ".", "--push"],
+                           capture_output=True, text=True, cwd=repo_path)
+        if r.returncode == 0:
+            return True, None, "pr"
+        return True, None, "local"  # repo is still usable locally even if gh push failed
+    return True, None, "local"
 
 
 def free_port(port):
