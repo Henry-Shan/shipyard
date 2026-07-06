@@ -66,35 +66,6 @@ def read_source_pdf():
 # the review board renders the Notion source instead of the PDF.
 NOTION_MAP_FILE = os.path.join(HERE, ".notion_map")
 
-# The packaged example task doc, shown on the intake card so a new user can SEE
-# what the manager eats (and try it with one click). realpath: the skill dir is
-# usually a symlink into the warehouse clone; examples/ lives at the clone root.
-DEMO_DOC = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), "..", "..", "examples", "demo-qa-findings.md"))
-_EXAMPLES = None
-
-
-def demo_examples():
-    """The packaged demo doc, parsed into the SAME block shape the Notion doc
-    view renders (so the intake card can show it as a continuous, scrollable
-    document rather than a card grid). Cached; {} shape on any failure."""
-    global _EXAMPLES
-    if _EXAMPLES is not None:
-        return _EXAMPLES
-    out = {"path": None, "title": "", "findings": [], "blocks": []}
-    try:
-        import notion_ingest
-        raw = open(DEMO_DOC, encoding="utf-8", errors="replace").read()
-        m = notion_ingest.parse(raw, "", "demo", tempfile.gettempdir(), do_images=False)
-        if m.get("findings"):
-            out = {"path": DEMO_DOC, "title": "Castaway Studio — demo QA doc",
-                   "findings": m["findings"][:20], "blocks": m.get("blocks", [])}
-    except Exception:
-        pass
-    _EXAMPLES = out
-    return out
-
-
 def notion_map_path():
     try:
         p = open(NOTION_MAP_FILE).read().strip()
@@ -1039,8 +1010,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, pdf_map((qs.get("path") or [""])[0]))
         if p == "/api/notion-map":
             return self._send(200, read_notion_map() or {})
-        if p == "/api/examples":
-            return self._send(200, demo_examples())
         if p == "/api/answer":
             # the dispatched ship-task session polls here for the human's reply
             sid = (qs.get("session_id") or [""])[0]
