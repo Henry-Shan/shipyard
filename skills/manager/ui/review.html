@@ -205,7 +205,6 @@
   <div class="cov" id="cov"></div>
   <span id="capctl" class="capctl"></span>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
-  <button class="hbtn gh" onclick="reconnectManager(this)" title="copy the command to reopen the /manager orchestrator (the daemon + all tasks persist)">⧉ Reconnect</button>
   <button class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
 <div id="pausebanner"></div>
@@ -350,14 +349,45 @@ function copyTestPlan(ev,id){ ev.preventDefault(); ev.stopPropagation();
   const txt=document.getElementById(id)?.textContent||"";
   navigator.clipboard.writeText(txt).then(()=>{const b=ev.target;const o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1200);}); }
 function onTestPlanToggle(id,open){ open?TESTPLAN_OPEN.add(id):TESTPLAN_OPEN.delete(id); }
-function reconnectManager(btn){
-  // Smoothly copy the resume command (falls back to a fresh /manager if the
-  // orchestrator session isn't registered). Button flashes "copied ✓" — no modal.
-  const cmd=MANAGER_SESSION?`cd ${REPO} && claude --resume ${MANAGER_SESSION}`:`cd ${REPO} && claude "/manager"`;
-  navigator.clipboard.writeText(cmd).then(()=>{
-    if(btn){ const o=btn.textContent; btn.textContent=MANAGER_SESSION?"copied resume ✓":"copied ✓"; btn.disabled=true;
-      setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); }
-  }).catch(()=>{ showModal("⧉ Reconnect manager","Copy failed — paste this in a terminal:\n\n  "+cmd); });
+// ---- Setup mode: the daemon started without a valid target repo. Show a
+// friendly setup screen; saving POSTs /api/config, the daemon restarts itself,
+// and the normal poll loop picks the board back up automatically.
+function renderSetup(s){
+  PROGRESS=s.progress||{steps:[],active:false,done:false};   // live feed works in setup mode too
+  const sig="setup:"+(s.repo||"")+":"+(s.config_path||"")+":"+progSig();
+  if(sig===LAST_SIG) return; LAST_SIG=sig;
+  $("#sub").textContent="setup";
+  // Claude's live status (progress beacons) renders ABOVE the repo form, so the
+  // user sees what's happening from the very first second — even with no repo.
+  const live=(PROGRESS.steps||[]).length?`<div style="margin-bottom:12px">${setupCard()}</div>`:"";
+  $("#stage").innerHTML=`<div class="setupwrap">${live}<div class="setup">
+    <div class="setup-h">👋 One thing before we start — which repo should the manager work on?</div>
+    <p class="ntext">Paste the absolute path of a <b>git repo</b> on this machine. Or just answer the
+    question in your Claude session — Claude can also <b>create a new repo</b> for you.</p>
+    <input id="repoIn" value="${esc(s.repo||"")}" placeholder="/absolute/path/to/your/repo"
+      style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:7px;padding:9px 11px;font:inherit;font-size:13px;margin:8px 0">
+    <div class="tact"><button id="repoSave" class="tbtn primary" onclick="saveRepo(this)">Use this repo →</button>
+      <span id="setupmsg" class="ntext"></span></div>
+    <p class="ntext" style="color:var(--dim);margin-top:10px">Saved to <span class="mono">${esc(s.config_path||"config.json")}</span> —
+    the daemon restarts itself and this page becomes the live board.</p>
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">What happens once a repo is set</div>
+      <ol class="ntext" style="margin:0;padding-left:20px;color:var(--dim)">
+        <li>Claude ingests your work source (QA doc, Notion page, or task list)</li>
+        <li>Each item is grounded in the repo and deduped against already-shipped work</li>
+        <li>Survivors are triaged and dispatched to parallel builder agents</li>
+        <li>Finished work collects here as PR-ready branches — <b>you</b> test + merge</li>
+      </ol>
+    </div>
+  </div></div>`;
+}
+async function saveRepo(btn){
+  const v=($("#repoIn")?.value||"").trim(); if(!v){ $("#setupmsg").textContent="enter a path first"; return; }
+  btn.disabled=true; btn.textContent="Saving…";
+  let r; try{ r=await apiPost("/api/config",{repo:v}); }catch(e){ r={ok:false,error:String(e)}; }
+  if(r&&r.ok){ $("#setupmsg").textContent="✓ Saved — restarting the daemon…"; LAST_SIG=""; }
+  else{ $("#setupmsg").textContent="✗ "+((r&&r.error)||"could not save");
+    btn.disabled=false; btn.textContent="Use this repo →"; }
 }
 
 // feature-test verdict (recorded by the run) — chip + expandable detail
@@ -619,7 +649,7 @@ function renderNotion(){
         <div class="nbody"><div class="nft">${mdi(b.text)}</div>${eviHtml}${tasksHtml}</div></div>`;
     }
   }
-  if(NMAP.url) html+=`<div style="text-align:center;margin:22px 0 0"><a href="${esc(NMAP.url)}" target="_blank">open the full doc in Notion ↗</a></div>`;
+  if(NMAP.url && /^https?:/i.test(NMAP.url)) html+=`<div style="text-align:center;margin:22px 0 0"><a href="${esc(NMAP.url)}" target="_blank">open the source doc ↗</a></div>`;
 
   // Pending questions ride at the very top — they block a run and need you now.
   const qHtml=QUESTIONS.length
@@ -643,10 +673,48 @@ function renderNotion(){
   }; });
 }
 
+// ---------- Plain mode: no doc-map and no PDF (typed-list source, or a file
+// the ingest couldn't parse). The board still shows everything that matters:
+// the live setup feed, pending questions, and every task grouped by state.
+function renderPlain(){
+  const live=TASKS.filter(t=>t.status!=="rejected");
+  const sig=JSON.stringify(["plain",progSig(),PAUSED,CAP,COOLDOWN>0,
+    QUESTIONS.map(q=>[q.id,q.status,q.answer]),[...REWORK_OPEN],[...TESTPLAN_OPEN],
+    TESTSRV&&[TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error],
+    live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
+  if(sig===LAST_SIG) return; LAST_SIG=sig;
+  $("#sub").textContent=live.length?live.length+" tasks":"getting started…";
+  const cnt={}; live.forEach(t=>{const l=taskState(t).l; cnt[l]=(cnt[l]||0)+1;});
+  const order=["PR ready","in progress","testing","needs you","blocked","failed","queued","draft"];
+  const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","queued":"--queued","draft":"--queued"};
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+  $("#index").innerHTML=`<div class="ihead">tasks · ${live.length}</div>`+live.map(t=>{const c=cssv(taskState(t).v);
+    return `<div class="irow" data-t="${t.id}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(t.title)}">${esc(t.title)}</span></div>`;}).join("");
+  const buckets=[["In progress",x=>x.status==="running"||x.status==="parked"],
+                 ["Stopped — needs your attention",x=>x.status==="failed"],
+                 ["PR ready — merge when you're happy",x=>x.status==="done"],
+                 ["Queued",x=>x.status==="queued"],
+                 ["Waiting on your answer",x=>x.status==="needs_input"],
+                 ["Can't be done here",x=>x.status==="blocked"],
+                 ["Drafts",x=>x.status==="draft"]];
+  let html="";
+  for(const [label,f] of buckets){ const ts=live.filter(f); if(!ts.length) continue;
+    html+=`<h2 class="ntest">${esc(label)} · ${ts.length}</h2>`+ts.map(t=>`<div id="task-${t.id}">${taskRow(t,false)}</div>`).join("");
+  }
+  if(!html) html=`<p class="ntext" style="color:var(--dim)">No tasks yet — they'll appear here as Claude finishes triage.</p>`;
+  const setupHtml=(PROGRESS.steps||[]).length?`<div class="setupwrap doc">${setupCard()}</div>`:"";
+  const qHtml=QUESTIONS.length?`<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>`:"";
+  $("#stage").innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`;
+  document.querySelectorAll("#index .irow").forEach(r=>{ r.onclick=()=>{ const el=document.getElementById("task-"+r.dataset.t);
+    if(el) $("#stage").scrollTo({top:Math.max(0,el.offsetTop-14),behavior:"smooth"});
+    document.querySelectorAll(".irow.on").forEach(x=>x.classList.remove("on")); r.classList.add("on"); }; });
+}
+
 async function refresh(){
   if(uiBusy()) return;
   let s; try{ s=await api("/api/state"); }catch(e){ return; }
   if(s.ui_version){ if(UIV===null)UIV=s.ui_version; else if(s.ui_version!==UIV){ location.reload(); return; } }
+  if(s.repo_ok===false){ renderSetup(s); return; }   // daemon in setup mode — no repo yet
   TASKS=s.tasks||[];
   TESTSRV=s.test_server||null;
   QUESTIONS=s.pending_questions||[];
@@ -657,13 +725,12 @@ async function refresh(){
   PROGRESS=s.progress||{steps:[],active:false,done:false};
   renderControls(s);
   LAST_ACTIVE=((s.counts&&((s.counts.running||0)+(s.counts.parked||0)))>0) || PROGRESS.active;
-  if(s.notion){ return refreshNotion(); }   // Notion source → Notion mode (PDF stays as fallback)
-  // No doc yet, but a /manager run is loading one — show the live setup feed.
-  if(PROGRESS.steps.length && !s.source_pdf){
-    const sig="setup:"+progSig(); if(sig!==LAST_SIG){ LAST_SIG=sig; $("#stage").innerHTML=`<div class="setupwrap">${setupCard()}</div>`; }
-    return;
-  }
-  const pdf=s.source_pdf||null;
+  if(s.notion){ return refreshNotion(); }   // doc-map source (Notion page or ingested .md) → doc mode
+  // No doc-map and no PDF (typed-list source, an unparsed file, or still
+  // loading): render the PLAIN TASK BOARD — live feed + questions + every task
+  // by state. Never strand the user on just the stepper.
+  if(!s.source_pdf){ return renderPlain(); }
+  const pdf=s.source_pdf;
   if(pdf!==PDF){ PDF=pdf; MAP=null;
     if(PDF){ try{ MAP=await api("/api/pdf-map?path="+encodeURIComponent(PDF)); }catch(e){ MAP=null; } }
     buildStage();

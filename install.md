@@ -63,14 +63,15 @@ Handle these cases:
 `curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
 into `$WAREHOUSE` — but note that updates then require re-downloading.)
 
-## Step 2 — Check prerequisites and REPORT the result
+## Step 2 — Check prerequisites, REPORT, then OFFER TO FIX
 
 Run each check and collect the results into one clear report. Missing items are
-**reported, not silently tolerated** — tell the user exactly what's missing, why
-it's needed, and how to install it. Only poppler is optional.
+**reported, not silently tolerated** — but don't stop at the report either:
+propose the exact fix commands and, with the user's OK, run them yourself and
+re-check. Only poppler is optional.
 
 ```bash
-python3 -c 'import sys; assert sys.version_info >= (3,10), sys.version; print("python3 OK:", sys.version.split()[0])'
+python3 -c 'import sys; assert sys.version_info >= (3,9), sys.version; print("python3 OK:", sys.version.split()[0])'
 git --version
 gh auth status          # must show a logged-in account — ship-task opens PRs with gh
 claude --version        # the Claude Code CLI — dispatch.sh launches headless runs with it
@@ -79,14 +80,28 @@ pdftoppm -v             # poppler — OPTIONAL: only needed for PDF ingest / the
 
 | Check | Needed for | If missing |
 |---|---|---|
-| `python3` ≥ 3.10 | every script (daemon, dedup, config) | install Python 3.10+ |
-| `git` | worktrees, dedup, branches | install git |
-| `gh auth status` logged in | opening PRs | `gh auth login` |
+| `python3` ≥ 3.9 | every script (stdlib only — **macOS's built-in Python qualifies**) | see fix flow below |
+| `git` | worktrees, dedup, branches | install git (macOS: `xcode-select --install`) |
+| `gh` + logged in | opening PRs | `brew install gh` / `apt install gh`, then `gh auth login` |
 | `claude` CLI | dispatching headless runs | install Claude Code |
 | poppler (`pdftoppm`) | **optional** — PDF ingest + panel PDF view | `brew install poppler` / `apt install poppler-utils` |
 
-If a **required** item is missing, stop after the report and let the user decide;
-do not continue to a half-working install without saying so.
+**Fix flow** (after presenting the report):
+
+1. Detect the package manager (`brew` on macOS, `apt`/`dnf` on Linux). Assemble
+   ONE fix plan for everything missing, show it to the user, and ask once —
+   e.g. "Missing: gh. Fix with `brew install gh`, then log you in? [yes/no]".
+   On yes, run the installs and re-run the checks; show the updated table.
+2. **`gh auth login` is interactive** — you can't answer its prompts. Ask the
+   user to run it themselves (in Claude Code they can type `! gh auth login` to
+   run it in-session), then verify with `gh auth status` before moving on.
+3. **Python:** 3.9+ is enough, so this is rarely a problem. If `python3` really
+   is older, first look for an already-installed newer one
+   (`command -v python3.12 python3.11 python3.10 python3.9`; on macOS also
+   `/usr/bin/python3`) before proposing an install.
+4. No package manager, or the user declines → print the manual install
+   commands per item and stop there, saying plainly which features won't work
+   until they're installed. Never continue silently into a half-working setup.
 
 ## Step 3 — Interview the user, then write `config.json`
 
@@ -142,8 +157,10 @@ cp ~/.claude/skills/manager/config.example.json ~/.claude/skills/manager/config.
 python3 ~/.claude/skills/manager/skill_config.py check
 ```
 
-Everything else (skills, selftests) is already done; the daemon refuses to start
-until "repo" is set, so nothing half-configured can run by accident.
+Everything else (skills, selftests) is already done. Without a repo the daemon
+boots into a **setup screen** (paste a repo path there, or answer Claude's
+setup question on the first `/manager` run) — and nothing can dispatch until a
+valid repo is saved, so a half-configured install can't run by accident.
 
 ## Step 4 — Smoke-check (no real dispatch)
 

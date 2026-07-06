@@ -150,9 +150,20 @@ REPO = CFG["repo"]
 LOG_DIR = os.environ.get("MANAGER_LOGS", os.path.join(HERE, "runs"))
 URL = os.environ.get("MANAGER_URL", f"http://127.0.0.1:{PORT}")
 
+
+def repo_ok():
+    """True when a usable target repo is configured. The daemon runs either way
+    (setup mode when False): the panel shows a setup screen and the dispatcher
+    holds until a repo is saved."""
+    return bool(REPO) and os.path.exists(os.path.join(REPO, ".git"))
+
 os.makedirs(LOG_DIR, exist_ok=True)
 
 _dispatch_lock = threading.Lock()
+# Touched on every /api/state poll. open_panel() checks it so a daemon restart
+# (every /manager run, every /api/config save) never opens a SECOND tab while
+# one is already connected — the live tab auto-reloads itself instead.
+LAST_POLL_FILE = os.path.join(LOG_DIR, "last_poll")
 PAUSE_FILE = os.path.join(LOG_DIR, "PAUSED")        # presence halts auto-dispatch
 PAUSE_UNTIL_FILE = os.path.join(LOG_DIR, "PAUSE_UNTIL")  # timed auto-resume (unix ts)
 CAP_FILE = os.path.join(LOG_DIR, "CAP")
@@ -207,6 +218,7 @@ def _run_task(task):
     # interrupted (e.g. rate limit) rather than throwing the partial work away.
     resume_sid = task.get("session_id") if task.get("resume") else None
     sid = resume_sid or core.new_session_id()
+    os.makedirs(LOG_DIR, exist_ok=True)
     log_path = os.path.join(LOG_DIR, f"task-{tid}-{sid}.log")
     core.update_task(tid, status="running", session_id=sid, log_path=log_path, resume=0,
                      failtest_info=None, featuretest=None)  # fresh run: no stale feature-test verdict
@@ -255,6 +267,7 @@ def start_rework(tid, feedback):
 
 
 def _run_rework(tid, sid, feedback):
+    os.makedirs(LOG_DIR, exist_ok=True)
     log_path = os.path.join(LOG_DIR, f"task-{tid}-{sid}-rework-{int(time.time())}.log")
     core.update_task(tid, status="running", log_path=log_path, failtest_info=None, featuretest=None)
     with core.connect() as c:
@@ -865,7 +878,7 @@ def dispatcher_loop():
     while True:
         try:
             with _dispatch_lock:
-                if not is_paused() and core.active_count() < get_cap():
+                if repo_ok() and not is_paused() and core.active_count() < get_cap():
                     nxt = core.next_queued()
                     if nxt:
                         threading.Thread(target=_run_task, args=(nxt,), daemon=True).start()
@@ -915,10 +928,17 @@ class Handler(BaseHTTPRequestHandler):
         if p in ("/", "/index.html", "/review", "/review.html"):
             return self._serve_file("review.html", "text/html")
         if p == "/api/state":
+            try:    # a live panel tab is polling — remember, so restarts don't open dupes
+                with open(LAST_POLL_FILE, "w") as f:
+                    f.write(str(time.time()))
+            except OSError:
+                pass
             st = core.snapshot()
             st["paused"] = is_paused()
             st["cap"] = get_cap()
             st["repo"] = REPO                # so the panel's copy-commands cd to the right repo
+            st["repo_ok"] = repo_ok()        # False -> the panel renders its setup screen
+            st["config_path"] = skill_config.CONFIG_PATH
             st["base_branch"] = BASE_BRANCH
             st["skill_dir"] = HERE           # for panel-shown shell snippets (e.g. PDF copy)
             st["manual_pause"] = os.path.exists(PAUSE_FILE)
@@ -1120,6 +1140,35 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/cap":
             set_cap(body.get("cap", get_cap()))
             return self._send(200, {"cap": get_cap()})
+        if p == "/api/config":
+            # Setup-mode escape hatch: the panel (or the agent) saves config
+            # values here; the daemon then re-execs itself so module-level
+            # settings reload. Only known keys are accepted; a repo path must
+            # be an existing git checkout before anything is written.
+            allowed = {"repo", "base_branch", "setup_command", "dev_command",
+                       "dev_port", "verify_command", "panel_port", "dispatch_cap",
+                       "env_files", "risk_keywords_extra", "memory_mcp",
+                       "worktree_dir", "archive_dir"}
+            updates = {k: v for k, v in body.items() if k in allowed}
+            if not updates:
+                return self._send(400, {"ok": False, "error": "no recognized config keys"})
+            if "repo" in updates:
+                updates["repo"] = os.path.expanduser(str(updates["repo"]).strip())
+                if not os.path.exists(os.path.join(updates["repo"], ".git")):
+                    return self._send(400, {"ok": False,
+                        "error": f"not a git repo: {updates['repo']} — run `git init` there first, or ask Claude to create one"})
+            cfgp = skill_config.CONFIG_PATH
+            try:
+                cur = json.load(open(cfgp))
+                if not isinstance(cur, dict):
+                    cur = {}
+            except (OSError, ValueError):
+                cur = {}
+            cur.update(updates)
+            with open(cfgp, "w") as f:
+                json.dump(cur, f, indent=2)
+            threading.Timer(0.6, _reexec).start()  # respond first, then restart
+            return self._send(200, {"ok": True, "restarting": True})
         if p.startswith("/api/tasks/") and p.endswith("/rework"):
             tid = int(p.split("/")[3])
             ok = start_rework(tid, body.get("feedback", ""))
@@ -1201,9 +1250,17 @@ class Handler(BaseHTTPRequestHandler):
 
 def open_panel():
     """Best-effort: open the control panel in Chrome (fallback: default browser).
-    Disable with MANAGER_NO_OPEN=1."""
+    Disable with MANAGER_NO_OPEN=1. Skipped when a panel tab is ALREADY polling
+    (last /api/state within 30s) — restart-first restarts the daemon constantly,
+    and without this guard every restart opened one more duplicate tab."""
     if os.environ.get("MANAGER_NO_OPEN"):
         return
+    try:
+        if time.time() - os.path.getmtime(LAST_POLL_FILE) < 30:
+            print(f"panel already open (tab polling) — not opening another: {URL}")
+            return
+    except OSError:
+        pass  # never polled -> first run, do open
     try:
         if sys.platform == "darwin":
             if subprocess.run(["open", "-a", "Google Chrome", URL],
@@ -1247,10 +1304,22 @@ def free_port(port):
     print(f"restart: freed port {port} (replaced stale daemon {pids})")
 
 
+def _reexec():
+    """Restart this daemon in place (same PID) so freshly-saved config loads.
+    Python sockets are close-on-exec, so the port frees itself."""
+    os.execv(sys.executable, [sys.executable, os.path.join(HERE, "managerd.py"), "serve"])
+
+
 def serve():
-    skill_config.require_repo()  # fail loudly on a fresh/unconfigured install
     free_port(PORT)   # restart-first: replace any running daemon so the latest code loads
     core.init_db()
+    if not repo_ok():
+        # Friendly setup mode instead of refusing to start: the panel shows a
+        # setup screen (paste a repo path -> saved via /api/config -> restart),
+        # and nothing can dispatch until the repo is valid.
+        print(f"manager: no target repo configured yet ({REPO or 'unset'}).")
+        print(f"  -> panel is in SETUP MODE at {URL} — enter your repo path there,")
+        print(f"     or edit {skill_config.CONFIG_PATH} (see config.example.json).")
     # An explicit MANAGER_CAP env on `serve` is authoritative and is written to
     # the cap file so it sticks; otherwise seed the file with the default once.
     if os.environ.get("MANAGER_CAP"):

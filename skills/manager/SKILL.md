@@ -2,10 +2,11 @@
 name: manager
 version: 0.2.0
 description: |
-  The autonomous managing agent that sits ABOVE /ship-task. Ingests a messy work
-  source (a Notion page URL, a PDF of QA findings + screenshots, a folder, or a
-  typed list), GROUNDS each item in the repo and the live base branch (never
-  guesses about schema/code), DEDUPES against already-shipped work, CONSOLIDATES
+  The autonomous managing agent that sits ABOVE /ship-task. Ingests ANY work
+  source — a Notion page URL, a PDF of QA findings + screenshots, a markdown or
+  text file, a folder, a typed list, or pasted free-form notes (everything is
+  normalized and DISPLAYED on the review board) — GROUNDS each item in the repo
+  and the live base branch (never guesses about schema/code), DEDUPES against already-shipped work, CONSOLIDATES
   duplicates, TRIAGES each to a ship-task tier, then RUNS THE WHOLE BATCH ITSELF —
   dispatching /ship-task runs in parallel, each taken all the way to a green PR
   (it stops at PR-ready; the human does the final merge). It behaves like a good
@@ -52,8 +53,8 @@ C(){ python3 "$SKILL_DIR/skill_config.py" get "$1"; }
 REPO="$(C repo)"; BASE="$(C base_branch)"; MURL="http://127.0.0.1:$(C panel_port)"
 ```
 
-If `python3 "$SKILL_DIR/skill_config.py" check` fails, stop and tell the user to
-create `config.json` (the installer normally writes it).
+If `python3 "$SKILL_DIR/skill_config.py" check` fails, do NOT stop with an
+error — run the first-run setup below (Phase 0) before anything else.
 
 ## The iron rules (this is why the manager exists)
 
@@ -84,11 +85,14 @@ create `config.json` (the installer normally writes it).
    investigate-only, or a feature too big without a scope decision — goes to the
    `blocked` bucket with a one-line reason, NOT a guess and NOT silence.
 
-## Phase 0 — (Re)start the control panel
+## Phase 0 — Panel up FIRST (instant feedback), then configure if needed
 
-**Always restart the daemon at the start of a `/manager` run** so it picks up the
-latest code. `serve` is restart-first: it frees its port (killing any stale
-daemon) before binding, so just run it — no manual stop needed:
+### Step 1 — start the daemon immediately, every run, before anything else
+
+Do this within your first seconds, even when no repo is configured yet — the
+daemon boots into a friendly **setup mode** and the panel appears in the user's
+browser right away, instead of them staring at a silent terminal. `serve` is
+restart-first (it frees its port, killing any stale daemon) so just run it:
 
 ```bash
 cd "$SKILL_DIR"
@@ -97,15 +101,50 @@ python3 managerd.py serve   # run in background; replaces any running daemon
 ```
 
 Port and concurrency come from config (`panel_port`, `dispatch_cap`); env vars
-(`MANAGER_PORT`, `MANAGER_CAP`) still override. `serve` auto-opens the panel in a
-browser on startup. If it doesn't, open it:
+(`MANAGER_PORT`, `MANAGER_CAP`) still override. `serve` auto-opens the panel
+itself and **skips opening when a panel tab is already connected** — so do NOT
+open `$MURL` with your own `open`/`xdg-open` command (that's how users end up
+with duplicate tabs). Just tell the user the URL (`$MURL`); the open tab always
+auto-reloads to the latest state.
+
+Then immediately start the live feed so the tab is never blank:
 
 ```bash
-open "$MURL" 2>/dev/null || xdg-open "$MURL"
+P(){ curl -s -X POST "$MURL/api/progress" -H 'Content-Type: application/json' -d "$1" >/dev/null; }
+P '{"clear":true}'
+P '{"label":"Started the control panel"}'
 ```
 
-Tell the user the URL (`$MURL`). The dashboard, suggestions inbox, worktrees, and
-activity log all live there.
+### Step 2 — first-run setup (only when `skill_config.py check` fails)
+
+Set it up conversationally — never error out, never guess a repo. The panel is
+already up in setup mode; keep it informed while you ask:
+
+```bash
+P '{"label":"Waiting for you to choose a target repo","detail":"answer the question in the Claude chat — or paste a repo path right here on the panel"}'
+```
+
+1. Check whether the current directory is a git repo
+   (`git rev-parse --git-dir 2>/dev/null`). Then ask ONE question with
+   **AskUserQuestion**, so the user just clicks:
+   - **Use this repo: `<pwd>` (recommended)** — only offered when pwd IS a git repo.
+   - **A different repo** — then ask for the absolute path.
+   - **Create a new repo for me** — confirm a path, then `git init -b main`,
+     make an initial commit, and offer `gh repo create --private --source . --push`
+     (ship-task opens PRs with `gh`; without a GitHub remote, runs stop at the
+     push step — say so plainly if they decline).
+2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
+   (`package.json` scripts, `Makefile`, CI workflows) — keep the
+   `config.example.json` defaults when unsure. Save everything through the
+   daemon so it restarts itself with the new config (the human may have already
+   pasted a path on the panel — same endpoint, last write wins):
+   ```bash
+   curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' \
+     -d '{"repo":"<abs path>","base_branch":"main","setup_command":"…","dev_command":"…","verify_command":"…"}'
+   sleep 2   # daemon re-execs; the open tab reloads into the board on its own
+   P '{"label":"Repo configured","detail":"<the repo path>"}'
+   ```
+3. `python3 "$SKILL_DIR/skill_config.py" check` must now pass before Phase 1.
 
 **Register this session for the panel's "⧉ Reconnect" button** (best-effort, so a
 closed window can be resumed with `claude --resume`). Your session id is the newest
@@ -131,18 +170,14 @@ regardless.
 ### Progress beacons — show the user the ingest happening live
 
 The board renders a clean, live "Setting up your board…" stepper from progress
-beacons you POST. **Fire one at the start of each phase below** so the user sees
-the process unfold instead of a blank board. Each is a fire-and-forget curl
-(token-light — announce the step as you begin it; a new step auto-completes the
-previous one). Reset the feed once, right after the daemon is up:
+beacons you POST (the `P` helper you defined in Phase 0 Step 1 — the feed was
+already cleared and started there). **Fire one at the start of each phase
+below** so the user sees the process unfold instead of a blank board. Each is a
+fire-and-forget curl (token-light — announce the step as you begin it; a new
+step auto-completes the previous one). If the daemon restarted during first-run
+setup, the feed reset with it — just keep beaconing; steps re-accumulate.
 
-```bash
-P(){ curl -s -X POST "$MURL/api/progress" -H 'Content-Type: application/json' -d "$1" >/dev/null; }
-P '{"clear":true}'                                             # start of the run
-P '{"label":"Started the control panel"}'
-```
-
-Then, as you reach each phase, beacon it (put real counts in `detail`):
+As you reach each phase, beacon it (put real counts in `detail`):
 
 | When | Beacon |
 |------|--------|
@@ -159,6 +194,23 @@ the stepper hands off to the live task board. On an error, send
 `P '{"status":"error","detail":"what failed"}'` so the user sees where it stopped.
 
 ## Phase 1 — Ingest the work source
+
+**Universal rule: whatever the user hands you gets DISPLAYED on the board.**
+Route by type below; anything that doesn't fit a native mode (Notion / PDF /
+grammar-matching markdown) you **normalize** into the canonical doc format and
+register — never leave the user with a stepper and invisible source. The
+canonical grammar (what `notion_ingest.py` parses):
+
+```
+## <section heading>                     ← one per theme/test area
+### <subsection>                         ← optional
+🔴 Bug 1.1 — <one actionable item>       ← kind ∈ bug|feature|issue|test|problem|note
+🟠 Feature 1.2 — <another item>          ← id needs ≥2 parts (1.1, 2.3.1, …)
+image 1.1 — <what a screenshot shows>    ← optional evidence caption line
+<any other line>                         ← preserved verbatim as document text
+```
+
+Severity emojis: 🔴 bug · 🟠 feature · 🟡 minor · 🟢/✅ done (= not a task) · ⚪ note.
 
 **A `/manager <source>` invocation ADDS to the existing board — it NEVER wipes
 prior runs or history.** Do NOT reset the queue at the start of a run. The board
@@ -213,6 +265,40 @@ removes them with the per-worktree button in the panel.)
      PY
      ```
      Skip the PDF/folder steps below.
+- **Markdown / text file** (the arg is a local `.md`/`.txt` path): run the SAME
+  ingest script as Notion — it parses findings docs written as `## Test …` /
+  `### Feature …` sections with `🔴 Bug X.Y.Z — …` lines (see
+  `examples/demo-qa-findings.md` in the package repo for the reference shape):
+  ```bash
+  python3 "$SKILL_DIR/notion_ingest.py" --raw "<abs path to the file>" \
+    --url "file://<abs path>" --title "<file name>"
+  ```
+  Then register the printed map.json exactly like Notion step 3
+  (`POST $MURL/api/source-notion {"path": "<map.json>"}`) — the board renders
+  the whole doc with per-finding live status — and triage from the printed
+  findings list. **If it prints 0 findings** (free-form notes that don't match
+  the grammar), fall through to "Anything else" below and normalize it.
+- **Anything else — typed lists, free-form notes, pasted emails/Slack threads,
+  meeting notes, CSV rows, a sentence in the invocation itself: NORMALIZE it.**
+  You are the parser. Write `$SKILL_DIR/.notion/normalized.md` in the canonical
+  grammar above:
+  - **Preserve the user's original wording** — quote their items; add only the
+    `🔴 Bug 1.1 —` style prefix and section headings. Non-actionable context
+    lines stay as plain text (they render as document text on the board).
+  - Number items `1.1, 1.2, 2.1 …` grouped under `##` headings by theme.
+  - Items the source itself marks finished get 🟢/✅ (displayed, not tasks).
+  Then ingest + register it like any markdown source:
+  ```bash
+  python3 "$SKILL_DIR/notion_ingest.py" --raw "$SKILL_DIR/.notion/normalized.md" \
+    --url "file://$SKILL_DIR/.notion/normalized.md" --title "<short source name>"
+  # POST the printed map.json to $MURL/api/source-notion, as above
+  ```
+  Set each task's `source` to its finding id (e.g. `"normalized — bug 1.2"`) so
+  the board pins live progress to the right line. Local screenshots the user
+  provided attach per-task via `--evidence` (they show as thumbnails on the
+  card) and as `image N.N — <caption>` lines in the doc.
+  (If normalization is somehow impossible, the board still falls back to a
+  plain task view — but that's the safety net, not the goal.)
 - **Folder / PDF** (no Notion URL): first clear any stale Notion source so the board
   uses the PDF — `curl -s -X POST "$MURL/api/source-notion" -H 'Content-Type: application/json' -d '{}' >/dev/null`. Then: read the PDF with the Read tool (≤20 pages per call), and
   inventory the asset folder (screenshots, CSVs). The screenshots are often the

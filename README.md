@@ -51,8 +51,9 @@ set up https://raw.githubusercontent.com/Henry-Shan/agent-warehouse/main/install
 ```
 
 The agent copies the three skills into `~/.claude/skills/`, checks prerequisites
-(python3 ≥ 3.10, git, `gh` auth, the `claude` CLI; poppler only for PDF ingest),
-interviews you for your project's settings, and writes `config.json`.
+(python3 ≥ 3.9, git, `gh` auth, the `claude` CLI; poppler only for PDF ingest),
+**offers to install anything missing**, interviews you for your project's
+settings, and writes `config.json`.
 
 Also works with [`npx skills add Henry-Shan/agent-warehouse`](https://github.com/vercel-labs/skills)
 thanks to the standard `skills/<name>/SKILL.md` layout (then copy
@@ -144,7 +145,8 @@ suggestions inbox, and a PR-ready card with its manual-test guide)_
 
 ## Requirements
 
-- macOS or Linux, `python3` ≥ 3.10 (stdlib only — no pip installs), `git`,
-  [`gh`](https://cli.github.com) (authenticated), the `claude` CLI.
+- macOS or Linux, `python3` ≥ 3.9 (stdlib only, no pip installs — **macOS's
+  built-in Python is enough**), `git`, [`gh`](https://cli.github.com)
+  (authenticated), the `claude` CLI.
 - Optional: poppler (`pdftoppm`) for PDF ingest; a Notion connector in Claude
   Code for Notion ingest; a memory MCP server if you set `memory_mcp`.

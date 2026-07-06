@@ -177,7 +177,6 @@
   <span id="capctl" class="capctl"></span>
   <a href="/review" target="_blank" title="requirements (PDF) next to the live edits ship-task makes, per task"
      style="margin-left:6px;background:var(--primaryd);border:1px solid var(--primary);color:#d7f5e5;border-radius:7px;padding:5px 12px;font-size:12.5px;font-weight:600">📋 Review board ↗</a>
-  <button id="reconnectbtn" class="ghost" onclick="reconnectManager(this)" style="margin-left:6px" title="copy the command to reopen the /manager orchestrator (the daemon + all tasks persist)">⧉ Reconnect</button>
   <button id="pausebtn" onclick="togglePause()" style="margin-left:6px"></button>
   <button id="clearbtn" class="ghost" onclick="clearAll(this)" style="margin-left:6px;color:#f2b8b8;border-color:#5c2b2b" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
@@ -342,25 +341,7 @@ function copyResume(sid, btn){
     if(btn){ const o=btn.textContent; btn.textContent="copied ✓"; setTimeout(()=>btn.textContent=o,1200); }
   });
 }
-// Reopen the /manager orchestrator. The daemon + DB persist independently of the
-// Claude session, so this resumes the registered orchestrator session if known,
-// else launches a fresh /manager on this same daemon (restart-first, same queue).
-let MANAGER_SESSION = null;
-function reconnectManager(btn){
-  const fresh = `cd ${REPO} && claude "/manager"`;
-  const resume = MANAGER_SESSION ? `cd ${REPO} && claude --resume ${MANAGER_SESSION}` : null;
-  // Copy the most-specific option; the modal shows BOTH so you can pick (the
-  // registered id is a best-effort guess and could be the wrong session).
-  navigator.clipboard.writeText(resume || fresh).then(()=>{
-    if(btn){ const o=btn.textContent; btn.textContent="copied ✓"; setTimeout(()=>btn.textContent=o,1400); }
-  });
-  const body = (resume
-    ? "Copied — resumes the registered /manager session (use this if it's the right one):\n\n  "+resume+
-      "\n\nOr start a fresh orchestrator on the same daemon + queue:\n\n  "+fresh
-    : "Copied — paste in a terminal:\n\n  "+fresh)+
-    "\n\nThe daemon and all tasks persist independently of the Claude window — either way nothing is lost.";
-  showModal("⧉ Reconnect manager", body);
-}
+let MANAGER_SESSION = null;   // registered orchestrator session id (from /api/state)
 function worktreeCard(w){
   const tied = w.task_id ? `<span class="row">↳ task #${w.task_id}: ${esc((w.task_title||'').slice(0,40))}</span>` : "";
   const b = JSON.stringify(w.branch||""), s = JSON.stringify(w.slug), pth = JSON.stringify(w.path);
