@@ -32,8 +32,13 @@
   header .sub{color:var(--dim);font-size:12px;font-weight:700}
   header .spacer{flex:1}
   .cov{display:flex;gap:6px;flex-wrap:wrap}
-  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;
-    border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em}
+  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;cursor:pointer;
+    border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em;
+    transition:transform .08s ease,box-shadow .08s ease}
+  .pillc:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .pillc:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+  /* flashed by clicking a coverage chip — steps to the next matching card */
+  .covflash{outline:3px solid var(--prog);outline-offset:2px}
   .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;font-weight:700}
   .live i{width:8px;height:8px;border-radius:50%;background:var(--ready);border:1.5px solid var(--ink);animation:pulse 1.4s infinite}
   @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
@@ -118,6 +123,11 @@
   /* Test-this-branch (boots the localhost app for a PR-ready task's worktree) */
   .tact{margin-top:9px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
   .tspacer{flex:1 1 auto}                    /* pushes session + Remove to the right */
+  /* secondary action row: same buttons, quieter and smaller than the one
+     primary action above them — a clear hierarchy instead of N equal buttons */
+  .tact-more{margin-top:6px}
+  .tact-more .tbtn{font-size:11px;padding:3px 9px;box-shadow:2px 2px 0 var(--ink);opacity:.85}
+  .tact-more .tbtn:hover{opacity:1;box-shadow:3px 3px 0 var(--ink)}
   /* chunky bordered button, hard offset shadow, presses down on click */
   .tbtn{font:inherit;font-size:12px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);
     background:var(--paper);color:var(--ink);border-radius:var(--r);padding:5px 12px;line-height:1.4;
@@ -141,7 +151,7 @@
   /* ---- migrated panel controls ---- */
   .hbtn{font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);
     background:var(--paper);color:var(--ink);border-radius:var(--r);padding:6px 13px;box-shadow:3px 3px 0 var(--ink);
-    transition:transform .08s ease,box-shadow .08s ease}
+    white-space:nowrap;transition:transform .08s ease,box-shadow .08s ease}
   .hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
   .hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
   .hbtn.primary{background:var(--ready);border-color:var(--ink);color:#fff}
@@ -198,6 +208,20 @@
     max-height:80vh;overflow:auto;box-shadow:8px 8px 0 var(--ink)}
   .modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-bottom:2.5px solid var(--ink);font-weight:800}
   #modal-log{white-space:pre-wrap;padding:14px 16px;margin:0;font-size:12px;line-height:1.5;font-family:ui-monospace,Menlo,monospace}
+  /* Before → After — a plain-language product view (no code): what was
+     reported broken, and the concrete outcome the build agent verified. */
+  .bawrap{display:flex;flex-direction:column;gap:10px;white-space:normal;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .barow{border:2.5px solid var(--ink);border-left-width:7px;border-radius:var(--r);padding:14px 16px;box-shadow:3px 3px 0 var(--ink)}
+  .barow.before{background:#FFE3E9;border-left-color:var(--fail)}
+  .barow.after{background:#E3F7EA;border-left-color:var(--ready)}
+  .balabel{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;color:var(--ink)}
+  .batext{font-size:14px;line-height:1.55;color:var(--ink)}
+  .baarrow{text-align:center;font-size:11px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
+  .baimgs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .baimg{height:96px;width:auto;border:2px solid var(--ink);border-radius:7px;object-fit:cover;cursor:pointer;display:block}
+  .bacode{margin:0;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    line-height:1.5;background:#0d0d0d;color:#e6e6e6;border:2px solid var(--ink);border-radius:8px;padding:10px 12px}
   /* example task-doc preview — embedded INSIDE the intake question card,
      between its context text and the reply box: small, scrollable, like
      flipping through a PDF, so the whole card still fits on screen */
@@ -219,17 +243,6 @@
   .exframe .nfh{cursor:default}         /* not collapsible here — just reading */
   .exframe .nft{font-size:12px}
   .exframe .ntext{font-size:12px}
-  /* conversation feed — the Claude<->user dialogue mirrored onto the board */
-  .convo{max-width:840px;margin:14px auto 0;background:var(--paper);border:2.5px solid var(--ink);
-    border-radius:var(--rl);padding:11px 15px;box-shadow:4px 4px 0 var(--ink)}
-  .convo>summary{cursor:pointer;font-weight:900;font-size:11px;color:var(--ink);list-style:none;text-transform:uppercase;letter-spacing:.5px}
-  .convo>summary::-webkit-details-marker{display:none}
-  .cvbody{margin-top:10px;display:flex;flex-direction:column;gap:8px}
-  .cvrow{display:flex;gap:9px;font-size:12.5px;line-height:1.5}
-  .cvwho{flex:0 0 54px;font-weight:900;font-size:10.5px;color:var(--ink);text-transform:uppercase;padding-top:2px}
-  .cvrow.you .cvwho{color:var(--prog)}
-  .cvtxt{white-space:pre-wrap;color:var(--ink)}
-  .cvrow.mgr .cvtxt{color:#333}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -283,7 +296,7 @@
   <nav id="index"><div class="ihead">requirements</div></nav>
   <div id="stage"><div class="skel"></div></div>
 </div>
-<div id="modal"><div class="modal-box">
+<div id="modal"><div id="modal-box" class="modal-box">
   <div class="modal-head"><span id="modal-title"></span><button class="tbtn gh" onclick="closeModal()">Close</button></div>
   <pre id="modal-log"></pre>
 </div></div>
@@ -329,13 +342,77 @@ async function apiPost(p,b){ return (await fetch(p,{method:"POST",
 async function startTest(path,btn){ if(btn){btn.disabled=true;btn.textContent="Starting…";}
   await apiPost("/api/testserver/start",{path}); refresh(); }
 async function stopTest(btn){ if(btn) btn.disabled=true; await apiPost("/api/testserver/stop",{}); refresh(); }
+// Not every task has a browsable page — many are pure backend logic the build
+// agent verified with `npm test`/`node -e ...` and said so in the test guide.
+// Hitting "Open app" for those just lands on a 404 (no page exists to show),
+// which reads as broken even though the server and the fix are both fine.
+// Whether THIS PROJECT has a browsable web frontend at all is a one-time
+// project fact (asked in the intake, config `has_web_ui`) — not a per-task
+// guess. Guessing per-task from test_plan wording was unreliable (many
+// backend-only guides still mention "the browser" in passing) and it kept
+// showing an Open-app button that just 404s for projects with no frontend.
 function testBtn(t){
-  if(!t.worktree) return "";                                   // no worktree yet / cleaned up
+  if(!HASWEB || !t.worktree) return "";
   const isTest = TESTSRV && TESTSRV.worktree===t.worktree;
   if(!isTest) return `<button class="tbtn" onclick='startTest(${JSON.stringify(t.worktree)},this)'>▶ Test this branch</button>`;
   if(TESTSRV.error) return `<span class="terr">✗ dev server crashed</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
   if(TESTSRV.web_up) return `<a class="applink" href="${TESTSRV.web_url}" target="_blank" title="${esc(TESTSRV.web_url||"")}">▶ Open app</a> <button class="tbtn gh" onclick="stopTest(this)">Stop test</button>`;
   return `<span class="tstarting"><span class="pulse"></span>starting dev server… (first boot can take a minute)</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
+}
+
+// ---- Before → After: a plain-language product view of what a fix did — no
+// code, no diffs. "Before" is the original reported problem (the finding's
+// own text, if this task is tied to one); "After" is the concrete outcome the
+// build agent verified, in its own words — the "✅ Success = ..." line from
+// the manual test guide it wrote, which is already written for a human to
+// read and judge, not for a developer to review.
+// "Before" evidence: the full finding text (from NMAP.blocks — NOT the
+// truncated NMAP.findings preview) plus any screenshots actually attached to
+// it (first-hand — the original reported evidence), falling back to the
+// task's own evidence images when it isn't tied to a doc finding.
+function beforeEvidence(t){
+  const ids=idsOf(t.source||"");
+  let text=null, imgs=[];
+  if(ids.length && NMAP && NMAP.blocks){
+    const b=NMAP.blocks.find(x=>x.t==="finding" && x.id===ids[0]);
+    if(b){ text=b.text; imgs=(b.evidence||[]).filter(e=>e.img).map(e=>e.img); }
+  }
+  if(!text) text=t.description || t.title;
+  if(!imgs.length && (t.evidence||[]).length) {
+    imgs=t.evidence.filter(p=>/\.(png|jpe?g|gif|webp)$/i.test(p));
+  }
+  return {text, imgs};
+}
+// "After" evidence: the feature-tester's REAL captured output when one was
+// recorded (genuine first-hand proof — actual pass/fail counts and printed
+// assertions from a real run), not a paraphrase. Only falls back to the test
+// guide's own "✅ Success = ..." line (still the build agent's words, just not
+// raw output) when no captured run output exists.
+function afterEvidence(t){
+  const f=ftParse(t);
+  if(f && f.output) return {kind:"output", text:f.output};
+  const tp=t.test_plan||"";
+  const m=tp.match(/✅\s*success\s*=?\s*(.+)/i);
+  if(m && m[1].trim()) return {kind:"reported", text:m[1].trim()};
+  const lines=tp.split("\n").map(l=>l.trim()).filter(Boolean);
+  if(lines.length) return {kind:"reported", text:lines[lines.length-1]};
+  if(t.status==="done"||t.status==="failed") return {kind:"reported", text:`Fixed: ${t.title}`};
+  return {kind:"none", text:"Still in progress — no verified outcome yet."};
+}
+function viewEffect(tid){
+  const t=TASKS.find(x=>x.id===tid); if(!t) return;
+  const before=beforeEvidence(t), after=afterEvidence(t);
+  const beforeImgs=before.imgs.length?`<div class="baimgs">${before.imgs.map(p=>
+    `<a href="/api/image?path=${encodeURIComponent(p)}" target="_blank"><img class="baimg" loading="lazy" src="/api/image?path=${encodeURIComponent(p)}"></a>`).join("")}</div>`:"";
+  const afterLabel=after.kind==="output"?"✅ After — actual test output (first-hand)":"✅ After — reported outcome";
+  const afterHtml=after.kind==="output"?`<pre class="bacode">${esc(after.text)}</pre>`:`<div class="batext">${esc(after.text)}</div>`;
+  $("#modal-title").textContent="Before → After";
+  $("#modal-log").innerHTML=`<div class="bawrap">
+    <div class="barow before"><div class="balabel">🔴 Before — the problem</div><div class="batext">${esc(before.text)}</div>${beforeImgs}</div>
+    <div class="baarrow">↓ fixed by this task ↓</div>
+    <div class="barow after"><div class="balabel">${afterLabel}</div>${afterHtml}</div>
+  </div>`;
+  $("#modal").style.display="flex";
 }
 
 // ---- Collapsible findings: click a finding's header to shrink it to just the
@@ -350,6 +427,9 @@ function toggleFind(id){
 // ============================ full task controls ==========================
 // Everything the classic panel does, brought onto the review board.
 let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0, PUSHMODE="pr";
+// Whether the project has a browsable web frontend — a one-time project fact
+// (config has_web_ui), not guessed per task. null = not asked yet.
+let HASWEB=null;
 // Toggle where finished work lands: "pr" (push + GitHub PR, needs gh) vs
 // "local" (committed local branch only — nothing leaves the machine). Applies
 // to the NEXT dispatched run; in-flight runs keep the mode they started with.
@@ -405,6 +485,23 @@ function ago(t){ // accepts epoch seconds (what the API sends) or an ISO string
   if(s<86400) return Math.round(s/3600)+"h ago"; return Math.round(s/86400)+"d ago"; }
 function showModal(t,x){ $("#modal-title").textContent=t; $("#modal-log").textContent=x; $("#modal").style.display="flex"; }
 function closeModal(){ $("#modal").style.display="none"; }
+
+// Coverage chips ("11 PR ready") are click-to-cycle: each click steps to the
+// NEXT matching card and flashes it, wrapping back to the first after the
+// last — so "11 PR ready" is actually browsable one at a time, not just a
+// count. Works across all three board modes (doc view, plain task list, PDF
+// view) since each tags its cards with the same data-covlabel attribute.
+let COV_CYCLE={};
+function cycleCov(label){
+  const els=[...document.querySelectorAll(`[data-covlabel="${CSS.escape(label)}"]`)];
+  if(!els.length) return;
+  const i=(COV_CYCLE[label]||0)%els.length;
+  const el=els[i];
+  const stage=$("#stage");
+  stage.scrollTo({top:Math.max(0, el.offsetTop-60), behavior:"smooth"});
+  el.classList.add("covflash"); setTimeout(()=>el.classList.remove("covflash"),1300);
+  COV_CYCLE[label]=i+1;
+}
 
 async function answer(qid,text){ if(!text)return; await apiPost(`/api/questions/${qid}/answer`,{answer:text}); refresh(); }
 async function setStatus(tid,status){ await apiPost(`/api/tasks/${tid}/status`,{status}); refresh(); }
@@ -497,9 +594,18 @@ function featuretestDetail(t){ const f=ftParse(t); if(!f||!f.verdict) return "";
 
 // The task's action bar. One primary action per state; secondary actions stay
 // quiet; the session chip + a single "Remove" sit to the right.
+// ONE bold primary action per card (the thing you actually came to do); every
+// other control — see-the-effect, rework, session resume, remove — sits in a
+// quieter secondary row beneath it, smaller and visually de-emphasized. Same
+// buttons, same behavior, just a clear hierarchy instead of 6+ equal-weight
+// buttons crammed into one row.
 function taskActions(t){
   const tb=testBtn(t);
-  const reworkBtn=t.session_id?`<button class="tbtn gh" onclick="toggleRework(${t.id})">Doesn't work →</button>`:"";
+  // Mutually exclusive with the live-app button: a project either has a page
+  // to open (tb) or it doesn't — never show both, never show neither.
+  const viewBtn=(!HASWEB && (t.worktree||t.pr_url))?`<button class="tbtn gh" onclick="viewEffect(${t.id})">👀 See the effect</button>`:"";
+  const reworkBtn=(t.session_id && (t.status==="done"||t.status==="failed"))
+    ?`<button class="tbtn gh" onclick="toggleRework(${t.id})">Doesn't work →</button>`:"";
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
@@ -508,7 +614,7 @@ function taskActions(t){
   if(t.status==="failed"){
     const resumeBtn=t.session_id?`<button class="tbtn primary" onclick="resumeTask(${t.id},this)">▶ Resume</button>`:"";
     const prLink=t.pr_url?`<a class="tbtn gh" href="${esc(t.pr_url)}" target="_blank">partial PR ↗</a>`:"";
-    main=`${resumeBtn} ${prLink} ${reworkBtn} <button class="tbtn gh" onclick="setStatus(${t.id},'queued')">Retry fresh</button>`;
+    main=`${resumeBtn} ${prLink} <button class="tbtn gh" onclick="setStatus(${t.id},'queued')">Retry fresh</button>`;
   } else if(t.status==="blocked"){
     main=`<button class="tbtn primary" onclick="setStatus(${t.id},'queued')">Queue anyway</button>`;
   } else if(t.status==="done"){
@@ -517,9 +623,11 @@ function taskActions(t){
     const finished = t.pr_url
       ? `<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`
       : (t.branch ? `<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick="copyBranchReview(${JSON.stringify(t.branch)},this)">⎇ ${esc(t.branch)} · copy review cmd</button>` : "");
-    main=`${finished} ${tb} ${reworkBtn}`;
+    main=`${finished} ${tb}`;
   } else if(t.status==="running"||t.status==="parked"){ main=tb; }
-  return `<div class="tact">${main}<span class="tspacer"></span>${sess}${remove}</div>`;
+  const primaryRow=main.trim()?`<div class="tact">${main}</div>`:"";
+  const more=[viewBtn,reworkBtn].filter(Boolean).join(" ");
+  return `${primaryRow}<div class="tact tact-more">${more}<span class="tspacer"></span>${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
 async function removeTask(tid){
@@ -595,7 +703,10 @@ function secState(sec){
     if(ts.every(t=>t.status==="done")) return {l:"PR ready",v:"--ready"};
     return taskState(ts[0]);
   }
-  return sec.kind==="context" ? {l:"context",v:"--ctx"} : {l:"no task",v:"--none"};
+  if(sec.kind==="context") return {l:"context",v:"--ctx"};
+  // While the batch is still being triaged, an un-tasked section is provisional,
+  // not final — show it as "in progress" rather than the (misleading) "no task".
+  return PROGRESS.active ? {l:"in progress",v:"--prog"} : {l:"no task",v:"--none"};
 }
 
 function pageTops(){ // cumulative top + display height per page
@@ -636,7 +747,7 @@ function renderAll(){
   $("#sub").textContent=(PDF?PDF.split("/").pop()+" · ":"")+secs.length+" sections";
   const order=["PR ready","in progress","testing","needs you","blocked","failed","no task","queued","context"];
   const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","no task":"--none","queued":"--queued","context":"--ctx"};
-  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" onclick="cycleCov('${l}')" title="click to step through each ${esc(l)} item" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
 
   // section index
   $("#index").innerHTML=`<div class="ihead">requirements · ${secs.length}</div>`+secs.map(s=>{
@@ -666,6 +777,7 @@ function renderAll(){
       return `<div class="task"><span class="badge" style="color:${tc};background:${tc}22">${ts.l}</span> <span class="tt">${esc(t.title)}</span>${prog}${pr}</div>`;}).join("")
       : `<div class="ctxn">${s.kind==="context"?"Reference / setup — not a task.":"No task recorded for this section yet."}</div>`;
     const el=document.createElement("div"); el.className="note nt-"+s._i; el.dataset.i=s._i;
+    el.dataset.covlabel=st.l;
     el.style.left="0px"; el.style.width=NOTESW+"px"; el.style.borderLeftColor=c;
     el.innerHTML=`<div class="nh"><span class="bn" style="background:${c}">${s._i+1}</span><span class="nt">${esc(s.title)}</span>
         <span class="badge" style="color:${c};background:${c}22">${st.l}</span></div>${tasksHtml}`;
@@ -698,7 +810,9 @@ function idsOf(s){ return (s||"").match(/\b\d+\.\d+(?:\.\d+){0,2}\b/g) || []; }
 function findTasks(id){ return TASKS.filter(t=>t.status!=="rejected" && idsOf(t.source).includes(id)); }
 function findState(f){
   const ts=findTasks(f.id);
-  if(!ts.length) return {l:"no task",v:"--none"};
+  // While the batch is still being triaged, an un-tasked finding is provisional,
+  // not final — show it as "in progress" rather than the (misleading) "no task".
+  if(!ts.length) return PROGRESS.active ? {l:"in progress",v:"--prog"} : {l:"no task",v:"--none"};
   const has=k=>ts.some(t=>t.status===k);
   if(has("failed")) return {l:"failed",v:"--fail"};
   if(has("blocked")) return {l:"blocked",v:"--block"};
@@ -711,7 +825,7 @@ function findState(f){
 async function refreshNotion(){
   if(!NMAP){ try{ NMAP=await api("/api/notion-map"); }catch(e){} }
   const tsSig = TESTSRV ? [TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error] : null;
-  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(), convoSig(),
+  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(), HASWEB,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]), [...REWORK_OPEN], [...TESTPLAN_OPEN],
     TASKS.map(t=>[t.id,t.status,t.progress,t.pr_url,t.source,t.worktree,t.stopped_reason,t.featuretest,t.session_id])]);
   if(sig!==LAST_SIG){ LAST_SIG=sig; renderNotion(); }
@@ -724,7 +838,7 @@ function renderNotion(){
   $("#sub").textContent=(NMAP.title||"Notion")+" · "+finds.length+" findings";
   const order=["PR ready","in progress","testing","needs you","blocked","failed","no task","queued"];
   const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","no task":"--none","queued":"--queued"};
-  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" onclick="cycleCov('${l}')" title="click to step through each ${esc(l)} item" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
   $("#index").innerHTML=`<div class="ihead">findings · ${finds.length}</div>`+finds.map(f=>{const c=cssv(findState(f).v);
     return `<div class="irow" data-id="${esc(f.id)}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(f.text)}">${esc(f.id)} ${esc(f.text)}</span></div>`;}).join("");
   let html="";
@@ -748,7 +862,7 @@ function renderNotion(){
         return cap+img;
       }).join("");
       const collapsed = COLLAPSED.has(b.id) ? " collapsed" : "";
-      html+=`<div class="nfind${collapsed}" id="find-${esc(b.id)}" style="border-left-color:${c}">
+      html+=`<div class="nfind${collapsed}" id="find-${esc(b.id)}" data-covlabel="${esc(st.l)}" style="border-left-color:${c}">
         <div class="nfh" onclick="toggleFind('${esc(b.id)}')" title="click to collapse / expand">
           <span class="chev">▾</span>
           <span class="sevtag" style="color:${sc};background:${sc}22">${esc(b.sev||b.kind)} ${esc(b.id)}</span>
@@ -766,8 +880,12 @@ function renderNotion(){
   const other=TASKS.filter(t=>t.status!=="rejected" && !idsOf(t.source).some(id=>findIds.has(id)));
   const otherHtml=other.length
     ? `<div class="ndoc otherdoc"><h2 class="ntest">Other tasks · ${other.length}</h2>${other.map(t=>taskRow(t,false)).join("")}</div>` : "";
-  const setupHtml = PROGRESS.active ? `<div class="setupwrap doc">${setupCard()}</div>` : "";
-  stage.innerHTML=setupHtml+qHtml+convoFeed()+`<div class="ndoc">${html}</div>`+otherHtml;
+  // A daemon restart alone can leave PROGRESS.active stuck true long after the
+  // batch is real and running — never let a stale ingest banner cover a board
+  // that already has actual tasks on it.
+  const hasRealTasks=TASKS.some(t=>t.status!=="rejected");
+  const setupHtml = (PROGRESS.active && !hasRealTasks) ? `<div class="setupwrap doc">${setupCard()}</div>` : "";
+  stage.innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`+otherHtml;
   document.querySelectorAll(".irow").forEach(r=>{ r.onclick=()=>{
     const id=r.dataset.id, el=document.getElementById("find-"+id), stage=$("#stage");
     if(!el||!stage) return;
@@ -829,36 +947,12 @@ async function useDemo(btn,qid){
   await answer(qid, EXAMPLES.path);   // replies to the intake with the demo doc's path
 }
 
-// ---------- Conversation feed: the Claude<->user dialogue on the board.
-// Sources: /api/say lines (kind "say.manager" / "say.you" in the event log)
-// plus every inbox question with its answer — merged chronologically.
-let EVENTS=[], QALL=[];
-function convoItems(){
-  const ev=EVENTS.filter(e=>(e.kind||"").startsWith("say."))
-    .map(e=>({t:e.created_at,who:e.kind.slice(4)==="you"?"you":"mgr",text:e.message}));
-  // Only ANSWERED questions belong in the history — pending ones are already
-  // live cards above; echoing them here just duplicated every open question.
-  const qa=[];
-  for(const q of QALL){
-    if(!q.answer) continue;
-    qa.push({t:q.created_at,who:"mgr",text:"❓ "+(q.question||"")});
-    qa.push({t:q.answered_at||q.created_at,who:"you",text:q.answer});
-  }
-  return ev.concat(qa).sort((a,b)=>a.t-b.t).slice(-16);
-}
-function convoSig(){ const it=convoItems(); return it.length+":"+(it.length?it[it.length-1].t:0); }
-function convoFeed(){
-  const it=convoItems(); if(!it.length) return "";
-  const rows=it.map(m=>`<div class="cvrow ${m.who}"><span class="cvwho">${m.who==="you"?"You":"Claude"}</span><span class="cvtxt">${esc(m.text)}</span></div>`).join("");
-  return `<details class="convo" open><summary>💬 Conversation</summary><div class="cvbody">${rows}</div></details>`;
-}
-
 // ---------- Plain mode: no doc-map and no PDF (typed-list source, or a file
 // the ingest couldn't parse). The board still shows everything that matters:
 // the live setup feed, pending questions, and every task grouped by state.
 function renderPlain(){
   const live=TASKS.filter(t=>t.status!=="rejected");
-  const sig=JSON.stringify(["plain",progSig(),convoSig(),!!EXAMPLES,PAUSED,CAP,COOLDOWN>0,
+  const sig=JSON.stringify(["plain",progSig(),!!EXAMPLES,PAUSED,CAP,COOLDOWN>0,HASWEB,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]),[...REWORK_OPEN],[...TESTPLAN_OPEN],
     TESTSRV&&[TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error],
     live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
@@ -875,7 +969,7 @@ function renderPlain(){
   const cnt={}; live.forEach(t=>{const l=taskState(t).l; cnt[l]=(cnt[l]||0)+1;});
   const order=["PR ready","in progress","testing","needs you","blocked","failed","queued","draft"];
   const colv={"PR ready":"--ready","in progress":"--prog","testing":"--test","needs you":"--wait","blocked":"--block","failed":"--fail","queued":"--queued","draft":"--queued"};
-  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
+  $("#cov").innerHTML=order.filter(l=>cnt[l]).map(l=>{const c=cssv(colv[l]);return `<span class="pillc" onclick="cycleCov('${l}')" title="click to step through each ${esc(l)} item" style="color:${c};background:${c}22">${cnt[l]} ${l}</span>`;}).join("");
   $("#index").innerHTML=`<div class="ihead">tasks · ${live.length}</div>`+live.map(t=>{const c=cssv(taskState(t).v);
     return `<div class="irow" data-t="${t.id}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(t.title)}">${esc(t.title)}</span></div>`;}).join("");
   const buckets=[["In progress",x=>x.status==="running"||x.status==="parked"],
@@ -887,12 +981,15 @@ function renderPlain(){
                  ["Drafts",x=>x.status==="draft"]];
   let html="";
   for(const [label,f] of buckets){ const ts=live.filter(f); if(!ts.length) continue;
-    html+=`<h2 class="ntest">${esc(label)} · ${ts.length}</h2>`+ts.map(t=>`<div id="task-${t.id}">${taskRow(t,false)}</div>`).join("");
+    html+=`<h2 class="ntest">${esc(label)} · ${ts.length}</h2>`+ts.map(t=>
+      `<div id="task-${t.id}" data-covlabel="${esc(taskState(t).l)}">${taskRow(t,false)}</div>`).join("");
   }
   if(!html) html=`<p class="ntext" style="color:var(--dim)">No tasks yet — they'll appear here as Claude finishes triage.</p>`;
-  const setupHtml=(PROGRESS.steps||[]).length?`<div class="setupwrap doc">${setupCard()}</div>`:"";
+  // Same rule as the doc view: a stale/stuck progress banner never covers a
+  // board that already has real tasks on it.
+  const setupHtml=((PROGRESS.steps||[]).length && !live.length)?`<div class="setupwrap doc">${setupCard()}</div>`:"";
   const qHtml=QUESTIONS.length?`<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>`:"";
-  $("#stage").innerHTML=setupHtml+qHtml+convoFeed()+`<div class="ndoc">${html}</div>`;
+  $("#stage").innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`;
   document.querySelectorAll("#index .irow").forEach(r=>{ r.onclick=()=>{ const el=document.getElementById("task-"+r.dataset.t);
     if(el) $("#stage").scrollTo({top:Math.max(0,el.offsetTop-14),behavior:"smooth"});
     document.querySelectorAll(".irow.on").forEach(x=>x.classList.remove("on")); r.classList.add("on"); }; });
@@ -906,13 +1003,12 @@ async function refresh(){
   TASKS=s.tasks||[];
   TESTSRV=s.test_server||null;
   QUESTIONS=s.pending_questions||[];
-  EVENTS=s.events||[];
-  QALL=s.questions||[];
   PAUSED=!!s.paused; MANAGER_SESSION=s.manager_session||null;
   if(s.repo) REPO=s.repo;
   if(s.skill_dir) SKILLDIR=s.skill_dir;
   if(s.base_branch) BASEBR=s.base_branch;
   PUSHMODE=s.push_mode||"pr";
+  HASWEB=s.has_web_ui;
   CAP=s.cap||1; COOLDOWN=s.cooldown_left||0;
   PROGRESS=s.progress||{steps:[],active:false,done:false};
   renderControls(s);
