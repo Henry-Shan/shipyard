@@ -20,6 +20,12 @@ This package contains three Claude Code skills that work together:
 > branches, and open PRs in the configured repo. Every run stops at PR-ready
 > and **never merges** — merging is always the human's action. The user should
 > read `dispatch.sh` before first use.
+>
+> **Never run `git config` (global or local) to set an identity or anything
+> else — not even a plausible-looking guess — and never link a repo to GitHub
+> (`gh repo create`, adding a remote, pushing) without asking first whether
+> the user wants that at all.** If a git operation needs something that isn't
+> configured, stop and give the user the exact command to run themselves.
 
 ## Step 1 — Install OR update (this step is idempotent)
 

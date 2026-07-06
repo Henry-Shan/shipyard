@@ -141,12 +141,36 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
    **AskUserQuestion**, so the user just clicks:
    - **Use this repo: `<pwd>` (recommended)** — only offered when pwd IS a git repo.
    - **A different repo** — then ask for the absolute path.
-   - **Create a new repo for me** — confirm a path, then `git init -b main`,
-     make an initial commit, and offer `gh repo create --private --source . --push`
-     (ship-task opens PRs with `gh`; without a GitHub remote, use
-     `push_mode: "local"` instead). If the user wants PR mode but `gh` is
-     missing, install it with one click — no sudo:
-     `bash "$SKILL_DIR/install-gh.sh"`, then have them run `! gh auth login`.
+   - **Create a new repo for me** — see the sub-flow below. **Never** start it
+     (never run `git init`, never touch GitHub) before that sub-flow's own
+     first question is answered.
+
+   **"Create a new repo for me" sub-flow — GitHub question FIRST, before any
+   git command runs:**
+   1. Confirm a path.
+   2. Ask, before touching git at all: *"Should this repo be linked to GitHub
+      (needed for PR mode — ship-task pushes branches and opens PRs there), or
+      fully local (local mode — nothing ever leaves this machine, no GitHub
+      account touched)?"* Options: **GitHub-linked (PR mode)** ·
+      **Fully local (local mode)**.
+   3. `git init -b main`. Before committing anything, check identity is
+      already configured — `git config user.name` and `git config user.email`
+      (plain, no `--global`/`--local` flag, so it reads whatever's already
+      effective). **If either is empty, STOP — do not commit, and above all
+      do NOT run `git config` yourself to set one, not even a guess.** Tell
+      the user exactly:
+      `git isn't configured with an identity yet — run this yourself, then
+      say "continue": git config --global user.name "Your Name" && git config
+      --global user.email "you@example.com"` — then wait. This is the same
+      "never touch git config" rule that applies to you everywhere else; it
+      applies here too, with no exception for a fresh repo.
+   4. Make the initial commit.
+   5. **GitHub-linked** → `gh repo create --private --source . --push`
+      (install `gh` first if needed: `bash "$SKILL_DIR/install-gh.sh"`, no
+      sudo, then have them run `! gh auth login`); set config
+      `push_mode: "pr"`.
+      **Fully local** → stop here. Do NOT run any `gh`/git-remote command; set
+      config `push_mode: "local"`.
 2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
    (`package.json` scripts, `Makefile`, CI workflows) — keep the
    `config.example.json` defaults when unsure. Save everything through the
@@ -556,3 +580,10 @@ screenshot (`POST /api/tasks/<id>/update {"after_evidence":["<path>"]}`).
   couldn't do — put it in `blocked` with a reason.
 - Never dedup against any branch other than the configured base branch
   (`origin/<base_branch>` is the truth for "already shipped").
+- **Never run `git config` (global or local, in this repo or any project
+  repo) to set an identity, or anything else — not even a plausible-looking
+  guess.** If a commit needs an identity that isn't configured, STOP and give
+  the user the exact command to run themselves; never run it for them.
+- Never run `gh repo create` / add a GitHub remote / push anywhere without
+  first asking the user whether they want GitHub involved at all — a "create
+  a new repo" flow defaults to nothing being linked until they say so.
