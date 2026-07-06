@@ -1,8 +1,23 @@
 # Install the manager skill package
 
 You are an AI coding agent installing this package for a user. Work through the
-steps in order. Do not skip the prerequisite report or the config interview.
-Report everything that's missing — never fail silently.
+steps in order. Report everything that's missing — never fail silently.
+
+**Scope: this installs the skills onto this machine, nothing more.** Do NOT
+ask about a target repo, base branch, dev/build/test commands, or anything
+else project-specific — none of that belongs here. The user picks a project
+later, in a separate Claude Code session, by running `/manager` inside it;
+that first run interviews them for exactly that project's settings. Keep this
+install fast, clean, and generic.
+
+Report progress as a running checklist as you go — mark each item done the
+moment it finishes, don't wait until the end to report everything at once:
+
+```
+[1/3] Installing skills…       ✓
+[2/3] Checking prerequisites…  ✓ (or: ⚠ 1 issue — see below)
+[3/3] Running smoke tests…     ✓
+```
 
 This package contains three Claude Code skills that work together:
 
@@ -62,8 +77,8 @@ Handle these cases:
   old install**: name-collision with something else the user has — ask before
   touching it.
 - **Update run** (clone already existed): after pulling, skip straight to
-  Step 4's smoke checks, re-run `skill_config.py check`, tell the user what
-  changed and whether any NEW skills were linked, and stop — no interview needed.
+  Step 3's smoke checks, tell the user what changed and whether any NEW
+  skills were linked, and stop.
 
 (If `git` is unavailable, fall back to the tarball:
 `curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
@@ -109,8 +124,9 @@ do the work:
    Offer these options:
    - **Install gh now — no sudo needed (Recommended)** → run the script, then
      hand the user the one manual step (below).
-   - **Use local mode instead** → skip gh entirely; set `push_mode: "local"`
-     in Step 3 (they can switch later — the same script works any time).
+   - **Use local mode instead** → skip gh entirely; they can set
+     `push_mode: "local"` during the first `/manager` run in their project
+     (and switch any time after from the panel's PR/Local button).
    - **I'll install it myself** → give the fix-later commands and continue in
      local mode so nothing is half-working meanwhile.
 3. **The login is the ONE interactive step** — `gh auth login` prompts can't be
@@ -127,80 +143,7 @@ do the work:
    (`command -v python3.12 python3.11 python3.10 python3.9`; on macOS also
    `/usr/bin/python3`) before proposing an install.
 
-## Step 3 — Interview the user, then write `config.json`
-
-Ask the user for these values (offer the defaults shown). Look at their target
-repo first so your suggested answers are informed (e.g. read `package.json` /
-`Makefile` / CI workflows to propose setup/dev/verify commands):
-
-1. **Target repo path** (required) — absolute path to the git checkout the
-   manager will work on.
-2. **Base branch** (default `main`) — the integration branch: dedup truth,
-   worktree base, and PR target. Check `git -C <repo> remote show origin` for
-   the default branch.
-3. **Setup command** (default `npm install`) — run once in each fresh worktree.
-4. **Does this project have a web frontend you can open in a browser?** This
-   decides whether the panel ever offers a "Test this branch"/"Open app"
-   button — get it right once here rather than a broken button showing up
-   later. Look at `package.json`/README to propose an informed default before
-   asking (a `dev`/`start` script that boots a UI vs. one that's clearly an
-   API/CLI/worker with nothing to browse to).
-   - **Yes** → ask **Dev command** (default `npm run dev`) and **Dev port**
-     (default `3000`) — the command + port that serve the browsable app.
-     Set config `has_web_ui: true`.
-   - **No** (API/library/CLI/backend-only) → skip dev command/port entirely;
-     set config `has_web_ui: false`. The panel will show a plain-language
-     before/after of each fix instead of a live-app button.
-5. **Verify command** (default `npm run lint && npm test`) — the quality gate
-   every ship-task run must pass before committing.
-6. **Env files** (default none) — repo-relative gitignored files (e.g. `.env`,
-   `apps/web/.env.local`) to symlink into each worktree.
-7. **Push mode** (default `pr`) — where finished work lands: `pr` pushes each
-   branch and opens a GitHub PR (needs `gh`); `local` stops at a committed
-   local branch — no push, no PR, no `gh`, nothing leaves the machine. If the
-   user has no GitHub remote or declined installing `gh`, recommend `local`
-   (they can toggle any time from the panel's PR/Local button).
-8. **Optional**: extra risk keywords (project terms that must force extra rigor,
-   e.g. a tenancy column name), and a memory MCP server name if they have one.
-
-Then write the answers to `~/.claude/skills/manager/config.json` using
-`~/.claude/skills/manager/config.example.json` as the template, and validate:
-
-```bash
-python3 ~/.claude/skills/manager/skill_config.py check   # must print "config OK"
-python3 ~/.claude/skills/manager/skill_config.py show    # echo the resolved config to the user
-```
-
-Also suggest customizing `~/.claude/skills/ship-task/BUILDER_PLAYBOOK.md` — it's
-a template for the target repo's architecture + footguns, and a filled-in
-playbook markedly improves the implement agent. Offer to draft it now by reading
-the target repo.
-
-Finally, add the run artifacts to the **target repo's** `.gitignore` (ship-task
-commits with `git add -A` inside the worktree, so unignored artifacts would ride
-into PRs):
-
-```
-.ship-task/
-.feature-test-result.json
-```
-
-**If the user has no target repo on this machine yet** (or wants to decide
-later): do NOT write a config.json with guessed values. Finish the install
-without it and include in your final report exactly how to complete setup later:
-
-```
-cp ~/.claude/skills/manager/config.example.json ~/.claude/skills/manager/config.json
-# edit "repo" + the commands, then:
-python3 ~/.claude/skills/manager/skill_config.py check
-```
-
-Everything else (skills, selftests) is already done. Without a repo the daemon
-boots into a **setup screen** (paste a repo path there, or answer Claude's
-setup question on the first `/manager` run) — and nothing can dispatch until a
-valid repo is saved, so a half-configured install can't run by accident.
-
-## Step 4 — Smoke-check (no real dispatch)
+## Step 3 — Smoke-check (no real dispatch)
 
 ```bash
 cd ~/.claude/skills/manager
@@ -213,18 +156,21 @@ bash ../ship-task/verify.sh --selftest          # verify harness (expects 1 PASS
 All four must succeed (verify.sh's selftest intentionally shows one simulated
 FAIL and exits 1 — that IS the pass condition for the harness).
 
-## Step 5 — Print "how to use"
+## Step 4 — Print "how to use"
 
 Tell the user:
 
 ```
-Installed. To use it:
+Installed. Nothing project-specific was asked or configured — that happens
+next, automatically, the first time you run /manager inside a real project.
+
+To use it:
 
   1. Open Claude Code in your target repo:   cd <repo> && claude
-  2. Run the manager on a work source:
-       /manager <notion page url>          # needs your Notion connector
-       /manager ~/Desktop/qa-findings.pdf  # PDF of findings (poppler for the board view)
-       /manager "fix X; add Y; investigate Z"
+  2. Run:   /manager
+     First run in a new repo, it asks a few quick setup questions right there
+     (repo path, base branch, whether there's a web frontend to test, PR vs.
+     local mode) — then every run after that just works.
   3. A control panel opens at http://127.0.0.1:<panel_port> — watch runs,
      answer the few questions that need you, and merge the finished PRs
      from GitHub. Runs always stop at PR-ready; nothing merges itself.
