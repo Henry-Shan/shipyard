@@ -33,6 +33,8 @@ Parked runs appear in the inbox; answer them there.
 | File | Role |
 |------|------|
 | `SKILL.md` | the agent's reasoning: ingest → ground → dedup → consolidate → triage → enqueue → dispatch → relay |
+| `panel-up.sh` | ALL of Phase 0 as one command: init → restart-first daemon → wait → open tab → start the live feed → print PANEL_URL/CONFIG_OK/REPO/… (~0.6s) |
+| `install-gh.sh` | no-sudo GitHub CLI install (official release binary → `~/.local/bin`) for PR mode |
 | `skill_config.py` | loads `config.json` (the one source of project truth) + env overrides |
 | `manager_core.py` | SQLite queue + suggestions inbox + relay state (the source of truth) |
 | `managerd.py` | HTTP daemon: serves the panel, the JSON API, the dispatcher loop, and the relay |

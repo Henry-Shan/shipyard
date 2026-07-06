@@ -153,7 +153,8 @@ suggestions inbox, and a PR-ready card with its manual-test guide)_
 ## Requirements
 
 - macOS or Linux, `python3` ≥ 3.9 (stdlib only, no pip installs — **macOS's
-  built-in Python is enough**), `git`, [`gh`](https://cli.github.com)
-  (authenticated), the `claude` CLI.
+  built-in Python is enough**), `git`, the `claude` CLI, and — for PR mode
+  only — [`gh`](https://cli.github.com) (the installer sets it up **without
+  sudo or Homebrew** if missing; or use local mode and skip it).
 - Optional: poppler (`pdftoppm`) for PDF ingest; a Notion connector in Claude
   Code for Notion ingest; a memory MCP server if you set `memory_mcp`.

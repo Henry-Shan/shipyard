@@ -86,22 +86,40 @@ pdftoppm -v             # poppler — OPTIONAL: only needed for PDF ingest / the
 | `claude` CLI | dispatching headless runs | install Claude Code |
 | poppler (`pdftoppm`) | **optional** — PDF ingest + panel PDF view | `brew install poppler` / `apt install poppler-utils` |
 
-**Fix flow** (after presenting the report):
+**Fix flow** (after presenting the report). Never dump manual instructions and
+stop — always end with ONE clickable question (AskUserQuestion) whose options
+do the work:
 
-1. Detect the package manager (`brew` on macOS, `apt`/`dnf` on Linux). Assemble
-   ONE fix plan for everything missing, show it to the user, and ask once —
-   e.g. "Missing: gh. Fix with `brew install gh`, then log you in? [yes/no]".
-   On yes, run the installs and re-run the checks; show the updated table.
-2. **`gh auth login` is interactive** — you can't answer its prompts. Ask the
-   user to run it themselves (in Claude Code they can type `! gh auth login` to
-   run it in-session), then verify with `gh auth status` before moving on.
-3. **Python:** 3.9+ is enough, so this is rarely a problem. If `python3` really
+1. **With a package manager** (`brew` on macOS, `apt`/`dnf` on Linux): assemble
+   one fix plan for everything missing and offer it as the recommended option —
+   e.g. "Install gh with brew and log you in? (Recommended)". On yes, run the
+   installs and re-run the checks; show the updated table.
+2. **Without a package manager — gh still installs with one click, no sudo.**
+   The repo ships a deterministic installer that downloads the official gh
+   release binary into `~/.local/bin` and wires PATH:
+   ```bash
+   bash ~/.claude/skills/manager/install-gh.sh    # no sudo, no brew; idempotent
+   ```
+   Offer these options:
+   - **Install gh now — no sudo needed (Recommended)** → run the script, then
+     hand the user the one manual step (below).
+   - **Use local mode instead** → skip gh entirely; set `push_mode: "local"`
+     in Step 3 (they can switch later — the same script works any time).
+   - **I'll install it myself** → give the fix-later commands and continue in
+     local mode so nothing is half-working meanwhile.
+3. **The login is the ONE interactive step** — `gh auth login` prompts can't be
+   answered by you. Right after the install, tell the user exactly:
+   > Type `! gh auth login` here (runs it in this session) — pick GitHub.com →
+   > HTTPS → Login with a web browser. Takes ~30 seconds.
+   Then verify with `gh auth status` before moving on. If a new PATH entry was
+   added, prefix your own checks with `export PATH="$HOME/.local/bin:$PATH"`.
+4. **poppler is optional and library-heavy** — there's no clean no-sudo path,
+   so without a package manager just note "PDF ingest / the panel's PDF view
+   won't be available" and move on. Never block the install on it.
+5. **Python:** 3.9+ is enough, so this is rarely a problem. If `python3` really
    is older, first look for an already-installed newer one
    (`command -v python3.12 python3.11 python3.10 python3.9`; on macOS also
    `/usr/bin/python3`) before proposing an install.
-4. No package manager, or the user declines → print the manual install
-   commands per item and stop there, saying plainly which features won't work
-   until they're installed. Never continue silently into a half-working setup.
 
 ## Step 3 — Interview the user, then write `config.json`
 

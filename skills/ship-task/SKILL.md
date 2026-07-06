@@ -49,7 +49,10 @@ below: the worktree base, the dedup truth, and the PR target.
 
 `$MODE` (config `push_mode`) picks the finish line — resolve it once at start
 and announce it with your routing decision:
-- **`pr`** (default): commit → push → open a PR to `$BASE` → hand off. Needs `gh`.
+- **`pr`** (default): commit → push → open a PR to `$BASE` → hand off. Needs
+  `gh` — if it's missing, `bash "$SKILL_DIR/../manager/install-gh.sh"` installs
+  it without sudo (official release binary into `~/.local/bin`); the user then
+  runs `gh auth login` once.
 - **`local`**: commit on the local feature branch and STOP. **No push, no PR, no
   `gh`, no network** — the user reviews and merges locally. Everything before
   the finish line (worktree, tests, verify gate, feature-tester) is identical.
