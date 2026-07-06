@@ -145,14 +145,27 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
      (never run `git init`, never touch GitHub) before that sub-flow's own
      first question is answered.
 
-   **"Create a new repo for me" sub-flow — GitHub question FIRST, before any
-   git command runs:**
+   **"Create a new repo for me" sub-flow — read the gh decision, never re-ask
+   it:**
    1. Confirm a path.
-   2. Ask, before touching git at all: *"Should this repo be linked to GitHub
-      (needed for PR mode — ship-task pushes branches and opens PRs there), or
-      fully local (local mode — nothing ever leaves this machine, no GitHub
-      account touched)?"* Options: **GitHub-linked (PR mode)** ·
-      **Fully local (local mode)**.
+   2. **Never ask the GitHub-linked-vs-local question here — that decision was
+      already made once, at install time.** Read it before touching git at all:
+      ```bash
+      python3 "$SKILL_DIR/skill_config.py" get gh_available
+      ```
+      - `True` → this machine has a working `gh` — proceed **GitHub-linked**
+        below, silently.
+      - `False` → install.md already recorded there's no `gh` (or the user
+        chose local) — proceed **Fully local** below, silently. Do not
+        mention gh, do not offer to install it, do not display any
+        GitHub-related question here.
+      - empty/unset (only happens if the skill was copied by hand without
+        running `install.md`) → this is the one fallback case where you ask:
+        *"Should this repo be linked to GitHub (PR mode), or fully local
+        (nothing ever leaves this machine)?"* Options: **GitHub-linked (PR
+        mode)** · **Fully local (local mode)**. Also persist the answer via
+        `curl -s -X POST "$MURL/api/config" -d '{"gh_available":true|false}'`
+        so it's never asked again on this machine.
    3. `git init -b main`. Before committing anything, check identity is
       already configured — `git config user.name` and `git config user.email`
       (plain, no `--global`/`--local` flag, so it reads whatever's already
@@ -165,10 +178,11 @@ P '{"label":"Waiting for you to choose a target repo","detail":"answer the quest
       "never touch git config" rule that applies to you everywhere else; it
       applies here too, with no exception for a fresh repo.
    4. Make the initial commit.
-   5. **GitHub-linked** → `gh repo create --private --source . --push`
-      (install `gh` first if needed: `bash "$SKILL_DIR/install-gh.sh"`, no
-      sudo, then have them run `! gh auth login`); set config
-      `push_mode: "pr"`.
+   5. **GitHub-linked** → `gh repo create --private --source . --push`; set
+      config `push_mode: "pr"`. (If this is the rare fallback path and `gh`
+      turns out not to be installed after all, install it now with
+      `bash "$SKILL_DIR/install-gh.sh"`, no sudo, then have them run
+      `! gh auth login` before retrying.)
       **Fully local** → stop here. Do NOT run any `gh`/git-remote command; set
       config `push_mode: "local"`.
 2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
@@ -581,5 +595,8 @@ screenshot (`POST /api/tasks/<id>/update {"after_evidence":["<path>"]}`).
   guess.** If a commit needs an identity that isn't configured, STOP and give
   the user the exact command to run themselves; never run it for them.
 - Never run `gh repo create` / add a GitHub remote / push anywhere without
-  first asking the user whether they want GitHub involved at all — a "create
-  a new repo" flow defaults to nothing being linked until they say so.
+  the GitHub-linkage decision already settled — that decision is made ONCE,
+  by install.md, and persisted as config `gh_available`. Read it (Step 2's
+  sub-flow) and act on it silently; only ask the user directly in the rare
+  case it's still unset (skill installed by hand, without install.md).
+  Never re-ask this question on a machine where it's already been answered.

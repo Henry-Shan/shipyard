@@ -93,7 +93,9 @@ committed template):
   "env_files": [],
   "risk_keywords_extra": [],
   "push_mode": "pr",
-  "memory_mcp": null
+  "has_web_ui": null,
+  "memory_mcp": null,
+  "gh_available": null
 }
 ```
 
@@ -102,6 +104,12 @@ opens a GitHub PR (needs `gh`); **`local`** stops at a committed local branch �
 no push, no PR, no `gh`, nothing leaves your machine, and you merge locally.
 Toggle it live from the panel's **⇧ PR mode / 💻 Local mode** button (applies to
 the next dispatched run).
+
+`gh_available` is decided once, by the installer's prerequisite check — it
+records whether `gh` works on this machine so that a later "create a new repo
+for me" flow never has to ask about GitHub linkage again; it just acts on
+this. `null` only happens if the skill was installed by hand instead of via
+`install.md`.
 
 Env vars (`MANAGER_REPO`, `MANAGER_PORT`, `MANAGER_CAP`, `MANAGER_BASE_BRANCH`,
 …) override the file. Optionally fill in

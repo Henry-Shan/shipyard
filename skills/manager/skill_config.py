@@ -72,6 +72,12 @@ DEFAULTS = {
     # Optional memory MCP server name (e.g. "my-project-memory"). null = ground
     # via git history + repo docs instead.
     "memory_mcp": None,
+    # Was `gh` (the GitHub CLI) confirmed working at install time? Decided ONCE,
+    # during install.md's prerequisite check — never re-asked by /manager or
+    # /ship-task. null = install.md hasn't run its gh check yet (rare: skill
+    # copied by hand). true/false lets a fresh "create a new repo for me" flow
+    # skip the GitHub-linked-vs-local question entirely and just act on it.
+    "gh_available": None,
 }
 
 # Env overrides — same names the scripts have always honored.

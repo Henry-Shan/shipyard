@@ -942,6 +942,7 @@ class Handler(BaseHTTPRequestHandler):
             # without a restart, and each dispatch reads it fresh anyway.
             st["push_mode"] = skill_config.get("push_mode")
             st["has_web_ui"] = skill_config.get("has_web_ui")   # null=not yet asked, true/false=decided
+            st["gh_available"] = skill_config.get("gh_available")  # decided once at install time
             st["base_branch"] = BASE_BRANCH
             st["skill_dir"] = HERE           # for panel-shown shell snippets (e.g. PDF copy)
             st["manual_pause"] = os.path.exists(PAUSE_FILE)
@@ -1154,7 +1155,8 @@ class Handler(BaseHTTPRequestHandler):
             allowed = {"repo", "base_branch", "setup_command", "dev_command",
                        "dev_port", "verify_command", "panel_port", "dispatch_cap",
                        "env_files", "risk_keywords_extra", "memory_mcp",
-                       "worktree_dir", "archive_dir", "push_mode", "has_web_ui"}
+                       "worktree_dir", "archive_dir", "push_mode", "has_web_ui",
+                       "gh_available"}
             updates = {k: v for k, v in body.items() if k in allowed}
             if not updates:
                 return self._send(400, {"ok": False, "error": "no recognized config keys"})
@@ -1176,7 +1178,7 @@ class Handler(BaseHTTPRequestHandler):
             # push_mode is read live (state endpoint + each dispatch), so a
             # mode toggle needs no restart — mid-batch toggles must not bounce
             # the daemon. Everything else is import-time config: re-exec.
-            needs_restart = bool(set(updates) - {"push_mode", "has_web_ui"})
+            needs_restart = bool(set(updates) - {"push_mode", "has_web_ui", "gh_available"})
             if needs_restart:
                 threading.Timer(0.6, _reexec).start()  # respond first, then restart
             return self._send(200, {"ok": True, "restarting": needs_restart})

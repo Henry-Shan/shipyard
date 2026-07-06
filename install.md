@@ -124,11 +124,13 @@ do the work:
    Offer these options:
    - **Install gh now — no sudo needed (Recommended)** → run the script, then
      hand the user the one manual step (below).
-   - **Use local mode instead** → skip gh entirely; they can set
-     `push_mode: "local"` during the first `/manager` run in their project
-     (and switch any time after from the panel's PR/Local button).
-   - **I'll install it myself** → give the fix-later commands and continue in
-     local mode so nothing is half-working meanwhile.
+   - **Use local mode instead** → skip gh entirely, permanently for now (see
+     the persistence note below) — nothing pushes anywhere, no GitHub account
+     is ever touched.
+   - **I'll install it myself** → treat it the same as "use local mode" for
+     now (see below) so nothing is half-working meanwhile; the user can come
+     back and re-run this install line later once `gh auth login` is done, and
+     this check will flip the decision to GitHub-linked automatically.
 3. **The login is the ONE interactive step** — `gh auth login` prompts can't be
    answered by you. Right after the install, tell the user exactly:
    > Type `! gh auth login` here (runs it in this session) — pick GitHub.com →
@@ -142,6 +144,32 @@ do the work:
    is older, first look for an already-installed newer one
    (`command -v python3.12 python3.11 python3.10 python3.9`; on macOS also
    `/usr/bin/python3`) before proposing an install.
+
+**Persist the gh decision — this is the ONLY place it's ever decided.** Once
+`gh auth status` succeeds (whether it was already working or you just fixed
+it), or the user picks local mode / defers it, record the outcome in
+`config.json` right now. Neither `/manager` nor `/ship-task` will ask about
+GitHub linkage again — a later "create a new repo for me" flow just reads this
+and acts on it, silently:
+
+```bash
+python3 - <<'EOF'
+import json, os
+path = os.path.expanduser("~/.claude/skills/manager/config.json")
+try:
+    with open(path) as f: cfg = json.load(f)
+    if not isinstance(cfg, dict): cfg = {}
+except (OSError, ValueError):
+    cfg = {}
+cfg["gh_available"] = GH_OK              # True if `gh auth status` succeeded, else False
+if not GH_OK:
+    cfg["push_mode"] = "local"           # no gh yet -> nothing should try to push/open a PR
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+EOF
+```
+
+(Substitute the real boolean for `GH_OK` — don't leave the literal in place.)
 
 ## Step 3 — Smoke-check (no real dispatch)
 

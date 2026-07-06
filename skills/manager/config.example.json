@@ -13,5 +13,6 @@
   "risk_keywords_extra": [],
   "push_mode": "pr",
   "has_web_ui": null,
-  "memory_mcp": null
+  "memory_mcp": null,
+  "gh_available": null
 }
