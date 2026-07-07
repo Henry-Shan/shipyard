@@ -129,64 +129,56 @@ Otherwise → Phase 1 directly.
 
 ### Step 2 — first-run setup (only when `skill_config.py check` fails)
 
-Set it up conversationally — never error out, never guess a repo. The panel is
-already up in setup mode; keep it informed while you ask:
+**Panel only — never a blocking `AskUserQuestion` here.** The panel's setup
+screen (already showing, from Step 1) has its own repo field wired straight
+into `/api/config`. If you instead fire a chat `AskUserQuestion` and the user
+answers via that panel field, you have no way to find out — the tool call
+just sits there waiting for a chat click that's never coming, and the run
+looks stuck ("No tasks yet" forever, because Phase 1 never got reached). Poll
+for the outcome instead, exactly like Step 3 does for the work source.
 
 ```bash
-P '{"label":"Waiting for you to choose a target repo","detail":"answer the question in the Claude chat — or paste a repo path right here on the panel"}'
+P '{"label":"Waiting for you to choose a target repo","detail":"paste a path on the panel, or just tell me one in chat"}'
 ```
 
 1. Check whether the current directory is a git repo
-   (`git rev-parse --git-dir 2>/dev/null`), and read the gh decision that
-   install.md already made — **before** building the question, so it can be
-   shown right there instead of hidden behind another click:
-   ```bash
-   python3 "$SKILL_DIR/skill_config.py" get gh_available
-   ```
-   Then ask ONE question with **AskUserQuestion**, so the user just clicks —
-   the "create a new repo" option's own label already states the mode that
-   was decided at install, nothing further to choose:
-   - **Use this repo: `<pwd>` (recommended)** — only offered when pwd IS a git repo.
-   - **A different repo** — then ask for the absolute path.
-   - **Create a new repo for me** — label it from `gh_available`:
-     - `True` → **"Create a new repo for me — pushes to GitHub (PR mode, as
-       set up at install)"**.
-     - `False` → **"Create a new repo for me — local only, no GitHub (as set
-       up at install)"**.
-     - empty/unset (only if the skill was copied by hand without ever running
-       `install.md`) → plain **"Create a new repo for me"** — the one
-       fallback case where the sub-flow below still asks GitHub-vs-local
-       inline, once, and persists the answer so it's never asked again.
-
-     Whichever label is shown, **never** start the sub-flow (never run
-     `git init`, never touch GitHub) before this question itself is answered.
-
-   **"Create a new repo for me" sub-flow — one call does all of it, the same
-   logic the panel's own repo field uses when someone pastes a path there
-   directly:**
-   1. Confirm a path.
-   2. Only in the empty/unset `gh_available` fallback case, ask *"Should this
-      repo be linked to GitHub (PR mode), or fully local (nothing ever leaves
-      this machine)?"* Options: **GitHub-linked (PR mode)** · **Fully local
-      (local mode)**, and persist it —
-      `curl -s -X POST "$MURL/api/config" -d '{"gh_available":true|false}'` —
-      so it's never asked again. Otherwise (the normal case) skip straight to
-      step 3, silently, per the label already shown.
-   3. Just save the path — the daemon does the rest:
-      ```bash
-      curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' -d '{"repo":"<abs path>"}'
-      ```
-      When the directory isn't a git checkout yet, the daemon itself creates
-      it: `git init`, checks identity is configured (**never guesses one —
-      this should already be true from install.md's prerequisite check; if
-      it's somehow still missing, the call fails with the exact command for
-      the user to run themselves — relay that verbatim and wait, then retry**),
-      makes the initial commit, and — only if `gh_available` is `true` —
-      `gh repo create --private --source . --push`. It responds `{"ok":false,
-      "error":"..."}` on any real problem (relay `error` to the user verbatim)
-      or `{"ok":true}` once the repo exists and `push_mode` is set correctly.
-      Never run `git init`/`git commit`/`gh repo create` yourself here — this
-      one call replaces all of that.
+   (`git rev-parse --git-dir 2>/dev/null`).
+   - **Already a git repo → just use it, no question needed:**
+     ```bash
+     curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' -d '{"repo":"<pwd>"}'
+     ```
+     Skip straight to item 2 below.
+   - **Not a git repo → say ONE short sentence in chat**, then wait: *"This
+     folder isn't a git repo yet — paste an existing repo's path on the
+     panel, or tell me a path (here included) and I'll set one up there."*
+     Then poll for either channel to resolve it — do not block on a chat
+     tool call:
+     ```bash
+     for i in $(seq 1 120); do   # ~10 min ceiling; re-check every 5s, never stall silently
+       ok="$(curl -s -m 2 "$MURL/api/state" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("repo_ok"))' 2>/dev/null)"
+       [ "$ok" = "True" ] && break
+       sleep 5
+     done
+     ```
+     If the user instead answers in the chat (a path, "here", "this
+     directory") while you're polling, that's a normal message — act on it
+     immediately rather than waiting out the loop, with the SAME one call
+     (works for both channels, and for a path that doesn't exist yet):
+     ```bash
+     curl -s -X POST "$MURL/api/config" -H 'Content-Type: application/json' -d '{"repo":"<abs path>"}'
+     ```
+     When the path isn't a git checkout yet, the daemon creates it: `git
+     init`, checks identity is configured (**never guesses one — this should
+     already be true from install.md's prerequisite check; if it's somehow
+     still missing, the call fails with the exact command for the user to
+     run themselves — relay that verbatim and keep waiting, then retry**),
+     makes the initial commit, and — only if config `gh_available` is
+     `true` (the decision install.md already made; never re-decided here) —
+     `gh repo create --private --source . --push`. Responds `{"ok":false,
+     "error":"..."}` on a real problem (relay `error` verbatim) or
+     `{"ok":true}` once the repo exists and `push_mode` is set correctly.
+     Never run `git init`/`git commit`/`gh repo create`/`git config` yourself
+     here — this one call replaces all of that, on either channel.
 2. Propose `setup_command` / `dev_command` / `verify_command` by reading the repo
    (`package.json` scripts, `Makefile`, CI workflows) — keep the
    `config.example.json` defaults when unsure. Save everything through the
@@ -596,9 +588,8 @@ screenshot (`POST /api/tasks/<id>/update {"after_evidence":["<path>"]}`).
   repo) to set an identity, or anything else — not even a plausible-looking
   guess.** If a commit needs an identity that isn't configured, STOP and give
   the user the exact command to run themselves; never run it for them.
-- Never run `gh repo create` / add a GitHub remote / push anywhere without
-  the GitHub-linkage decision already settled — that decision is made ONCE,
-  by install.md, and persisted as config `gh_available`. Read it (Step 2's
-  sub-flow) and act on it silently; only ask the user directly in the rare
-  case it's still unset (skill installed by hand, without install.md).
-  Never re-ask this question on a machine where it's already been answered.
+- Never run `gh repo create` / add a GitHub remote / push anywhere yourself —
+  the GitHub-linkage decision is made ONCE, by install.md, persisted as config
+  `gh_available`, and acted on by the daemon's own repo-creation logic (Step
+  2, via `/api/config`). Never re-decide or re-ask this on a machine where
+  it's already answered.
