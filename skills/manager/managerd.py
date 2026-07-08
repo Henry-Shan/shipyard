@@ -1174,8 +1174,16 @@ class Handler(BaseHTTPRequestHandler):
             stop_test_server()
             return self._send(200, {"ok": True})
         if p == "/api/reset":
+            # Clear All must actually clear the board — not just the tasks table.
+            # The source doc (Notion map / PDF) is a separate file pointer that
+            # renderNotion() keeps rendering from regardless of the task queue,
+            # so leaving it behind after a reset looks exactly like "nothing
+            # got cleared": the full QA doc + all its findings stay on screen.
             n = core.reset_queue()
             progress_clear()
+            for f in (NOTION_MAP_FILE, SOURCE_PDF_FILE):
+                try: os.remove(f)
+                except OSError: pass
             return self._send(200, {"ok": True, "cleared": n})
         if p == "/api/progress":
             # Live /manager ingest feed. {clear:true} resets; else append a step
