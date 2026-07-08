@@ -73,9 +73,14 @@ TASK_COUNT="$(curl -s -m 2 "$URL/api/task-count" 2>/dev/null | python3 -c '
 import json,sys
 try: print(json.load(sys.stdin).get("count",0))
 except Exception: print(0)' 2>/dev/null || echo 0)"
+# Only CLEAR here — never post a placeholder "Started the control panel"
+# step. That step described nothing real ("setting up" when nothing was
+# actually in progress), and now that the daemon itself posts the intake
+# question whenever the board is empty (see managerd.py's ensure_intake_
+# question), the honest state at boot is "waiting for you", not "working" —
+# the stepper should stay empty until a real /manager ingest posts real steps.
 if [ "${TASK_COUNT:-0}" = "0" ]; then
   curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"clear":true}' >/dev/null
-  curl -s -X POST "$URL/api/progress" -H 'Content-Type: application/json' -d '{"label":"Started the control panel"}' >/dev/null
 fi
 
 # Best-effort: register the calling Claude session for the panel (resume info).

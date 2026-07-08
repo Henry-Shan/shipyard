@@ -1119,7 +1119,11 @@ function renderPlain(){
     html+=`<h2 class="ntest">${esc(label)} · ${ts.length}</h2>`+ts.map(t=>
       `<div id="task-${t.id}" data-covlabel="${esc(taskState(t).l)}">${taskRow(t,false)}</div>`).join("");
   }
-  if(!html) html=`<p class="ntext" style="color:var(--dim)">No tasks yet — they'll appear here as Claude finishes triage.</p>`;
+  // Only the genuine "nothing happening at all" case gets this — never
+  // alongside real ingest activity or a pending question, both of which
+  // already explain what's going on far more accurately than this could.
+  if(!html && !PROGRESS.active && !QUESTIONS.length)
+    html=`<p class="ntext" style="color:var(--dim)">Nothing queued yet.</p>`;
   // Same rule as the doc view: a stale/stuck progress banner never covers a
   // board that already has real tasks on it.
   const setupHtml=((PROGRESS.steps||[]).length && !live.length)?`<div class="setupwrap doc">${setupCard()}</div>`:"";
