@@ -554,10 +554,8 @@ function projRow(p, active){
 let BROWSE_PATH=null;
 function projAddFormHtml(){
   return `<div class="projadd">
-    <input id="projPath" placeholder="/absolute/path — existing repo, or a new folder to set one up at"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}"
-      onfocus="if(!BROWSE_PATH) openBrowse();">
-    <button class="tbtn gh" onclick="openBrowse()">📂 Browse</button>
+    <input id="projPath" placeholder="/absolute/path, or click + Add to browse for a folder"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}">
     <button id="projAddBtn" class="tbtn primary" onclick="addProject(this)">+ Add</button>
   </div>
   <div id="browseBox"></div>
@@ -580,9 +578,10 @@ async function browseTo(path){
       <button class="tbtn" onclick="$('#browseBox').innerHTML='';BROWSE_PATH=null;">Cancel</button></div>
   </div>`;
 }
-function useBrowsePath(){
-  $("#projPath").value=BROWSE_PATH||"";
-  $("#browseBox").innerHTML=""; BROWSE_PATH=null;
+async function useBrowsePath(){
+  const path=BROWSE_PATH; if(!path)return;
+  $("#browseBox").innerHTML=`<p class="ntext">Adding…</p>`;
+  await doAddProject(path);
 }
 async function renderHome(){   // what "/" itself renders — the full-page project picker
   let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
@@ -599,12 +598,16 @@ async function renderHome(){   // what "/" itself renders — the full-page proj
   </div></div>`;
 }
 async function addProject(btn){
-  const v=($("#projPath")?.value||"").trim(); if(!v)return;
+  const v=($("#projPath")?.value||"").trim();
+  if(!v){ openBrowse(); return; }   // nothing typed yet -> open the folder picker instead
   btn.disabled=true; btn.textContent="Adding…";
-  let r; try{ r=await apiPost("/api/projects",{path:v}); }catch(e){ r={ok:false,error:String(e)}; }
+  await doAddProject(v);
   btn.disabled=false; btn.textContent="+ Add";
-  if(r&&r.ok){ $("#projPath").value=""; renderHome(); }
-  else{ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
+}
+async function doAddProject(path){
+  let r; try{ r=await apiPost("/api/projects",{path}); }catch(e){ r={ok:false,error:String(e)}; }
+  if(r&&r.ok){ BROWSE_PATH=null; renderHome(); }
+  else{ $("#browseBox").innerHTML=""; $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
 }
 async function toggleProjectMode(slug,btn){
   btn.disabled=true;
