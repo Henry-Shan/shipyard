@@ -112,15 +112,24 @@ INTAKE_QUESTION = "Task docs (Notion URL, PDF, .md) — or just type the tasks"
 
 
 def ensure_intake_question():
-    """Post the standard task-doc intake question if it isn't already
-    pending — used both by the auto-trigger (empty board) and the manual
-    "+ New task doc" action (populated board). Identical text to what
-    /manager's own Step 3 posts, so add_question's dedupe means whichever
-    posts it first "wins" and a real /manager run finds the same row
-    (possibly already answered) instead of duplicating it. Returns True if a
-    question now exists (whether freshly posted or already there)."""
-    pending = core.list_questions(only_pending=True)
-    if any(q["session_id"] == "manager-intake" and q["question"] == INTAKE_QUESTION for q in pending):
+    """Make sure the standard task-doc intake question is actually
+    answerable right now — used both by the auto-trigger (empty board) and
+    the manual "+ New task doc" action (populated board). Identical text to
+    what /manager's own Step 3 posts, so a real /manager run finds the same
+    row (via poll_answer) instead of a genuinely duplicate one.
+
+    A stale 'answered' row (someone answered it here on the panel, but no
+    /manager session ever ran to consume it via poll_answer) must NOT be
+    treated as a permanent block on asking again — that would silently make
+    "add a task doc" stop working forever the moment nobody happens to run
+    /manager right after answering. Reset it back to pending instead, so the
+    SAME row becomes answerable again. A 'delivered' row (already consumed
+    by a past run) is done for good — start a fresh one."""
+    existing = core.find_question("manager-intake", INTAKE_QUESTION)
+    if existing and existing["status"] == "pending":
+        return True
+    if existing and existing["status"] == "answered":
+        core.reset_question(existing["id"])
         return True
     core.add_question("manager-intake", INTAKE_QUESTION, [], "")
     return True

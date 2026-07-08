@@ -356,6 +356,29 @@ def ask_if_fixed(task_id, context=""):
                         context, task_id, kind="verify_fixed")
 
 
+def find_question(session_id, question):
+    """The most recent question row (any status) matching this exact
+    session_id+question text, or None. The caller decides what to do based
+    on its status — e.g. ensure_intake_question resets a stale 'answered'
+    row (nothing ever consumed it) back to pending instead of treating it as
+    a permanent block on ever asking again."""
+    with connect() as c:
+        row = c.execute(
+            "SELECT * FROM questions WHERE session_id=? AND question=? ORDER BY id DESC LIMIT 1",
+            (session_id, question),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def reset_question(question_id):
+    """Clear a stale answered-but-never-delivered question back to pending
+    so it can be answered again — for when nothing ever consumed the
+    previous answer (no /manager session ran) and the human wants to try."""
+    with connect() as c:
+        c.execute("UPDATE questions SET answer=NULL, status='pending', answered_at=NULL WHERE id=?",
+                  (question_id,))
+
+
 def poll_answer(session_id):
     """Called by the dispatched session: returns the oldest answered-but-undelivered
     answer for this session and marks it delivered, or None if nothing is waiting."""
