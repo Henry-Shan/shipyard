@@ -21,9 +21,17 @@ import time
 import uuid
 from contextlib import contextmanager
 
-DB_PATH = os.environ.get(
-    "MANAGER_DB",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "manager.db"),
+import skill_config
+
+# Multi-project: each project gets its own manager.db under projects/<slug>/
+# (see skill_config.py's "Multi-project" note). $MANAGER_DB is an explicit
+# override (isolation for tests, or a single-project-only setup) and always
+# wins; otherwise this follows whichever project is currently active.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_legacy_db = os.path.join(_HERE, "manager.db")
+_ap = skill_config.active_project()
+DB_PATH = os.environ.get("MANAGER_DB") or (
+    skill_config.project_db_path(_ap["slug"]) if _ap else _legacy_db
 )
 
 # Task lifecycle. A task moves queued -> running, may bounce to parked while it
@@ -87,6 +95,9 @@ CREATE TABLE IF NOT EXISTS events (
 
 @contextmanager
 def connect():
+    _dir = os.path.dirname(DB_PATH)
+    if _dir:
+        os.makedirs(_dir, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

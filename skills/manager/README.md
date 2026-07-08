@@ -54,6 +54,20 @@ commands, extra risk keywords, optional memory MCP. Env vars still override:
 see the security note in the repo README) and `MANAGER_MODEL` (optional model
 override for dispatched runs).
 
+## Multiple projects
+
+One daemon, one port, any number of projects — click **📁 Projects** in the
+panel header to see all of them and switch, or add a new one (an existing
+repo, or a plain folder to create one at). This is purely a panel/daemon
+action; no `/manager` session is needed to add or switch projects, only to
+actually run a batch inside one. Each project gets its own state under
+`projects/<slug>/` (`config.json` + `manager.db`); `gh_available` and
+`panel_port` stay in the top-level `config.json` since those are machine-level
+facts, not per-project ones. `projects.json` is the registry. An existing
+single-project install migrates automatically the first time the daemon boots
+with this version — the original `config.json`/`manager.db` are copied, never
+moved, so nothing is lost even if the migration is somehow re-run.
+
 ## API (for the agent / scripts)
 
 - `POST /api/tasks` `{title,description,source,tier,evidence,open_question}` → enqueue

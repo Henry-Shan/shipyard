@@ -82,8 +82,10 @@ gather them.
    branch and stops; the human merges from GitHub. In **local mode**
    (`push_mode: "local"`) each run stops at a committed local branch — nothing
    is pushed, no `gh` needed; the human reviews and merges locally. Either way,
-   merging is always the human's action. The mode is read live at each
-   dispatch, so the panel's PR/Local toggle applies to the next run.
+   merging is always the human's action. **This is a per-project preference
+   the human sets from the panel's 📁 Projects list — never decide or change
+   it yourself; just read it live at each dispatch,** so a toggle there
+   applies to the next run.
 5. **Report what you couldn't do.** Anything you can't execute — external blockers,
    investigate-only, or a feature too big without a scope decision — goes to the
    `blocked` bucket with a one-line reason, NOT a guess and NOT silence.

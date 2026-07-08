@@ -102,8 +102,9 @@ committed template):
 `push_mode` picks the finish line: **`pr`** (default) pushes each branch and
 opens a GitHub PR (needs `gh`); **`local`** stops at a committed local branch —
 no push, no PR, no `gh`, nothing leaves your machine, and you merge locally.
-Toggle it live from the panel's **⇧ PR mode / 💻 Local mode** button (applies to
-the next dispatched run).
+It's a **per-project** setting — toggle it from the panel's **📁 Projects**
+list (each project has its own ⇧ PR / 💻 Local button, applied to that
+project's next dispatched run) rather than from inside `/manager` itself.
 
 `gh_available` is decided once, by the installer's prerequisite check — it
 records whether `gh` works on this machine so that a later "create a new repo
@@ -133,6 +134,10 @@ click "Test this branch" to boot any run's worktree, and merge finished PRs
 from GitHub.
 
 Single task, no orchestration: `/ship-task "add a CSV export button to the items table"`
+
+**Working across multiple projects?** The same panel handles that — click
+**📁 Projects** to see all of them and switch, or add a new one, no `/manager`
+session needed for that step. See `skills/manager/README.md`.
 
 ## ⚠ Security — read before first use
 

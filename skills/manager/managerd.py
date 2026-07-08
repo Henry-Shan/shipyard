@@ -953,8 +953,30 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         p, qs = u.path, parse_qs(u.query)
-        # The review board IS the panel now — serve it at the root too.
+        # "/" is the projects home page (the JS itself renders that mode when
+        # location.pathname is "/" — see renderHome() in review.html); a
+        # specific project's board lives at "/<slug>", handled just below.
         if p in ("/", "/index.html", "/review", "/review.html"):
+            return self._serve_file("review.html", "text/html")
+        if re.match(r"^/[a-zA-Z0-9_-]+$", p):
+            slug = p[1:]
+            projects = skill_config.load_projects()
+            match = next((x for x in projects["projects"] if x["slug"] == slug), None)
+            if not match:
+                return self._send(404, b"no such project")
+            if projects.get("active") != slug:
+                # Switching projects needs the same full re-exec every other
+                # config change does (CONFIG_PATH/DB_PATH are fixed at import
+                # time) — respond with a tiny self-refreshing page instead of
+                # making the browser wait on a request that outlives the
+                # process it was sent to.
+                skill_config.activate_project(slug)
+                threading.Timer(0.6, _reexec).start()
+                html = (b'<!doctype html><meta charset="utf-8">'
+                        b'<meta http-equiv="refresh" content="2;url=/' + slug.encode() + b'">'
+                        b'<body style="font:14px system-ui;padding:40px">'
+                        b'Switching to <b>' + slug.encode() + b'</b> \xe2\x80\x94 reloading in a moment\xe2\x80\xa6</body>')
+                return self._send(200, html, "text/html")
             return self._serve_file("review.html", "text/html")
         if p == "/api/task-count":
             # A scripted health check's non-tab equivalent of /api/state's task
@@ -965,6 +987,11 @@ class Handler(BaseHTTPRequestHandler):
             # restart and it would stop ever auto-opening the browser.
             n = len([t for t in core.snapshot().get("tasks", []) if t.get("status") != "rejected"])
             return self._send(200, {"count": n})
+        if p == "/api/projects":
+            d = skill_config.load_projects()
+            for proj in d["projects"]:
+                proj["push_mode"] = skill_config.project_push_mode(proj["slug"])
+            return self._send(200, d)
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
@@ -1209,6 +1236,7 @@ class Handler(BaseHTTPRequestHandler):
             updates = {k: v for k, v in body.items() if k in allowed}
             if not updates:
                 return self._send(400, {"ok": False, "error": "no recognized config keys"})
+            cfgp = skill_config.CONFIG_PATH
             if "repo" in updates:
                 updates["repo"] = os.path.expanduser(str(updates["repo"]).strip())
                 if not os.path.exists(os.path.join(updates["repo"], ".git")):
@@ -1216,7 +1244,16 @@ class Handler(BaseHTTPRequestHandler):
                     if not ok:
                         return self._send(400, {"ok": False, "error": err})
                     updates.setdefault("push_mode", push_mode)
-            cfgp = skill_config.CONFIG_PATH
+                # A fresh install (no project registered yet, e.g. /manager's
+                # own first-run flow) must still land in the project registry —
+                # otherwise it'd silently write the flat legacy config.json and
+                # never show up under 📁 Projects. skill_config.CONFIG_PATH was
+                # fixed at import time, before this registration existed, so
+                # compute the real target path fresh rather than trusting it.
+                if skill_config.active_project() is None:
+                    entry = skill_config.add_project(updates["repo"])
+                    skill_config.activate_project(entry["slug"])
+                    cfgp = skill_config.project_config_path(entry["slug"])
             try:
                 cur = json.load(open(cfgp))
                 if not isinstance(cur, dict):
@@ -1233,6 +1270,39 @@ class Handler(BaseHTTPRequestHandler):
             if needs_restart:
                 threading.Timer(0.6, _reexec).start()  # respond first, then restart
             return self._send(200, {"ok": True, "restarting": needs_restart})
+        if p == "/api/projects":
+            # Register a new project — purely a panel/daemon action, no /manager
+            # (or any Claude session) needs to be involved. Same repo-creation
+            # logic as the single-project setup screen: an existing git repo is
+            # used as-is; a plain folder gets one created (identity-checked,
+            # gh_available-gated), never guessing anything.
+            path = os.path.expanduser(str(body.get("path") or "").strip())
+            if not path:
+                return self._send(400, {"ok": False, "error": "path required"})
+            if not os.path.exists(os.path.join(path, ".git")):
+                ok, err, _push_mode = init_local_repo(path)
+                if not ok:
+                    return self._send(400, {"ok": False, "error": err})
+            entry = skill_config.add_project(path, body.get("name"))
+            return self._send(200, {"ok": True, "project": entry})
+        if p == "/api/projects/activate":
+            slug = str(body.get("slug") or "").strip()
+            try:
+                skill_config.activate_project(slug)
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
+            threading.Timer(0.6, _reexec).start()  # respond first, then restart into the new project
+            return self._send(200, {"ok": True})
+        if p == "/api/projects/push-mode":
+            # A pure panel/website preference, settable per project straight
+            # from the projects list — no need to open a project first, and
+            # never something /manager decides or asks about.
+            slug = str(body.get("slug") or "").strip()
+            try:
+                skill_config.set_project_push_mode(slug, body.get("push_mode"))
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
+            return self._send(200, {"ok": True})
         if p.startswith("/api/tasks/") and p.endswith("/rework"):
             tid = int(p.split("/")[3])
             ok = start_rework(tid, body.get("feedback", ""))
@@ -1328,13 +1398,18 @@ def open_panel():
             return
     except OSError:
         pass  # never polled -> first run, do open
+    # "/" is the multi-project home page now — /manager still opens straight
+    # into the active project's own board (today's UX), falling back to home
+    # only when nothing is configured/active yet.
+    ap = skill_config.active_project()
+    target = f"{URL}/{ap['slug']}" if ap else URL
     try:
         if sys.platform == "darwin":
-            if subprocess.run(["open", "-a", "Google Chrome", URL],
+            if subprocess.run(["open", "-a", "Google Chrome", target],
                               capture_output=True).returncode != 0:
-                subprocess.run(["open", URL], capture_output=True)
+                subprocess.run(["open", target], capture_output=True)
         elif sys.platform.startswith("linux"):
-            subprocess.run(["xdg-open", URL], capture_output=True)
+            subprocess.run(["xdg-open", target], capture_output=True)
     except Exception:
         pass
 
@@ -1422,6 +1497,14 @@ def _reexec():
 
 
 def serve():
+    if skill_config.migrate_legacy_single_project():
+        # CONFIG_PATH/DB_PATH are fixed at import time — this process's copies
+        # are already stale (computed before the migration ran). Re-exec into
+        # a fresh process instead of patching globals in place; the new one
+        # imports against the just-written projects.json and picks up the
+        # project-scoped config.json/manager.db cleanly.
+        _reexec()
+        return
     free_port(PORT)   # restart-first: replace any running daemon so the latest code loads
     core.init_db()
     if not repo_ok():

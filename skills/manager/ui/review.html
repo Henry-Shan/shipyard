@@ -243,6 +243,19 @@
   .exframe .nfh{cursor:default}         /* not collapsible here — just reading */
   .exframe .nft{font-size:12px}
   .exframe .ntext{font-size:12px}
+  /* Projects picker (📁 Projects button -> the shared modal) — see and open
+     any registered project, or add a new one, with no /manager session
+     needed for this step. */
+  .projrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)}
+  .projrow:last-child{border-bottom:none}
+  .projinfo{flex:1;min-width:0}
+  .projinfo b{font-size:13px}
+  .projpath{font-size:11px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projactive{font-size:11px;font-weight:800;color:var(--ready);white-space:nowrap}
+  .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
+    padding:7px 9px;font:inherit;font-size:13px}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -287,7 +300,7 @@
   <div class="spacer"></div>
   <div class="cov" id="cov"></div>
   <span id="capctl" class="capctl"></span>
-  <button id="modebtn" class="hbtn gh" onclick="toggleMode(this)"></button>
+  <button class="hbtn gh" onclick="showProjects()" title="see and switch between all your projects — no /manager session needed">📁 Projects</button>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
   <button id="clearallbtn" class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
@@ -438,16 +451,6 @@ let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0, PUSHMODE
 // Whether the project has a browsable web frontend — a one-time project fact
 // (config has_web_ui), not guessed per task. null = not asked yet.
 let HASWEB=null;
-// Toggle where finished work lands: "pr" (push + GitHub PR, needs gh) vs
-// "local" (committed local branch only — nothing leaves the machine). Applies
-// to the NEXT dispatched run; in-flight runs keep the mode they started with.
-async function toggleMode(btn){
-  if(btn) btn.disabled=true;
-  const next=PUSHMODE==="local"?"pr":"local";
-  try{ await apiPost("/api/config",{push_mode:next}); }catch(e){}
-  if(btn) btn.disabled=false;
-  refresh();
-}
 // REPO + SKILLDIR come from /api/state (the configured target repo and the
 // manager skill's install dir) — used in copy-to-terminal commands.
 let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager", BASEBR="main";
@@ -468,17 +471,13 @@ function setupCard(){
 }
 function progSig(){ return JSON.stringify((PROGRESS.steps||[]).map(s=>[s.label,s.status,s.detail])); }
 function renderControls(s){
-  // Pause/PR-Local/Clear-all are meaningless before a repo is configured
-  // (renderSetup hides them); make sure they're back once there's a real board.
-  $("#modebtn").style.display=$("#pausebtn").style.display=$("#clearallbtn").style.display="";
+  // Pause/Clear-all are meaningless before a repo is configured (renderSetup
+  // hides them); make sure they're back once there's a real board. PR/Local
+  // mode lives per-project in the 📁 Projects list now, not a header button.
+  $("#pausebtn").style.display=$("#clearallbtn").style.display="";
   const cap=s.cap||1;
   $("#capctl").innerHTML=`<span class="caplbl">concurrency</span>`+
     `<button class="capb" onclick="setCap(${cap-1})">−</button><b>${cap}</b><button class="capb" onclick="setCap(${cap+1})">+</button>`;
-  const mb=$("#modebtn");
-  if(mb){ mb.textContent=PUSHMODE==="local"?"💻 Local mode":"⇧ PR mode";
-    mb.title=PUSHMODE==="local"
-      ?"Finished work stays as LOCAL branches — no push, no PRs, no gh needed. Click to switch to PR mode."
-      :"Finished work is pushed and opened as GitHub PRs (needs gh). Click to switch to local-only mode (nothing leaves this machine)."; }
   const pb=$("#pausebtn"); pb.textContent=PAUSED?"▶ Resume":"⏸ Pause"; pb.className="hbtn"+(PAUSED?" primary":" gh");
   // Only surface the time-sensitive rate-limit cooldown; the plain "Paused"
   // state is already shown by the Resume button, so no banner for it.
@@ -524,6 +523,67 @@ async function clearAll(btn){
   try{ await apiPost("/api/reset",{}); }catch(e){ alert("Could not clear the board: "+e); }
   finally{ if(btn){btn.disabled=false;btn.textContent=label;} refresh(); }
 }
+
+// ---------- Projects: see and open any registered project, or add a new one
+// (existing repo, or a plain folder to create one at) — purely a panel
+// action, no /manager session needed for this step.
+function projRow(p, active){
+  // A real <a href> — navigating to /<slug> is what actually switches the
+  // active project (server-side, in do_GET); no click-handler JS needed here.
+  const pushBtn=`<button class="tbtn ${p.push_mode==="local"?"":"gh"}" title="finished work: PR mode pushes + opens a GitHub PR; local mode stops at a committed local branch"
+    onclick="event.preventDefault();toggleProjectMode('${esc(p.slug)}',this)">${p.push_mode==="local"?"💻 Local":"⇧ PR"}</button>`;
+  return `<div class="projrow">
+    <div class="projinfo"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></div>
+    ${pushBtn}
+    ${p.slug===active?'<span class="projactive">● active</span>':`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`}
+  </div>`;
+}
+function projAddFormHtml(){
+  return `<div class="projadd">
+    <input id="projPath" placeholder="/absolute/path — existing repo, or a new folder to set one up at"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}">
+    <button id="projAddBtn" class="tbtn primary" onclick="addProject(this)">+ Add</button>
+  </div>
+  <p id="projmsg" class="ntext" style="color:var(--dim);margin-top:6px"></p>`;
+}
+async function showProjects(){   // modal shortcut, reachable from inside any project's board
+  let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
+  const rows=(d.projects||[]).map(p=>projRow(p,d.active)).join("")
+    || `<p class="ntext" style="color:var(--dim)">No projects yet — add one below.</p>`;
+  $("#modal-title").textContent="Projects";
+  $("#modal-log").innerHTML=`<div class="projlist">${rows}</div>${projAddFormHtml()}`;
+  $("#modal").style.display="flex";
+}
+async function renderHome(){   // what "/" itself renders — the full-page project picker
+  let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
+  const rows=(d.projects||[]).map(p=>projRow(p,d.active)).join("")
+    || `<p class="ntext" style="color:var(--dim)">No projects yet — add your first one below.</p>`;
+  document.title="Projects — manager";
+  $("#sub").textContent="projects";
+  $("#cov").innerHTML=""; $("#index").innerHTML="";
+  $("#pausebtn").style.display=$("#clearallbtn").style.display="none";
+  $("#stage").innerHTML=`<div class="setupwrap"><div class="setup">
+    <div class="setup-h">📁 Your projects</div>
+    <div class="projlist">${rows}</div>
+    ${projAddFormHtml()}
+  </div></div>`;
+}
+async function addProject(btn){
+  const v=($("#projPath")?.value||"").trim(); if(!v)return;
+  btn.disabled=true; btn.textContent="Adding…";
+  let r; try{ r=await apiPost("/api/projects",{path:v}); }catch(e){ r={ok:false,error:String(e)}; }
+  btn.disabled=false; btn.textContent="+ Add";
+  if(r&&r.ok){ $("#projPath").value="";
+    if(location.pathname==="/") renderHome(); else showProjects();
+  }else{ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
+}
+async function toggleProjectMode(slug,btn){
+  btn.disabled=true;
+  try{ await apiPost("/api/projects/push-mode",{slug, push_mode: btn.textContent.includes("Local")?"pr":"local"}); }
+  catch(e){}
+  if(location.pathname==="/") renderHome(); else showProjects();
+}
+
 function toggleRework(tid){ REWORK_OPEN.has(tid)?REWORK_OPEN.delete(tid):REWORK_OPEN.add(tid); renderNotion(); }
 async function sendRework(tid){ const v=($("#rw"+tid)?.value||"").trim(); if(!v)return;
   REWORK_OPEN.delete(tid); await apiPost(`/api/tasks/${tid}/rework`,{feedback:v}); refresh(); }
@@ -556,7 +616,7 @@ function onTestPlanToggle(id,open){ open?TESTPLAN_OPEN.add(id):TESTPLAN_OPEN.del
 function renderSetup(s){
   PROGRESS=s.progress||{steps:[],active:false,done:false};   // live feed works in setup mode too
   // Nothing to pause, no push mode, nothing to clear yet — hide, don't show blank pills.
-  $("#modebtn").style.display=$("#pausebtn").style.display=$("#clearallbtn").style.display="none";
+  $("#pausebtn").style.display=$("#clearallbtn").style.display="none";
   const sig="setup:"+(s.repo||"")+":"+(s.config_path||"")+":"+progSig();
   if(sig===LAST_SIG) return; LAST_SIG=sig;
   $("#sub").textContent="setup";
@@ -1043,7 +1103,9 @@ async function loop(){
   timer=setTimeout(loop, document.hidden?8000:(LAST_ACTIVE?1500:4000));
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ clearTimeout(timer); loop(); } });
-loop();
+// "/" is the projects home page (no board to poll); any "/<slug>" path is a
+// specific project's live board, same as before.
+if(location.pathname==="/") renderHome(); else loop();
 </script>
 </body>
 </html>
