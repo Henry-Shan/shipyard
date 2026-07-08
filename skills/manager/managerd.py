@@ -992,24 +992,6 @@ class Handler(BaseHTTPRequestHandler):
             for proj in d["projects"]:
                 proj["push_mode"] = skill_config.project_push_mode(proj["slug"])
             return self._send(200, d)
-        if p == "/api/browse":
-            # A folder picker for the "+ Add project" form — browsers can't
-            # expose real filesystem paths to page JS, but this daemon already
-            # has full local filesystem access (same trust level as git init
-            # elsewhere), so it can list directories server-side instead.
-            start = os.path.expanduser((qs.get("path") or [""])[0]) or os.path.expanduser("~")
-            start = os.path.abspath(start)
-            if not os.path.isdir(start):
-                start = os.path.expanduser("~")
-            try:
-                names = sorted(
-                    n for n in os.listdir(start)
-                    if not n.startswith(".") and os.path.isdir(os.path.join(start, n))
-                )
-            except OSError:
-                names = []
-            parent = None if start == "/" else (os.path.dirname(start.rstrip("/")) or "/")
-            return self._send(200, {"path": start, "parent": parent, "dirs": names})
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
@@ -1354,11 +1336,16 @@ class Handler(BaseHTTPRequestHandler):
             path = os.path.expanduser(str(body.get("path") or "").strip())
             if not path:
                 return self._send(400, {"ok": False, "error": "path required"})
+            if not os.path.isabs(path):
+                return self._send(400, {"ok": False, "error": f"path must be absolute, got: {path}"})
             if not os.path.exists(os.path.join(path, ".git")):
                 ok, err, _push_mode = init_local_repo(path)
                 if not ok:
                     return self._send(400, {"ok": False, "error": err})
-            entry = skill_config.add_project(path, body.get("name"))
+            try:
+                entry = skill_config.add_project(path, body.get("name"))
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
             return self._send(200, {"ok": True, "project": entry})
         if p == "/api/projects/activate":
             slug = str(body.get("slug") or "").strip()
@@ -1378,6 +1365,19 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._send(400, {"ok": False, "error": str(e)})
             return self._send(200, {"ok": True})
+        if p == "/api/projects/remove":
+            # Stops tracking a project — never touches the actual repo, git
+            # history, branches, or PRs, exactly like Clear All never touches
+            # worktrees. If the removed project was the active one, re-exec
+            # so the daemon picks up whichever project (if any) is next.
+            slug = str(body.get("slug") or "").strip()
+            try:
+                active_changed = skill_config.remove_project(slug)
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
+            if active_changed:
+                threading.Timer(0.6, _reexec).start()
+            return self._send(200, {"ok": True, "active_changed": active_changed})
         if p.startswith("/api/tasks/") and p.endswith("/rework"):
             tid = int(p.split("/")[3])
             ok = start_rework(tid, body.get("feedback", ""))

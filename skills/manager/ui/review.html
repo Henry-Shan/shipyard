@@ -253,19 +253,10 @@
   .projpath{font-size:11px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .projactive{font-size:11px;font-weight:800;color:var(--ready);white-space:nowrap}
-  .projrow .tbtn{min-width:70px;text-align:center;box-sizing:border-box}
+  .projrow .tbtn:not(.danger){min-width:70px;text-align:center;box-sizing:border-box}
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
-  .browsepanel{margin-top:8px;border:2px solid var(--ink);border-radius:8px;background:var(--paper);
-    box-shadow:3px 3px 0 var(--ink);overflow:hidden}
-  .browsepath{font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);
-    padding:8px 10px;border-bottom:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .browselist{max-height:220px;overflow-y:auto}
-  .browserow{padding:7px 10px;font-size:13px;cursor:pointer}
-  .browserow:hover{background:var(--line)}
-  .browseup{color:var(--dim)}
-  .browseact{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -546,42 +537,28 @@ function projRow(p, active){
     <a class="projinfo" href="/${encodeURIComponent(p.slug)}"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></a>
     ${pushBtn}
     ${p.slug===active?'<span class="projactive">● active</span>':`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`}
+    <button class="tbtn danger" title="stop tracking this project — never touches your actual repo, git history, branches, or PRs"
+      onclick="event.preventDefault();removeProject('${esc(p.slug)}','${esc(p.name)}')">🗑</button>
   </div>`;
 }
-// ---------- Folder browser: the daemon has real filesystem access (same
-// trust level as git init elsewhere), so "+ Add" gets an actual folder
-// picker instead of a free-text path the user has to already know by heart.
-let BROWSE_PATH=null;
+async function removeProject(slug,name){
+  if(!confirm(`Stop tracking "${name}" here?\n\nThis only removes it from this list (and this app's own task/queue history for it) — your actual repo, git history, branches, and PRs are never touched.`))return;
+  let r; try{ r=await apiPost("/api/projects/remove",{slug}); }catch(e){ r={ok:false,error:String(e)}; }
+  if(r&&r.ok) renderHome();
+  else alert("Could not remove project: "+((r&&r.error)||"unknown error"));
+}
+// ---------- Folder picker: a real native OS "choose folder" dialog, not an
+// in-page dropdown — a browser can't hand page JS an absolute filesystem
+// path for security reasons, but this daemon runs locally on the same
+// machine as the browser, so it just pops the OS's own dialog server-side
+// (osascript on macOS, zenity on Linux) and reads the chosen path back.
 function projAddFormHtml(){
   return `<div class="projadd">
     <input id="projPath" placeholder="/absolute/path, or click + Add to browse for a folder"
       onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}">
     <button id="projAddBtn" class="tbtn primary" onclick="addProject(this)">+ Add</button>
   </div>
-  <div id="browseBox"></div>
   <p id="projmsg" class="ntext" style="color:var(--dim);margin-top:6px"></p>`;
-}
-async function openBrowse(){ await browseTo(($("#projPath")?.value||"").trim() || null); }
-async function browseTo(path){
-  let d; try{ d=await api("/api/browse"+(path?"?path="+encodeURIComponent(path):"")); }
-  catch(e){ return; }
-  BROWSE_PATH=d.path;
-  const up=d.parent?`<div class="browserow browseup" onclick="browseTo('${esc(d.parent)}')">⬆ ..</div>`:"";
-  const dirs=(d.dirs||[]).map(n=>{
-    const full=(d.path.replace(/\/$/,""))+"/"+n;
-    return `<div class="browserow" onclick="browseTo('${esc(full)}')">📁 ${esc(n)}</div>`;
-  }).join("") || `<p class="ntext" style="color:var(--dim);padding:8px 10px">no subfolders here</p>`;
-  $("#browseBox").innerHTML=`<div class="browsepanel">
-    <div class="browsepath">${esc(d.path)}</div>
-    <div class="browselist">${up}${dirs}</div>
-    <div class="browseact"><button class="tbtn primary" onclick="useBrowsePath()">Use this folder</button>
-      <button class="tbtn" onclick="$('#browseBox').innerHTML='';BROWSE_PATH=null;">Cancel</button></div>
-  </div>`;
-}
-async function useBrowsePath(){
-  const path=BROWSE_PATH; if(!path)return;
-  $("#browseBox").innerHTML=`<p class="ntext">Adding…</p>`;
-  await doAddProject(path);
 }
 async function renderHome(){   // what "/" itself renders — the full-page project picker
   let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
@@ -599,15 +576,23 @@ async function renderHome(){   // what "/" itself renders — the full-page proj
 }
 async function addProject(btn){
   const v=($("#projPath")?.value||"").trim();
-  if(!v){ openBrowse(); return; }   // nothing typed yet -> open the folder picker instead
+  if(!v){   // nothing typed yet -> pop the native folder picker instead
+    btn.disabled=true; btn.textContent="Choose a folder…";
+    let r; try{ r=await apiPost("/api/browse-folder",{}); }catch(e){ r={ok:false,error:String(e)}; }
+    btn.disabled=false; btn.textContent="+ Add";
+    if(r&&r.canceled) return;
+    if(!r||!r.ok){ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not open a folder picker"); return; }
+    await doAddProject(r.path);
+    return;
+  }
   btn.disabled=true; btn.textContent="Adding…";
   await doAddProject(v);
   btn.disabled=false; btn.textContent="+ Add";
 }
 async function doAddProject(path){
   let r; try{ r=await apiPost("/api/projects",{path}); }catch(e){ r={ok:false,error:String(e)}; }
-  if(r&&r.ok){ BROWSE_PATH=null; renderHome(); }
-  else{ $("#browseBox").innerHTML=""; $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
+  if(r&&r.ok){ renderHome(); }
+  else{ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
 }
 async function toggleProjectMode(slug,btn){
   btn.disabled=true;

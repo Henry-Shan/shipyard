@@ -160,6 +160,28 @@ def activate_project(slug):
     save_projects(d)
 
 
+def remove_project(slug):
+    """Stop tracking a project — removes it from the list and deletes its
+    OWN state (projects/<slug>/: config.json + manager.db + docs), never the
+    user's actual repo/git history/branches/PRs, exactly like Clear All never
+    touches git worktrees. Returns True if the ACTIVE project changed as a
+    result (caller should re-exec), False otherwise. Raises ValueError if
+    slug isn't registered."""
+    d = load_projects()
+    if not any(p["slug"] == slug for p in d["projects"]):
+        raise ValueError(f"no such project: {slug}")
+    d["projects"] = [p for p in d["projects"] if p["slug"] != slug]
+    was_active = d.get("active") == slug
+    if was_active:
+        d["active"] = d["projects"][0]["slug"] if d["projects"] else None
+    save_projects(d)
+    pdir = project_dir(slug)
+    if os.path.isdir(pdir):
+        import shutil as _shutil
+        _shutil.rmtree(pdir, ignore_errors=True)
+    return was_active
+
+
 def migrate_legacy_single_project():
     """One-time upgrade for an existing single-project install (a config.json
     with "repo" set, from before multi-project support existed): register it
