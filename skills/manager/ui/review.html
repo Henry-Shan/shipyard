@@ -28,7 +28,7 @@
     padding:10px 18px;background:var(--paper);border-bottom:3px solid var(--ink)}
   header .title{font-size:15px;font-weight:900;letter-spacing:-.01em;display:inline-block;
     background:#FFE14D;border:2.5px solid var(--ink);border-radius:6px;padding:2px 10px;
-    box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg)}
+    box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);color:inherit;text-decoration:none;cursor:pointer}
   header .sub{color:var(--dim);font-size:12px;font-weight:700}
   header .spacer{flex:1}
   .cov{display:flex;gap:6px;flex-wrap:wrap}
@@ -248,14 +248,24 @@
      needed for this step. */
   .projrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)}
   .projrow:last-child{border-bottom:none}
-  .projinfo{flex:1;min-width:0}
+  .projinfo{flex:1;min-width:0;text-decoration:none;color:inherit;display:block;cursor:pointer}
   .projinfo b{font-size:13px}
   .projpath{font-size:11px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .projactive{font-size:11px;font-weight:800;color:var(--ready);white-space:nowrap}
+  .projrow .tbtn{min-width:70px;text-align:center;box-sizing:border-box}
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
+  .browsepanel{margin-top:8px;border:2px solid var(--ink);border-radius:8px;background:var(--paper);
+    box-shadow:3px 3px 0 var(--ink);overflow:hidden}
+  .browsepath{font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);
+    padding:8px 10px;border-bottom:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .browselist{max-height:220px;overflow-y:auto}
+  .browserow{padding:7px 10px;font-size:13px;cursor:pointer}
+  .browserow:hover{background:var(--line)}
+  .browseup{color:var(--dim)}
+  .browseact{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -295,12 +305,11 @@
 </head>
 <body>
 <header>
-  <span class="title">Review</span><span class="sub" id="sub">…</span>
+  <a class="title" href="/" title="all your projects">Review</a><span class="sub" id="sub">…</span>
   <span class="live"><i></i> live</span>
   <div class="spacer"></div>
   <div class="cov" id="cov"></div>
   <span id="capctl" class="capctl"></span>
-  <button class="hbtn gh" onclick="showProjects()" title="see and switch between all your projects — no /manager session needed">📁 Projects</button>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
   <button id="clearallbtn" class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
@@ -528,31 +537,52 @@ async function clearAll(btn){
 // (existing repo, or a plain folder to create one at) — purely a panel
 // action, no /manager session needed for this step.
 function projRow(p, active){
-  // A real <a href> — navigating to /<slug> is what actually switches the
-  // active project (server-side, in do_GET); no click-handler JS needed here.
+  // Both the name/path block and "Open →" are real <a href>s — navigating to
+  // /<slug> is what actually switches the active project (server-side, in
+  // do_GET); no click-handler JS needed for that part.
   const pushBtn=`<button class="tbtn ${p.push_mode==="local"?"":"gh"}" title="finished work: PR mode pushes + opens a GitHub PR; local mode stops at a committed local branch"
     onclick="event.preventDefault();toggleProjectMode('${esc(p.slug)}',this)">${p.push_mode==="local"?"💻 Local":"⇧ PR"}</button>`;
   return `<div class="projrow">
-    <div class="projinfo"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></div>
+    <a class="projinfo" href="/${encodeURIComponent(p.slug)}"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></a>
     ${pushBtn}
     ${p.slug===active?'<span class="projactive">● active</span>':`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`}
   </div>`;
 }
+// ---------- Folder browser: the daemon has real filesystem access (same
+// trust level as git init elsewhere), so "+ Add" gets an actual folder
+// picker instead of a free-text path the user has to already know by heart.
+let BROWSE_PATH=null;
 function projAddFormHtml(){
   return `<div class="projadd">
     <input id="projPath" placeholder="/absolute/path — existing repo, or a new folder to set one up at"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}">
+      onkeydown="if(event.key==='Enter'){event.preventDefault();addProject($('#projAddBtn'));}"
+      onfocus="if(!BROWSE_PATH) openBrowse();">
+    <button class="tbtn gh" onclick="openBrowse()">📂 Browse</button>
     <button id="projAddBtn" class="tbtn primary" onclick="addProject(this)">+ Add</button>
   </div>
+  <div id="browseBox"></div>
   <p id="projmsg" class="ntext" style="color:var(--dim);margin-top:6px"></p>`;
 }
-async function showProjects(){   // modal shortcut, reachable from inside any project's board
-  let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
-  const rows=(d.projects||[]).map(p=>projRow(p,d.active)).join("")
-    || `<p class="ntext" style="color:var(--dim)">No projects yet — add one below.</p>`;
-  $("#modal-title").textContent="Projects";
-  $("#modal-log").innerHTML=`<div class="projlist">${rows}</div>${projAddFormHtml()}`;
-  $("#modal").style.display="flex";
+async function openBrowse(){ await browseTo(($("#projPath")?.value||"").trim() || null); }
+async function browseTo(path){
+  let d; try{ d=await api("/api/browse"+(path?"?path="+encodeURIComponent(path):"")); }
+  catch(e){ return; }
+  BROWSE_PATH=d.path;
+  const up=d.parent?`<div class="browserow browseup" onclick="browseTo('${esc(d.parent)}')">⬆ ..</div>`:"";
+  const dirs=(d.dirs||[]).map(n=>{
+    const full=(d.path.replace(/\/$/,""))+"/"+n;
+    return `<div class="browserow" onclick="browseTo('${esc(full)}')">📁 ${esc(n)}</div>`;
+  }).join("") || `<p class="ntext" style="color:var(--dim);padding:8px 10px">no subfolders here</p>`;
+  $("#browseBox").innerHTML=`<div class="browsepanel">
+    <div class="browsepath">${esc(d.path)}</div>
+    <div class="browselist">${up}${dirs}</div>
+    <div class="browseact"><button class="tbtn primary" onclick="useBrowsePath()">Use this folder</button>
+      <button class="tbtn" onclick="$('#browseBox').innerHTML='';BROWSE_PATH=null;">Cancel</button></div>
+  </div>`;
+}
+function useBrowsePath(){
+  $("#projPath").value=BROWSE_PATH||"";
+  $("#browseBox").innerHTML=""; BROWSE_PATH=null;
 }
 async function renderHome(){   // what "/" itself renders — the full-page project picker
   let d; try{ d=await api("/api/projects"); }catch(e){ d={projects:[],active:null}; }
@@ -573,15 +603,14 @@ async function addProject(btn){
   btn.disabled=true; btn.textContent="Adding…";
   let r; try{ r=await apiPost("/api/projects",{path:v}); }catch(e){ r={ok:false,error:String(e)}; }
   btn.disabled=false; btn.textContent="+ Add";
-  if(r&&r.ok){ $("#projPath").value="";
-    if(location.pathname==="/") renderHome(); else showProjects();
-  }else{ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
+  if(r&&r.ok){ $("#projPath").value=""; renderHome(); }
+  else{ $("#projmsg").textContent="✗ "+((r&&r.error)||"could not add that project"); }
 }
 async function toggleProjectMode(slug,btn){
   btn.disabled=true;
   try{ await apiPost("/api/projects/push-mode",{slug, push_mode: btn.textContent.includes("Local")?"pr":"local"}); }
   catch(e){}
-  if(location.pathname==="/") renderHome(); else showProjects();
+  renderHome();
 }
 
 function toggleRework(tid){ REWORK_OPEN.has(tid)?REWORK_OPEN.delete(tid):REWORK_OPEN.add(tid); renderNotion(); }

@@ -992,6 +992,24 @@ class Handler(BaseHTTPRequestHandler):
             for proj in d["projects"]:
                 proj["push_mode"] = skill_config.project_push_mode(proj["slug"])
             return self._send(200, d)
+        if p == "/api/browse":
+            # A folder picker for the "+ Add project" form — browsers can't
+            # expose real filesystem paths to page JS, but this daemon already
+            # has full local filesystem access (same trust level as git init
+            # elsewhere), so it can list directories server-side instead.
+            start = os.path.expanduser((qs.get("path") or [""])[0]) or os.path.expanduser("~")
+            start = os.path.abspath(start)
+            if not os.path.isdir(start):
+                start = os.path.expanduser("~")
+            try:
+                names = sorted(
+                    n for n in os.listdir(start)
+                    if not n.startswith(".") and os.path.isdir(os.path.join(start, n))
+                )
+            except OSError:
+                names = []
+            parent = None if start == "/" else (os.path.dirname(start.rstrip("/")) or "/")
+            return self._send(200, {"path": start, "parent": parent, "dirs": names})
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
