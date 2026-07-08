@@ -1307,6 +1307,44 @@ class Handler(BaseHTTPRequestHandler):
             if needs_restart:
                 threading.Timer(0.6, _reexec).start()  # respond first, then restart
             return self._send(200, {"ok": True, "restarting": needs_restart})
+        if p == "/api/browse-folder":
+            # "+ Add project" wants a real native folder picker, not an in-page
+            # dropdown — a browser can't hand page JS an absolute filesystem
+            # path from its own file input for security reasons, but this
+            # daemon runs locally on the same machine as the browser, so it can
+            # just pop the OS's own native "choose folder" dialog and read the
+            # path back directly. Blocks this request's thread until the user
+            # picks or cancels (ThreadingHTTPServer keeps every other route free).
+            path, err = None, None
+            try:
+                if sys.platform == "darwin":
+                    r = subprocess.run(
+                        ["osascript", "-e",
+                         'POSIX path of (choose folder with prompt "Choose a project folder" '
+                         'default location (path to home folder))'],
+                        capture_output=True, text=True)
+                    if r.returncode == 0:
+                        path = r.stdout.strip()
+                    elif "User canceled" not in (r.stderr or ""):
+                        err = r.stderr.strip() or "folder picker failed"
+                elif sys.platform.startswith("linux") and shutil.which("zenity"):
+                    r = subprocess.run(["zenity", "--file-selection", "--directory",
+                                        "--title=Choose a project folder",
+                                        "--filename=" + os.path.expanduser("~") + "/"],
+                                       capture_output=True, text=True)
+                    if r.returncode == 0:
+                        path = r.stdout.strip()
+                    elif r.returncode != 1:  # 1 = user canceled in zenity's convention
+                        err = r.stderr.strip() or "folder picker failed"
+                else:
+                    err = "no native folder picker available on this platform — type the path instead"
+            except FileNotFoundError:
+                err = "no native folder picker available on this platform — type the path instead"
+            if err:
+                return self._send(400, {"ok": False, "error": err})
+            if not path:
+                return self._send(200, {"ok": False, "canceled": True})
+            return self._send(200, {"ok": True, "path": path})
         if p == "/api/projects":
             # Register a new project — purely a panel/daemon action, no /manager
             # (or any Claude session) needs to be involved. Same repo-creation

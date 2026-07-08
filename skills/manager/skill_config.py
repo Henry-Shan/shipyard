@@ -123,10 +123,16 @@ def set_project_push_mode(slug, mode):
 def add_project(path, name=None):
     """Register a new project (does NOT activate it — that's a separate,
     explicit step, same as the panel's Add vs. Open). Returns the registry
-    entry. Raises ValueError on a bad path."""
+    entry. Raises ValueError on a bad (missing or non-absolute) path — a
+    relative path here would mean something different depending on whatever
+    directory the daemon process happens to be running from, which git
+    operations elsewhere all assume is an absolute repo path."""
     path = os.path.expanduser(str(path).strip())
     if not path:
         raise ValueError("path required")
+    if not os.path.isabs(path):
+        raise ValueError(f"path must be absolute, got: {path}")
+    path = os.path.normpath(path)
     d = load_projects()
     for p in d["projects"]:
         if os.path.normpath(p["path"]) == os.path.normpath(path):
