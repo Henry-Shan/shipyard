@@ -34,6 +34,7 @@ import json
 import os
 import re
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MACHINE_CONFIG_PATH = os.path.join(HERE, "config.json")   # gh_available, panel_port — always here
@@ -85,6 +86,69 @@ def project_config_path(slug):
 
 def project_db_path(slug):
     return os.path.join(project_dir(slug), "manager.db")
+
+
+def docs_file(slug):
+    return os.path.join(project_dir(slug), "docs.json")
+
+
+def load_docs(slug):
+    """A project's ingested task docs — {"docs": [{"id","kind","path","title",
+    "created_at"}...], "active": id|None}. Lets the panel show a history of
+    every source that's ever been ingested for this project and switch which
+    one's findings are displayed, instead of just the single most recent one."""
+    d = _read_json(docs_file(slug), {})
+    d.setdefault("docs", [])
+    d.setdefault("active", None)
+    return d
+
+
+def save_docs(slug, data):
+    _write_json(docs_file(slug), data)
+
+
+def add_doc(slug, kind, path, title=None):
+    """Register a newly-ingested task doc (kind: "notion" or "pdf"; path: the
+    map.json or PDF's absolute path) and make it the active one. Re-ingesting
+    the SAME path updates that entry in place instead of duplicating it."""
+    d = load_docs(slug)
+    norm = os.path.normpath(path)
+    for doc in d["docs"]:
+        if doc["kind"] == kind and os.path.normpath(doc["path"]) == norm:
+            if title:
+                doc["title"] = title
+            d["active"] = doc["id"]
+            save_docs(slug, d)
+            return doc
+    new_id = max((doc["id"] for doc in d["docs"]), default=0) + 1
+    entry = {"id": new_id, "kind": kind, "path": path,
+             "title": title or os.path.basename(path), "created_at": time.time()}
+    d["docs"].append(entry)
+    d["active"] = new_id
+    save_docs(slug, d)
+    return entry
+
+
+def activate_doc(slug, doc_id):
+    """doc_id=None clears the active doc (falls back to the plain task view)
+    without deleting any history."""
+    d = load_docs(slug)
+    if doc_id is not None and not any(doc["id"] == doc_id for doc in d["docs"]):
+        raise ValueError(f"no such doc: {doc_id}")
+    d["active"] = doc_id
+    save_docs(slug, d)
+
+
+def active_doc(slug):
+    """The active doc's entry, or None (nothing ingested yet, or the active
+    one's file has since gone missing)."""
+    d = load_docs(slug)
+    if d["active"] is None:
+        return None
+    doc = next((x for x in d["docs"] if x["id"] == d["active"]), None)
+    if doc and os.path.isfile(doc["path"]):
+        return doc
+    return None
 
 
 def active_project():

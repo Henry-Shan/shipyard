@@ -42,9 +42,6 @@ TEARDOWN = os.path.normpath(os.path.join(HERE, "..", "ship-task", "teardown-work
 # the orchestrator (/manager) Claude session id, registered at startup — persists
 # across daemon restarts so the panel's "Reconnect" button can resume it.
 MANAGER_SESSION_FILE = os.path.join(HERE, ".manager_session")
-# the source QA PDF for this batch (registered by /manager at ingest), shown on the
-# review board. Stored as an absolute path; served via /api/image.
-SOURCE_PDF_FILE = os.path.join(HERE, ".source_pdf")
 
 
 def read_manager_session():
@@ -54,17 +51,22 @@ def read_manager_session():
         return None
 
 
+def _active_project_slug():
+    ap = skill_config.active_project()
+    return ap["slug"] if ap else None
+
+
 def read_source_pdf():
-    try:
-        p = open(SOURCE_PDF_FILE).read().strip()
-        return p if p and os.path.isfile(p) else None
-    except OSError:
+    """The active project's active task doc, IF it's a PDF (registered by
+    /manager at ingest via /api/source-pdf) — shown on the review board,
+    served via /api/image. Per-project docs history lives in docs.json; see
+    skill_config.py's docs registry."""
+    slug = _active_project_slug()
+    if not slug:
         return None
+    doc = skill_config.active_doc(slug)
+    return doc["path"] if doc and doc["kind"] == "pdf" else None
 
-
-# the active Notion doc-map (built by notion_ingest.py at /manager ingest). When set,
-# the review board renders the Notion source instead of the PDF.
-NOTION_MAP_FILE = os.path.join(HERE, ".notion_map")
 
 # The packaged example task doc, shown read-only on the intake card so a new
 # user can SEE what the manager eats, before they've pasted their own source.
@@ -97,11 +99,31 @@ def demo_examples():
 
 
 def notion_map_path():
-    try:
-        p = open(NOTION_MAP_FILE).read().strip()
-        return p if p and os.path.isfile(p) else None
-    except OSError:
+    """The active project's active task doc, IF it's a Notion/markdown
+    ingest (registered by /manager at ingest via /api/source-notion)."""
+    slug = _active_project_slug()
+    if not slug:
         return None
+    doc = skill_config.active_doc(slug)
+    return doc["path"] if doc and doc["kind"] == "notion" else None
+
+
+INTAKE_QUESTION = "Task docs (Notion URL, PDF, .md) — or just type the tasks"
+
+
+def ensure_intake_question():
+    """Post the standard task-doc intake question if it isn't already
+    pending — used both by the auto-trigger (empty board) and the manual
+    "+ New task doc" action (populated board). Identical text to what
+    /manager's own Step 3 posts, so add_question's dedupe means whichever
+    posts it first "wins" and a real /manager run finds the same row
+    (possibly already answered) instead of duplicating it. Returns True if a
+    question now exists (whether freshly posted or already there)."""
+    pending = core.list_questions(only_pending=True)
+    if any(q["session_id"] == "manager-intake" and q["question"] == INTAKE_QUESTION for q in pending):
+        return True
+    core.add_question("manager-intake", INTAKE_QUESTION, [], "")
+    return True
 
 
 def read_notion_map():
@@ -992,6 +1014,12 @@ class Handler(BaseHTTPRequestHandler):
             for proj in d["projects"]:
                 proj["push_mode"] = skill_config.project_push_mode(proj["slug"])
             return self._send(200, d)
+        if p == "/api/docs":
+            # The active project's task-doc history — every source ever
+            # ingested for it, so the panel can list them and switch which
+            # one's findings are displayed (not just the single latest one).
+            slug = _active_project_slug()
+            return self._send(200, skill_config.load_docs(slug) if slug else {"docs": [], "active": None})
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
@@ -1065,23 +1093,14 @@ class Handler(BaseHTTPRequestHandler):
                             t["branch"] = branch
             # An empty board with a configured repo and no live /manager
             # session running has nothing for the human to act on otherwise —
-            # proactively post the SAME intake question /manager itself would
-            # (identical text, so a real run later finds this one instead of
-            # duplicating it — see add_question's dedupe), so "enter your task
-            # docs" is always available, not just while a session is open.
-            INTAKE_Q = "Task docs (Notion URL, PDF, .md) — or just type the tasks"
-            if (st["repo_ok"]
-                    and not any(t["status"] != "rejected" for t in st["tasks"])
-                    and not any(q["session_id"] == "manager-intake" and q["question"] == INTAKE_Q
-                                for q in st["pending_questions"])):
-                ctx = "Paste a Notion URL, a path to a PDF/markdown file, or just type the tasks (one per line)."
-                if skill_config.get("has_web_ui") is None:
-                    ctx += ('\nHas a web frontend to test in a browser? Include "web: yes <command> <port>" '
-                            'or "web: no" — only asked once.')
-                ctx += "\nSaved for whenever you run /manager here — that's what actually starts the batch."
-                core.add_question("manager-intake", INTAKE_Q, [], ctx)
-                st["pending_questions"] = core.list_questions(only_pending=True)
-                st["questions"] = core.list_questions()
+            # proactively post the SAME intake question /manager itself would,
+            # so "enter your task docs" is always available, not just while a
+            # session is open. (A populated board can still ask for another
+            # doc — that's the manual /api/intake/new trigger, not this one.)
+            if st["repo_ok"] and not any(t["status"] != "rejected" for t in st["tasks"]):
+                if ensure_intake_question():
+                    st["pending_questions"] = core.list_questions(only_pending=True)
+                    st["questions"] = core.list_questions()
             return self._send(200, st)
         if p == "/api/image":
             return self._serve_image((qs.get("path") or [""])[0])
@@ -1158,26 +1177,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True})
             return self._send(400, {"error": "session_id must be a uuid"})
         if p == "/api/source-pdf":
-            # /manager registers the batch's source QA PDF (absolute path) so the
-            # review board can show it. Must be an existing .pdf file.
+            # /manager registers the batch's source QA PDF (absolute path) as
+            # a task doc for the ACTIVE project — kept in that project's docs
+            # history (skill_config.py), not just a single overwritten pointer.
+            slug = _active_project_slug()
+            if not slug:
+                return self._send(400, {"error": "no active project"})
             path = (body.get("path") or "").strip()
             if path.lower().endswith(".pdf") and os.path.isfile(path):
-                try: open(SOURCE_PDF_FILE, "w").write(path)
-                except OSError: pass
-                return self._send(200, {"ok": True})
+                doc = skill_config.add_doc(slug, "pdf", path, body.get("title"))
+                return self._send(200, {"ok": True, "doc": doc})
             return self._send(400, {"error": "path must be an existing .pdf"})
         if p == "/api/source-notion":
-            # register the Notion doc-map (map.json from notion_ingest.py) as the
-            # active review-board source; pass {"path": "<…/map.json>"} or {} to clear.
+            # register the Notion/markdown doc-map (map.json from
+            # notion_ingest.py) as a task doc for the ACTIVE project; pass
+            # {"path": "<…/map.json>"} or {} to clear the active doc (history
+            # is kept either way — see skill_config.py's docs registry).
+            slug = _active_project_slug()
+            if not slug:
+                return self._send(400, {"error": "no active project"})
             path = (body.get("path") or "").strip()
             if not path:
-                try: os.remove(NOTION_MAP_FILE)
-                except OSError: pass
+                skill_config.activate_doc(slug, None)
                 return self._send(200, {"ok": True, "cleared": True})
             if path.endswith(".json") and os.path.isfile(path):
-                try: open(NOTION_MAP_FILE, "w").write(path)
-                except OSError: pass
-                return self._send(200, {"ok": True})
+                doc = skill_config.add_doc(slug, "notion", path, body.get("title"))
+                return self._send(200, {"ok": True, "doc": doc})
             return self._send(400, {"error": "path must be an existing map.json"})
         if p == "/api/tasks":
             tid = core.add_task(
@@ -1220,16 +1245,18 @@ class Handler(BaseHTTPRequestHandler):
             stop_test_server()
             return self._send(200, {"ok": True})
         if p == "/api/reset":
-            # Clear All must actually clear the board — not just the tasks table.
-            # The source doc (Notion map / PDF) is a separate file pointer that
-            # renderNotion() keeps rendering from regardless of the task queue,
-            # so leaving it behind after a reset looks exactly like "nothing
-            # got cleared": the full QA doc + all its findings stay on screen.
+            # Clear All must actually clear the board — not just the tasks
+            # table. The active project's task doc is separate state that
+            # renderNotion() keeps rendering from regardless of the task
+            # queue, so leaving it behind after a reset looks exactly like
+            # "nothing got cleared": the full QA doc + all its findings stay
+            # on screen. Wipes the WHOLE docs history too, not just the
+            # active pointer — a fresh start really means fresh.
             n = core.reset_queue()
             progress_clear()
-            for f in (NOTION_MAP_FILE, SOURCE_PDF_FILE):
-                try: os.remove(f)
-                except OSError: pass
+            slug = _active_project_slug()
+            if slug:
+                skill_config.save_docs(slug, {"docs": [], "active": None})
             return self._send(200, {"ok": True, "cleared": n})
         if p == "/api/progress":
             # Live /manager ingest feed. {clear:true} resets; else append a step
@@ -1378,6 +1405,26 @@ class Handler(BaseHTTPRequestHandler):
             if active_changed:
                 threading.Timer(0.6, _reexec).start()
             return self._send(200, {"ok": True, "active_changed": active_changed})
+        if p == "/api/docs/activate":
+            # Switch which of the active project's ingested docs is displayed
+            # — a pure panel action, live (no restart: the board just reads
+            # docs.json fresh on the next /api/state poll).
+            slug = _active_project_slug()
+            if not slug:
+                return self._send(400, {"ok": False, "error": "no active project"})
+            doc_id = body.get("id")
+            try:
+                skill_config.activate_doc(slug, int(doc_id) if doc_id is not None else None)
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
+            return self._send(200, {"ok": True})
+        if p == "/api/intake/new":
+            # "+ New task doc" — ensures the intake question is available even
+            # when the board already has tasks (the automatic /api/state
+            # trigger only fires on an EMPTY board); same question either way,
+            # so a /manager run later finds one card either way.
+            ensure_intake_question()
+            return self._send(200, {"ok": True})
         if p.startswith("/api/tasks/") and p.endswith("/rework"):
             tid = int(p.split("/")[3])
             ok = start_rework(tid, body.get("feedback", ""))
