@@ -502,7 +502,7 @@ function questionCard(q){
     <div style="margin:6px 0;font-weight:600">${esc(q.question)}</div>
     ${q.context?`<div class="ctx">${esc(q.context)}</div>`:""}
     <div class="opts">${opts}</div>
-    <textarea id="ta${q.id}" rows="2" placeholder="…or type a custom reply"></textarea>
+    <textarea id="ta${q.id}" rows="2" placeholder="Notion URL, PDF, .md, any format"></textarea>
     <div class="acts"><button class="primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>
       ${q.task_id?`<button class="ghost" onclick="deleteTask(${q.task_id})" title="don't answer — abandon: remove worktree + delete branch">🗑 Delete task</button>`:""}</div>
   </div>`;
