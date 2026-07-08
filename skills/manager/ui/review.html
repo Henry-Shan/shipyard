@@ -246,17 +246,23 @@
   /* Projects picker (📁 Projects button -> the shared modal) — see and open
      any registered project, or add a new one, with no /manager session
      needed for this step. */
-  .projrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)}
+  .projrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line)}
   .projrow:last-child{border-bottom:none}
+  .projrow.active{background:var(--ready-bg,rgba(46,166,107,.08));border-left:3px solid var(--ready);padding-left:7px}
   .projinfo{flex:1;min-width:0;text-decoration:none;color:inherit;display:block;cursor:pointer}
   .projinfo b{font-size:13px}
   .projpath{font-size:11px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .projactive{font-size:11px;font-weight:800;color:var(--ready);white-space:nowrap}
   .projrow .tbtn:not(.danger){min-width:70px;text-align:center;box-sizing:border-box}
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
+  .docrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line)}
+  .docrow:last-child{border-bottom:none}
+  .docrow.active{background:rgba(46,166,107,.08);border-left:3px solid var(--ready);padding-left:7px}
+  .docinfo{flex:1;min-width:0}
+  .docinfo b{font-size:13px}
+  .docwhen{font-size:11px;color:var(--dim)}
   /* /manager setup progress feed — the live ingest steps */
   .setupwrap{max-width:640px;margin:44px auto 0;padding:0 16px}
   .setupwrap.doc{margin:16px auto 0}
@@ -301,6 +307,7 @@
   <div class="spacer"></div>
   <div class="cov" id="cov"></div>
   <span id="capctl" class="capctl"></span>
+  <button id="docsbtn" class="hbtn gh" onclick="showDocs()" title="see every task doc ever ingested here, switch which one's shown, or start a new one">📄 Docs</button>
   <button id="pausebtn" class="hbtn" onclick="togglePause()"></button>
   <button id="clearallbtn" class="hbtn danger" onclick="clearAll(this)" title="remove ALL tasks, questions and history from the board — git worktrees are left untouched">🗑 Clear all</button>
 </header>
@@ -474,7 +481,7 @@ function renderControls(s){
   // Pause/Clear-all are meaningless before a repo is configured (renderSetup
   // hides them); make sure they're back once there's a real board. PR/Local
   // mode lives per-project in the 📁 Projects list now, not a header button.
-  $("#pausebtn").style.display=$("#clearallbtn").style.display="";
+  $("#pausebtn").style.display=$("#clearallbtn").style.display=$("#docsbtn").style.display="";
   const cap=s.cap||1;
   $("#capctl").innerHTML=`<span class="caplbl">concurrency</span>`+
     `<button class="capb" onclick="setCap(${cap-1})">−</button><b>${cap}</b><button class="capb" onclick="setCap(${cap+1})">+</button>`;
@@ -533,10 +540,15 @@ function projRow(p, active){
   // do_GET); no click-handler JS needed for that part.
   const pushBtn=`<button class="tbtn ${p.push_mode==="local"?"":"gh"}" title="finished work: PR mode pushes + opens a GitHub PR; local mode stops at a committed local branch"
     onclick="event.preventDefault();toggleProjectMode('${esc(p.slug)}',this)">${p.push_mode==="local"?"💻 Local":"⇧ PR"}</button>`;
-  return `<div class="projrow">
+  // Same-shaped element either way (a hidden placeholder when already active)
+  // so every row's buttons line up in the same columns regardless of state.
+  const openBtn=p.slug===active
+    ?`<span class="tbtn primary" style="visibility:hidden">Open →</span>`
+    :`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`;
+  return `<div class="projrow${p.slug===active?" active":""}">
     <a class="projinfo" href="/${encodeURIComponent(p.slug)}"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></a>
     ${pushBtn}
-    ${p.slug===active?'<span class="projactive">● active</span>':`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`}
+    ${openBtn}
     <button class="tbtn danger" title="stop tracking this project — never touches your actual repo, git history, branches, or PRs"
       onclick="event.preventDefault();removeProject('${esc(p.slug)}','${esc(p.name)}')">🗑</button>
   </div>`;
@@ -546,6 +558,40 @@ async function removeProject(slug,name){
   let r; try{ r=await apiPost("/api/projects/remove",{slug}); }catch(e){ r={ok:false,error:String(e)}; }
   if(r&&r.ok) renderHome();
   else alert("Could not remove project: "+((r&&r.error)||"unknown error"));
+}
+
+// ---------- Task docs: every source ever ingested for the CURRENT project
+// (📄 Docs button) — switch which one's findings are shown, or start a new
+// one. Purely a panel action; ingesting the new source still needs /manager.
+async function showDocs(){
+  let d; try{ d=await api("/api/docs"); }catch(e){ d={docs:[],active:null}; }
+  const rows=[...(d.docs||[])].reverse().map(doc=>{
+    const icon=doc.kind==="pdf"?"📕":"📘";
+    const isActive=doc.id===d.active;
+    return `<div class="docrow${isActive?" active":""}">
+      <div class="docinfo"><b>${icon} ${esc(doc.title)}</b><div class="docwhen">${esc(ago(doc.created_at))}</div></div>
+      ${isActive?'<span class="tbtn primary" style="visibility:hidden">Show</span>'
+                :`<button class="tbtn primary" onclick="activateDoc(${doc.id})">Show</button>`}
+    </div>`;
+  }).join("") || `<p class="ntext" style="color:var(--dim)">No task docs ingested yet.</p>`;
+  $("#modal-title").textContent="Task docs";
+  $("#modal-log").innerHTML=`<div class="doclist">${rows}</div>
+    <div class="projadd" style="margin-top:14px">
+      <button class="tbtn primary" onclick="newTaskDoc(this)" style="flex:1">+ New task doc</button>
+    </div>
+    <p class="ntext" style="color:var(--dim);margin-top:6px">Posts the task-doc question to "Needs your input" — answer it there; running /manager here is what actually ingests it.</p>`;
+  $("#modal").style.display="flex";
+}
+async function activateDoc(id){
+  await apiPost("/api/docs/activate",{id});
+  closeModal();
+  refresh();
+}
+async function newTaskDoc(btn){
+  btn.disabled=true; btn.textContent="Adding…";
+  try{ await apiPost("/api/intake/new",{}); }catch(e){}
+  closeModal();
+  refresh();
 }
 // ---------- Folder picker: a real native OS "choose folder" dialog, not an
 // in-page dropdown — a browser can't hand page JS an absolute filesystem
@@ -567,7 +613,7 @@ async function renderHome(){   // what "/" itself renders — the full-page proj
   document.title="Projects — manager";
   $("#sub").textContent="projects";
   $("#cov").innerHTML=""; $("#index").innerHTML="";
-  $("#pausebtn").style.display=$("#clearallbtn").style.display="none";
+  $("#pausebtn").style.display=$("#clearallbtn").style.display=$("#docsbtn").style.display="none";
   $("#stage").innerHTML=`<div class="setupwrap"><div class="setup">
     <div class="setup-h">📁 Your projects</div>
     <div class="projlist">${rows}</div>
@@ -633,7 +679,7 @@ function onTestPlanToggle(id,open){ open?TESTPLAN_OPEN.add(id):TESTPLAN_OPEN.del
 function renderSetup(s){
   PROGRESS=s.progress||{steps:[],active:false,done:false};   // live feed works in setup mode too
   // Nothing to pause, no push mode, nothing to clear yet — hide, don't show blank pills.
-  $("#pausebtn").style.display=$("#clearallbtn").style.display="none";
+  $("#pausebtn").style.display=$("#clearallbtn").style.display=$("#docsbtn").style.display="none";
   const sig="setup:"+(s.repo||"")+":"+(s.config_path||"")+":"+progSig();
   if(sig===LAST_SIG) return; LAST_SIG=sig;
   $("#sub").textContent="setup";
@@ -762,7 +808,7 @@ function questionCard(q){
     ${q.context?`<div class="qctx">${esc(q.context)}</div>`:""}
     ${example}
     ${opts?`<div class="qopts">${opts}</div>`:""}
-    <textarea id="ta${q.id}" rows="2" placeholder="…or type a custom reply"></textarea>
+    <textarea id="ta${q.id}" rows="2" placeholder="Notion URL, PDF, .md, any format"></textarea>
     <div class="tact"><button class="tbtn primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>${q.task_id?` <button class="tbtn gh" onclick="deleteTask(${q.task_id})">🗑 Delete task</button>`:""}</div>
   </div>`;
 }
@@ -1032,7 +1078,7 @@ function exampleInline(){
   if(!EXAMPLES){ loadExamples(); return ""; }
   if(!(EXAMPLES.findings||[]).length) return "";
   return `<div class="exbox">
-    <div class="exbar">📄 ${esc(EXAMPLES.title||"Example task doc")} — what a source doc looks like</div>
+    <div class="exbar">📄 ${esc(EXAMPLES.title||"Example Task Doc")}</div>
     <div class="exframe">${exampleDocHtml()}</div></div>`;
 }
 
@@ -1122,7 +1168,8 @@ async function loop(){
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ clearTimeout(timer); loop(); } });
 // "/" is the projects home page (no board to poll); any "/<slug>" path is a
 // specific project's live board, same as before.
-if(location.pathname==="/") renderHome(); else loop();
+if(location.pathname==="/"){ renderHome(); }
+else{ loadExamples(); loop(); }   // prefetch the example doc now, not on first question-card render
 </script>
 </body>
 </html>
