@@ -251,12 +251,19 @@ def _task_dict(row):
 
 def add_question(session_id, question, options=None, context="", task_id=None, kind=""):
     """A running ship-task session relays a question to the human. Idempotent
-    for identical pending questions: re-posting the same (session, question)
-    returns the existing row instead of stacking duplicates on the board."""
+    for identical pending OR answered-but-undelivered questions: re-posting
+    the same (session, question) returns the existing row instead of
+    stacking duplicates on the board. Matters even for a still-'answered'
+    row (not just 'pending') because the panel itself can now proactively
+    post the intake question before any /manager session exists — if the
+    human answers it right there, a /manager run starting later must not
+    post a second, genuinely duplicate pending copy alongside the answer
+    it's about to fetch via poll_answer(). Only a 'delivered' row (fully
+    consumed by a past run) is NOT treated as a duplicate."""
     options = options or []
     with connect() as c:
         dup = c.execute(
-            "SELECT id FROM questions WHERE session_id=? AND question=? AND status='pending'",
+            "SELECT id FROM questions WHERE session_id=? AND question=? AND status IN ('pending','answered')",
             (session_id, question),
         ).fetchone()
         if dup:

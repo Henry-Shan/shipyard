@@ -1081,6 +1081,25 @@ class Handler(BaseHTTPRequestHandler):
                         t["worktree"] = wt
                         if branch:
                             t["branch"] = branch
+            # An empty board with a configured repo and no live /manager
+            # session running has nothing for the human to act on otherwise —
+            # proactively post the SAME intake question /manager itself would
+            # (identical text, so a real run later finds this one instead of
+            # duplicating it — see add_question's dedupe), so "enter your task
+            # docs" is always available, not just while a session is open.
+            INTAKE_Q = "Task docs (Notion URL, PDF, .md) — or just type the tasks"
+            if (st["repo_ok"]
+                    and not any(t["status"] != "rejected" for t in st["tasks"])
+                    and not any(q["session_id"] == "manager-intake" and q["question"] == INTAKE_Q
+                                for q in st["pending_questions"])):
+                ctx = "Paste a Notion URL, a path to a PDF/markdown file, or just type the tasks (one per line)."
+                if skill_config.get("has_web_ui") is None:
+                    ctx += ('\nHas a web frontend to test in a browser? Include "web: yes <command> <port>" '
+                            'or "web: no" — only asked once.')
+                ctx += "\nSaved for whenever you run /manager here — that's what actually starts the batch."
+                core.add_question("manager-intake", INTAKE_Q, [], ctx)
+                st["pending_questions"] = core.list_questions(only_pending=True)
+                st["questions"] = core.list_questions()
             return self._send(200, st)
         if p == "/api/image":
             return self._serve_image((qs.get("path") or [""])[0])
