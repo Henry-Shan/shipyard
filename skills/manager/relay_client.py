@@ -98,6 +98,8 @@ def _filtered_state():
         "questions": questions,
         "progress": s.get("progress", {}),
         "counts": s.get("counts", {}),
+        "paused": s.get("paused"),
+        "cap": s.get("cap"),
         "project": {
             # basename only — never the full local filesystem path
             "repo_name": os.path.basename(repo.rstrip("/")) if repo else None,
@@ -169,6 +171,19 @@ def _handle(cmd):
                 return {"ok": False, "error": "no intake question to answer"}
             _local_post(f"/api/questions/{q['id']}/answer", {"answer": answer})
             return {"ok": True, "started": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # Board CONTROL commands — not code execution (they never run claude), so
+    # they route straight through to the local API without the arm gate. Only
+    # post_intake, which actually starts an agent, is gated.
+    if ctype in ("pause", "resume", "clear_all", "set_cap"):
+        route = {"pause": "/api/pause", "resume": "/api/resume",
+                 "clear_all": "/api/reset", "set_cap": "/api/cap"}[ctype]
+        body = {"cap": payload.get("cap")} if ctype == "set_cap" else {}
+        try:
+            _local_post(route, body)
+            return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
