@@ -15,3 +15,5 @@ __pycache__/
 .notion_blocked_notice
 .DS_Store
 .gstack/
+.env
+.env.*

@@ -3,3 +3,7 @@ node_modules/
 .env
 .env.local
 package-lock.json
+.vercel
+.env*
+# Vendored skill docs — re-fetchable from skills-lock.json (like node_modules).
+.agents/
