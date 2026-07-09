@@ -136,8 +136,23 @@ let CAPV=1,PAUSED=false;
 function bumpCap(d){const n=Math.max(1,CAPV+d);CAPV=n;$('#capv').textContent=n;sendCmd('set_cap',{cap:n});}
 function togglePause(){sendCmd(PAUSED?'resume':'pause');}
 function clearAll(){if(confirm('Remove ALL tasks, questions and history from this project’s board?\n\nGit worktrees untouched. Can’t be undone.'))sendCmd('clear_all');}
-async function sendDoc(btn){const doc=$('#docbox').value.trim();if(!doc)return;btn.disabled=true;$('#sent').textContent='sending…';
-  const r=await sendCmd('post_intake',{answer:doc});btn.disabled=false;$('#sent').textContent=r.ok?'sent ✓':'sent';$('#docbox').value='';}
+async function sendDoc(btn){
+  const doc=$('#docbox').value.trim();if(!doc)return;
+  btn.disabled=true;$('#sent').textContent='sending…';
+  const r=await sendCmd('post_intake',{answer:doc});$('#docbox').value='';
+  const id=r&&r.id;
+  for(let i=0;i<8&&id;i++){                     // wait for the machine's actual outcome
+    await new Promise(z=>setTimeout(z,700));
+    let rr;try{rr=await api('/api/dash/result?token='+enc(TOKEN)+'&cmd_id='+id);}catch(e){continue;}
+    const res=rr&&rr.result;if(!res)continue;
+    if(res.started)$('#sent').textContent='▶ started on your machine';
+    else if(res.refused==='not_armed')$('#sent').textContent='⚠ not started — machine isn’t armed (see below)';
+    else if(res.ok===false)$('#sent').textContent='not started'+(res.error?': '+res.error:'');
+    else $('#sent').textContent='sent ✓';
+    btn.disabled=false;return;
+  }
+  btn.disabled=false;$('#sent').textContent='sent — waiting for your machine';
+}
 function taskCard(t){const c={done:'var(--ready)',running:'var(--prog)',failed:'var(--fail)',needs_input:'var(--wait)'}[t.status]||'var(--ink)';
   return `<div class="task"><span class="st" style="color:${c}">${esc(t.status)}${t.tier!=null?' · T'+t.tier:''}</span>
     <div style="margin-top:5px"><b>${esc(t.title)}</b></div>${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:''}</div>`;}
