@@ -961,14 +961,20 @@ def _link_env_files(wt):
 
 
 def _prepare_node_modules(wt):
-    """Next 16 / Turbopack refuses a `node_modules` that is a symlink pointing
-    OUTSIDE the project root — which is exactly how some worktrees are set up
-    (node_modules -> the main checkout, to skip a per-worktree install). It
-    crashes with 'Symlink [project]/node_modules is invalid, it points out of
-    the filesystem root'. Replace any such symlink with a REAL directory via an
-    APFS copy-on-write clone (cheap on disk, ~one-time per worktree), so the
-    frontend can boot. Idempotent: a real dir, or a link that stays inside the
-    worktree, is left alone."""
+    """Ensure the worktree has a REAL node_modules that Turbopack accepts.
+
+    Worktrees show up in two broken shapes, both fixed the same way — clone the
+    main checkout's node_modules in as a real directory (APFS copy-on-write:
+    cheap on disk, ~one-time per worktree):
+      - node_modules is a SYMLINK to the main checkout (set up that way to skip
+        an install). Next 16 / Turbopack rejects a node_modules symlink that
+        escapes the project root ('points out of the filesystem root').
+      - node_modules is ABSENT — the worktree was never installed, so even
+        'turbo' (node_modules/.bin/turbo) is missing ('turbo: command not found').
+    A real, populated node_modules (or a link that stays inside the worktree) is
+    left alone."""
+    if not os.path.isdir(os.path.join(REPO, "node_modules")):
+        return []          # nothing to clone from; not a node project set up here
     fixed = []
     bases = [wt]
     for sub in ("apps", "packages"):
@@ -978,21 +984,31 @@ def _prepare_node_modules(wt):
     wt_abs = os.path.abspath(wt)
     for base in bases:
         nm = os.path.join(base, "node_modules")
-        if not os.path.islink(nm):
-            continue
-        target = os.path.realpath(nm)
-        if not os.path.isdir(target) or os.path.abspath(target).startswith(wt_abs + os.sep):
+        if os.path.islink(nm):
+            target = os.path.realpath(nm)
+            # a link that resolves inside the worktree is fine — leave it
+            if os.path.abspath(target).startswith(wt_abs + os.sep):
+                continue
+        elif os.path.isdir(nm):
+            continue          # already a real dir
+        elif base != wt:
+            continue          # only auto-populate a MISSING root node_modules
+                              # (monorepos hoist deps there, not per-workspace)
+        rel = os.path.relpath(base, wt)
+        src = os.path.join(REPO, rel, "node_modules")
+        if not os.path.isdir(src):
             continue
         tmp = nm + ".materializing"
         subprocess.run(["rm", "-rf", tmp], capture_output=True)
         # -c = APFS clonefile (copy-on-write); fall back to a plain deep copy.
-        r = subprocess.run(["cp", "-Rc", target, tmp], capture_output=True, text=True)
+        r = subprocess.run(["cp", "-Rc", src, tmp], capture_output=True, text=True)
         if r.returncode != 0:
             subprocess.run(["rm", "-rf", tmp], capture_output=True)
-            r = subprocess.run(["cp", "-R", target, tmp], capture_output=True, text=True)
+            r = subprocess.run(["cp", "-R", src, tmp], capture_output=True, text=True)
         if r.returncode == 0:
             try:
-                os.remove(nm)            # drop the symlink…
+                if os.path.lexists(nm):
+                    os.remove(nm)        # drop the symlink…
                 os.rename(tmp, nm)       # …and atomically swap in the real dir
                 fixed.append(base)
             except OSError:
@@ -1000,6 +1016,36 @@ def _prepare_node_modules(wt):
         else:
             subprocess.run(["rm", "-rf", tmp], capture_output=True)
     return fixed
+
+
+def _link_workspace_dist(wt):
+    """Monorepo workspace packages (packages/<name>) are consumed through a
+    node_modules symlink, but their build output (dist/) is gitignored — so a
+    fresh worktree has the source without a build, and the app fails to resolve
+    e.g. '@scope/shared-core' ('Module not found'). Copy each package's built
+    dist from the main checkout wherever the worktree lacks it (CoW clone).
+    Idempotent; a no-op for projects with no packages/ dir. Note: a preview
+    reuses the main checkout's build for any shared package the branch itself
+    didn't rebuild — fine for a visual preview, not a substitute for CI."""
+    copied = []
+    pkgroot = os.path.join(REPO, "packages")
+    if not os.path.isdir(pkgroot):
+        return copied
+    for name in os.listdir(pkgroot):
+        src = os.path.join(pkgroot, name, "dist")
+        pkgdir = os.path.join(wt, "packages", name)
+        dst = os.path.join(pkgdir, "dist")
+        if not os.path.isdir(src) or not os.path.isdir(pkgdir):
+            continue
+        if os.path.isdir(dst) and os.listdir(dst):
+            continue  # the worktree already built this package
+        if os.path.lexists(dst):
+            subprocess.run(["rm", "-rf", dst], capture_output=True)
+        r = subprocess.run(["cp", "-Rc", src, dst], capture_output=True)
+        if r.returncode != 0:
+            subprocess.run(["cp", "-R", src, dst], capture_output=True)
+        copied.append(name)
+    return copied
 
 
 def start_test_server(wt):
@@ -1018,6 +1064,7 @@ def start_test_server(wt):
     os.makedirs(logd, exist_ok=True)
     _link_env_files(wt)          # gitignored .env(s) the servers read at startup
     _prepare_node_modules(wt)    # turn a Turbopack-hostile node_modules symlink into a real dir
+    _link_workspace_dist(wt)     # give monorepo workspace packages their gitignored build output
 
     def _launch(command, logname):
         # No `exec`: the command may be a compound line (e.g.
