@@ -279,9 +279,12 @@
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
-  .docrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line)}
+  .docrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line);
+    cursor:pointer;transition:background .1s}
   .docrow:last-child{border-bottom:none}
+  .docrow:hover{background:#FFF6C7}
   .docrow.active{background:rgba(46,166,107,.08);border-left:3px solid var(--ready);padding-left:7px}
+  .docrow.active:hover{background:rgba(46,166,107,.16)}
   .docinfo{flex:1;min-width:0}
   .docinfo b{font-size:13px}
   .docwhen{font-size:11px;color:var(--dim)}
@@ -666,10 +669,10 @@ async function showDocs(){
   const rows=[...(d.docs||[])].reverse().map(doc=>{
     const icon=doc.kind==="pdf"?"📕":"📘";
     const isActive=doc.id===d.active;
-    return `<div class="docrow${isActive?" active":""}">
-      <div class="docinfo"><b>${icon} ${esc(doc.title)}</b><div class="docwhen">${esc(ago(doc.created_at))}</div></div>
-      ${isActive?'<span class="tbtn primary" style="visibility:hidden">Show</span>'
-                :`<button class="tbtn primary" onclick="activateDoc(${doc.id})">Show</button>`}
+    // The whole row is clickable — open any past doc to go in and navigate it.
+    return `<div class="docrow${isActive?" active":""}" onclick="activateDoc(${doc.id})" title="open this doc and navigate it">
+      <div class="docinfo"><b>${icon} ${esc(doc.title)}</b><div class="docwhen">${esc(ago(doc.created_at))}${isActive?" · showing now":""}</div></div>
+      <span class="tbtn primary">${isActive?"Viewing":"Open →"}</span>
     </div>`;
   }).join("") || `<p class="ntext" style="color:var(--dim)">No task docs ingested yet.</p>`;
   $("#modal-title").textContent="Task docs";
