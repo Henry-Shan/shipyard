@@ -848,6 +848,7 @@ def _testserver_error():
         return ""
     tail = lines[-60:]
     for keys in (("EADDRINUSE", "address already in use", "already running"),
+                 ("points out of the filesystem root", "TurbopackInternalError"),
                  ("FATAL", "panic:"), ("command not found", "not found"),
                  ("npm error", "Lifecycle script"),
                  ("Error:", "error:"), ("exit status",)):
@@ -959,6 +960,48 @@ def _link_env_files(wt):
     return linked
 
 
+def _prepare_node_modules(wt):
+    """Next 16 / Turbopack refuses a `node_modules` that is a symlink pointing
+    OUTSIDE the project root — which is exactly how some worktrees are set up
+    (node_modules -> the main checkout, to skip a per-worktree install). It
+    crashes with 'Symlink [project]/node_modules is invalid, it points out of
+    the filesystem root'. Replace any such symlink with a REAL directory via an
+    APFS copy-on-write clone (cheap on disk, ~one-time per worktree), so the
+    frontend can boot. Idempotent: a real dir, or a link that stays inside the
+    worktree, is left alone."""
+    fixed = []
+    bases = [wt]
+    for sub in ("apps", "packages"):
+        d = os.path.join(wt, sub)
+        if os.path.isdir(d):
+            bases += [os.path.join(d, x) for x in os.listdir(d)]
+    wt_abs = os.path.abspath(wt)
+    for base in bases:
+        nm = os.path.join(base, "node_modules")
+        if not os.path.islink(nm):
+            continue
+        target = os.path.realpath(nm)
+        if not os.path.isdir(target) or os.path.abspath(target).startswith(wt_abs + os.sep):
+            continue
+        tmp = nm + ".materializing"
+        subprocess.run(["rm", "-rf", tmp], capture_output=True)
+        # -c = APFS clonefile (copy-on-write); fall back to a plain deep copy.
+        r = subprocess.run(["cp", "-Rc", target, tmp], capture_output=True, text=True)
+        if r.returncode != 0:
+            subprocess.run(["rm", "-rf", tmp], capture_output=True)
+            r = subprocess.run(["cp", "-R", target, tmp], capture_output=True, text=True)
+        if r.returncode == 0:
+            try:
+                os.remove(nm)            # drop the symlink…
+                os.rename(tmp, nm)       # …and atomically swap in the real dir
+                fixed.append(base)
+            except OSError:
+                subprocess.run(["rm", "-rf", tmp], capture_output=True)
+        else:
+            subprocess.run(["rm", "-rf", tmp], capture_output=True)
+    return fixed
+
+
 def start_test_server(wt):
     if not os.path.isdir(wt):
         return None
@@ -973,7 +1016,8 @@ def start_test_server(wt):
         time.sleep(0.2)
     logd = os.path.join(LOG_DIR, "testserver")
     os.makedirs(logd, exist_ok=True)
-    _link_env_files(wt)   # gitignored .env(s) the servers read at startup
+    _link_env_files(wt)          # gitignored .env(s) the servers read at startup
+    _prepare_node_modules(wt)    # turn a Turbopack-hostile node_modules symlink into a real dir
 
     def _launch(command, logname):
         # No `exec`: the command may be a compound line (e.g.
