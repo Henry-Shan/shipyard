@@ -894,6 +894,27 @@ def stop_test_server():
         pass
 
 
+def _link_env_files(wt):
+    """Symlink the project's gitignored env files (config `env_files`, paths
+    relative to the repo root — e.g. "apps/server/.env") from the main checkout
+    into the worktree. A git worktree never carries gitignored files, so a
+    server that reads .env at startup would otherwise crash on missing secrets.
+    Read live so a just-saved env_files takes effect without a restart."""
+    linked = []
+    for rel in (skill_config.get("env_files") or []):
+        src = os.path.join(REPO, rel)
+        dst = os.path.join(wt, rel)
+        if not os.path.exists(src) or os.path.lexists(dst):
+            continue  # nothing to link, or the worktree already has its own
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.symlink(os.path.abspath(src), dst)
+            linked.append(rel)
+        except OSError:
+            pass
+    return linked
+
+
 def start_test_server(wt):
     if not os.path.isdir(wt):
         return None
@@ -905,10 +926,15 @@ def start_test_server(wt):
     time.sleep(1)  # let the old process release its locks/port before relaunch
     logd = os.path.join(LOG_DIR, "testserver")
     os.makedirs(logd, exist_ok=True)
+    _link_env_files(wt)   # gitignored .env(s) the servers read at startup
 
     def _launch(command, logname):
+        # No `exec`: the command may be a compound line (e.g.
+        # "cd apps/server && go run main.go"), and `exec cd …` fails because cd
+        # is a shell builtin, not a program — which silently kills the launch.
+        # start_new_session + killpg (in stop_test_server) still reaps children.
         return subprocess.Popen(
-            ["bash", "-c", f"cd '{wt}' && exec {command}"],
+            ["bash", "-c", f"cd '{wt}' && {command}"],
             stdin=subprocess.DEVNULL,
             stdout=open(os.path.join(logd, logname), "w"),
             stderr=subprocess.STDOUT, start_new_session=True).pid
