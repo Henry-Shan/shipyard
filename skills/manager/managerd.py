@@ -848,7 +848,8 @@ def _testserver_error():
         return ""
     tail = lines[-60:]
     for keys in (("EADDRINUSE", "address already in use", "already running"),
-                 ("FATAL", "panic:"), ("npm error", "Lifecycle script"),
+                 ("FATAL", "panic:"), ("command not found", "not found"),
+                 ("npm error", "Lifecycle script"),
                  ("Error:", "error:"), ("exit status",)):
         for ln in reversed(tail):
             if any(k in ln for k in keys):
@@ -873,21 +874,64 @@ def test_server_info():
     return info
 
 
-def stop_test_server():
-    info = test_server_info()
-    if info:
-        for pid in info.get("pids", []):
+def _free_port(port):
+    """SIGKILL whatever is LISTENing on a TCP port (frees it immediately).
+
+    -sTCP:LISTEN is essential: a bare `lsof -ti tcp:PORT` also matches CLIENT
+    connections to that port — e.g. the user's browser tab open on the dev
+    server — so without it we'd kill Chrome, not the server."""
+    if port:
+        subprocess.run(f"lsof -ti tcp:{port} -sTCP:LISTEN | xargs kill -9 2>/dev/null",
+                       shell=True)
+
+
+def _kill_under_cwd(wt):
+    """Kill every process whose working directory is inside this worktree.
+
+    This is what catches the compiled `go run` binary: once `go run` itself is
+    killed the binary is orphaned (reparented to init) and keeps holding its
+    ports, and its argv is a go-build temp path — so neither the process group
+    nor `pkill -f <worktree>` reaches it. Its CWD, however, is still the
+    worktree. Matched via a single `lsof -d cwd` pass (no slow tree walk)."""
+    wt = os.path.abspath(wt)
+    try:
+        out = subprocess.run(["lsof", "-d", "cwd", "-Fpn"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception:
+        return
+    pid = None
+    for line in out.splitlines():
+        if line[:1] == "p":
+            pid = line[1:]
+        elif line[:1] == "n" and pid and line[1:].startswith(wt):
             try:
-                os.killpg(pid, signal.SIGTERM)
-            except OSError:
+                os.kill(int(pid), signal.SIGKILL)
+            except (OSError, ValueError):
+                pass
+
+
+def stop_test_server(wt=None):
+    """Tear down the running test server AND any stragglers that could hold its
+    ports — orphaned binaries from a prior run or a daemon restart included, so
+    the next launch always starts from clean ports."""
+    info = test_server_info()
+    worktrees = set()
+    if wt:
+        worktrees.add(os.path.abspath(wt))
+    if info:
+        if info.get("worktree"):
+            worktrees.add(os.path.abspath(info["worktree"]))
+        for pid in info.get("pids", []):
+            for killer in (os.killpg, os.kill):   # whole group first, then the pid
                 try:
-                    os.kill(pid, signal.SIGTERM)
+                    killer(pid, signal.SIGKILL)
                 except OSError:
                     pass
-    # also free the dev (and backend) port definitively
-    for port in (DEV_PORT, BACKEND_PORT):
-        if port:
-            subprocess.run(f"lsof -ti tcp:{port} | xargs kill 2>/dev/null", shell=True)
+    for w in worktrees:
+        subprocess.run(["pkill", "-9", "-f", w], capture_output=True)  # argv match
+        _kill_under_cwd(w)                                             # orphaned binaries
+    _free_port(DEV_PORT)
+    _free_port(BACKEND_PORT)
     try:
         os.remove(TEST_FILE)
     except OSError:
@@ -918,12 +962,15 @@ def _link_env_files(wt):
 def start_test_server(wt):
     if not os.path.isdir(wt):
         return None
-    stop_test_server()  # one test server at a time
-    # A dev server may already be running for THIS worktree (e.g. one leaked
-    # from setup-worktree). Kill anything whose argv references the worktree
-    # path so the fresh launch can bind the canonical dev port.
-    subprocess.run(["pkill", "-f", wt], capture_output=True)
-    time.sleep(1)  # let the old process release its locks/port before relaunch
+    # Tear down the previous server AND this worktree's stragglers (orphaned
+    # go/next binaries from an earlier run or a daemon restart), then wait for
+    # the ports to actually clear before relaunching — otherwise the fresh
+    # backend can't bind and the panel reports "backend not up".
+    stop_test_server(wt)
+    for _ in range(20):   # up to ~4s for the OS to release the ports
+        if not _port_up(DEV_PORT) and not (BACKEND_PORT and _port_up(BACKEND_PORT)):
+            break
+        time.sleep(0.2)
     logd = os.path.join(LOG_DIR, "testserver")
     os.makedirs(logd, exist_ok=True)
     _link_env_files(wt)   # gitignored .env(s) the servers read at startup
