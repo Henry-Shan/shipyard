@@ -703,6 +703,15 @@ function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claud
 function copyBranchReview(branch,btn){
   navigator.clipboard.writeText(`cd ${REPO} && git diff ${BASEBR}...${branch}   # review; merge when happy: git merge --squash ${branch} && git commit`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1400);} }); }
+// PR mode, but this done task's PR was never opened (github was blocked when
+// it ran). Push the branch + open the PR now, then flip the card to the link.
+async function openPR(tid,btn){
+  const o=btn.textContent; btn.disabled=true; btn.textContent="Opening PR…";
+  let r; try{ r=await apiPost(`/api/tasks/${tid}/open-pr`,{}); }catch(e){ r={ok:false,output:String(e)}; }
+  if(r&&r.ok&&r.pr_url){ LAST_SIG=""; refresh(); return; }
+  btn.disabled=false; btn.textContent=o;
+  showModal("Couldn't open the PR",(r&&r.output)||"unknown error");
+}
 function copyTestPlan(ev,id){ ev.preventDefault(); ev.stopPropagation();
   const txt=document.getElementById(id)?.textContent||"";
   navigator.clipboard.writeText(txt).then(()=>{const b=ev.target;const o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1200);}); }
@@ -790,11 +799,18 @@ function taskActions(t){
   } else if(t.status==="blocked"){
     main=`<button class="tbtn primary" onclick="setStatus(${t.id},'queued')">Queue anyway</button>`;
   } else if(t.status==="done"){
-    // PR mode: link to the PR. Local mode (no pr_url): show the local branch
-    // with a copyable review command — the work never left the machine.
-    const finished = t.pr_url
-      ? `<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`
-      : (t.branch ? `<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick="copyBranchReview(${JSON.stringify(t.branch)},this)">⎇ ${esc(t.branch)} · copy review cmd</button>` : "");
+    // PR mode is the norm. If the PR is open, link to it. If it isn't yet
+    // (e.g. github was unreachable when the run finished), one click pushes the
+    // branch and opens the PR — never the local "copy review cmd", which only
+    // belongs to a project deliberately kept in local (no-PR) mode.
+    let finished="";
+    if(t.pr_url){
+      finished=`<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`;
+    } else if(t.branch && PUSHMODE!=="local"){
+      finished=`<button class="tbtn primary" onclick="openPR(${t.id},this)" title="push this branch to GitHub and open its pull request">Open PR to merge ↗</button>`;
+    } else if(t.branch){
+      finished=`<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick="copyBranchReview(${JSON.stringify(t.branch)},this)">⎇ ${esc(t.branch)} · copy review cmd</button>`;
+    }
     main=`${finished} ${tb}`;
   } else if(t.status==="running"||t.status==="parked"){ main=tb; }
   const primaryRow=main.trim()?`<div class="tact">${main}</div>`:"";

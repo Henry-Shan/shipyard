@@ -789,6 +789,38 @@ DEV_COMMAND = CFG["dev_command"]
 WORKTREE_BASE = CFG["worktree_dir"]
 
 
+def open_pr(branch, worktree):
+    """Push a finished task's branch and open (or find) its GitHub PR.
+
+    Used by the panel's "Open PR to merge" button in PR mode when a done task
+    has a branch but no PR yet — typically because the network blocked github
+    at the moment the run finished. Idempotent: an existing PR is reused, never
+    duplicated, so it's also safe to click for several tasks that share one
+    branch (a batched fix). Runs inside the worktree so gh resolves the right
+    branch + remote. Returns (ok, pr_url, log)."""
+    cwd = worktree if worktree and os.path.isdir(worktree) else REPO
+    log = []
+
+    def run(args):
+        r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+        log.append("$ " + " ".join(args) + "\n" + (r.stdout + r.stderr).strip())
+        return r
+
+    if run(["git", "push", "-u", "origin", branch]).returncode != 0:
+        return False, None, "\n".join(log)
+    # Reuse an existing PR for this branch if there is one; else open a new one.
+    view = run(["gh", "pr", "view", branch, "--json", "url", "-q", ".url"])
+    url = view.stdout.strip() if view.returncode == 0 else ""
+    if not url:
+        create = run(["gh", "pr", "create", "--base", BASE_BRANCH,
+                      "--head", branch, "--fill"])
+        if create.returncode != 0:
+            return False, None, "\n".join(log)
+        m = re.search(r"https://github\.com/\S+/pull/\d+", create.stdout)
+        url = m.group(0) if m else ""
+    return bool(url), (url or None), "\n".join(log)
+
+
 def _port_up(port):
     s = socket.socket()
     s.settimeout(0.3)
@@ -1669,6 +1701,26 @@ class Handler(BaseHTTPRequestHandler):
                 stop_test_server()
             core.delete_task(tid)
             return self._send(200, {"ok": True, "output": out})
+        if p.startswith("/api/tasks/") and p.endswith("/open-pr"):
+            # PR mode: push this task's branch and open (or look up) its PR, then
+            # link EVERY task on that same branch to the PR (a batched fix shares
+            # one branch). The work already lives in the worktree; this just gets
+            # it onto GitHub as a PR when the original run couldn't.
+            tid = int(p.split("/")[3])
+            t = core.get_task(tid)
+            if not t:
+                return self._send(404, {"ok": False, "error": "no such task"})
+            branch = t.get("branch")
+            if not branch:
+                return self._send(400, {"ok": False,
+                    "error": "this task has no branch — nothing to open a PR from"})
+            ok, pr_url, out = open_pr(branch, t.get("worktree"))
+            if ok and pr_url:
+                for other in core.list_tasks():
+                    if (other.get("branch") or "") == branch and not other.get("pr_url"):
+                        core.update_task(other["id"], pr_url=pr_url)
+            return self._send(200 if ok else 502,
+                              {"ok": ok, "pr_url": pr_url, "output": out})
         if p.startswith("/api/tasks/") and p.endswith("/delete"):
             # "Just delete this" — abandon a task from ANY state: stop its servers,
             # remove the worktree, FORCE-delete the branch (even if unmerged, since
