@@ -39,6 +39,7 @@ Parked runs appear in the inbox; answer them there.
 | `manager_core.py` | SQLite queue + suggestions inbox + relay state (the source of truth) |
 | `managerd.py` | HTTP daemon: serves the panel, the JSON API, the dispatcher loop, and the relay |
 | `dispatch.sh` | launches one headless `/ship-task` run with the relay preamble injected |
+| `auto-manager.sh` | launches one headless `/manager` ingest run — triggered by the daemon itself when the panel's task-doc question is answered directly on the website, no terminal needed |
 | `dedup_index.py` | deterministic already-shipped pre-filter (git log + archive) |
 | `archive.py` | persists each finished run (log/diff/summary) into `archive_dir` |
 | `notion_ingest.py` | optional Notion-page ingest (needs the user's Notion connector) |
@@ -56,17 +57,36 @@ override for dispatched runs).
 
 ## Multiple projects
 
-One daemon, one port, any number of projects — click **📁 Projects** in the
-panel header to see all of them and switch, or add a new one (an existing
-repo, or a plain folder to create one at). This is purely a panel/daemon
-action; no `/manager` session is needed to add or switch projects, only to
-actually run a batch inside one. Each project gets its own state under
-`projects/<slug>/` (`config.json` + `manager.db`); `gh_available` and
-`panel_port` stay in the top-level `config.json` since those are machine-level
-facts, not per-project ones. `projects.json` is the registry. An existing
-single-project install migrates automatically the first time the daemon boots
-with this version — the original `config.json`/`manager.db` are copied, never
-moved, so nothing is lost even if the migration is somehow re-run.
+One daemon, one port, any number of projects — click the **Review** title
+(top left of the panel) to go to the projects home page, see all of them and
+switch, or add a new one (an existing repo, or a plain folder to create one
+at). This is purely a panel/daemon action; no `/manager` session is needed to
+add or switch projects, only to actually run a batch inside one. Each project
+gets its own state under `projects/<slug>/` (`config.json` + `manager.db`);
+`gh_available` and `panel_port` stay in the top-level `config.json` since
+those are machine-level facts, not per-project ones. `projects.json` is the
+registry. An existing single-project install migrates automatically the first
+time the daemon boots with this version — the original `config.json`/
+`manager.db` are copied, never moved, so nothing is lost even if the migration
+is somehow re-run.
+
+## Answering from the website alone (no terminal)
+
+Each project's board proactively asks its task-doc question (Notion URL, PDF,
+markdown path, or typed tasks) whenever it has nothing queued and nothing
+already pending — you don't have to have run `/manager` yourself for that
+question to be there. **Answering it directly on the panel is enough to
+actually start the batch:** the daemon launches a real, unattended `/manager`
+session itself (`auto-manager.sh`, same `--dangerously-skip-permissions`
+posture as every dispatched `/ship-task` run — see the security note in the
+repo README) with your answer as its work source. Progress shows up in the
+same live feed a terminal-launched `/manager` run would produce.
+
+Single-flight: only one such auto-launched ingest run goes at a time per
+project. Answering "+ New task doc" again while one is still busy just queues
+that answer — the next time the board polls after the first run finishes, it
+notices the still-unprocessed answer and launches it automatically; nothing
+is lost, and nothing double-launches.
 
 ## API (for the agent / scripts)
 

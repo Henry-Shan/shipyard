@@ -135,9 +135,16 @@ from GitHub.
 
 Single task, no orchestration: `/ship-task "add a CSV export button to the items table"`
 
-**Working across multiple projects?** The same panel handles that — click
-**📁 Projects** to see all of them and switch, or add a new one, no `/manager`
-session needed for that step. See `skills/manager/README.md`.
+**Working across multiple projects?** The same panel handles that — click the
+**Review** title (top left) to see every project and switch, or add a new one,
+no `/manager` session needed for that step. See `skills/manager/README.md`.
+
+**You don't even need a terminal open to start a batch.** Answering the
+panel's task-doc question directly on the website — no `/manager` session
+running — makes the daemon itself launch one, headless, right then. See the
+security section below: this is the same unattended-agent posture as every
+dispatched `/ship-task` run, just triggered by a web answer instead of a
+typed command.
 
 ## ⚠ Security — read before first use
 
@@ -147,6 +154,13 @@ session needed for that step. See `skills/manager/README.md`.
 first tool prompt). Those agents can **edit files, run commands, push branches,
 and open PRs in the configured repo** — treat a batch like giving a contractor
 push access to feature branches.
+
+**This includes the panel itself.** Answering the task-doc question on the
+website — not just running `/manager` from a terminal — makes the daemon
+launch that same kind of unattended agent (`skills/manager/auto-manager.sh`,
+same `--dangerously-skip-permissions` posture). There is no confirmation
+step between answering on the panel and a real, unattended session starting
+in your configured repo.
 
 What bounds them:
 

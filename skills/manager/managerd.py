@@ -36,12 +36,17 @@ import skill_config
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, "ui")
 DISPATCH = os.path.join(HERE, "dispatch.sh")
+AUTO_MANAGER = os.path.join(HERE, "auto-manager.sh")
 # The ship-task skill is installed as a sibling of this one; resolve its scripts
 # relative to THIS file, never via an absolute repo path.
 TEARDOWN = os.path.normpath(os.path.join(HERE, "..", "ship-task", "teardown-worktree.sh"))
 # the orchestrator (/manager) Claude session id, registered at startup — persists
 # across daemon restarts so the panel's "Reconnect" button can resume it.
 MANAGER_SESSION_FILE = os.path.join(HERE, ".manager_session")
+# single-flight guard for auto-launched /manager ingest runs (see
+# launch_auto_manager below) — a flat file, not per-project, since only one
+# project is ever "active" for the whole daemon at a time.
+AUTO_MANAGER_LOCK = os.path.join(HERE, ".auto_manager.pid")
 
 
 def read_manager_session():
@@ -111,27 +116,124 @@ def notion_map_path():
 INTAKE_QUESTION = "Task docs (Notion URL, PDF, .md) — or just type the tasks"
 
 
+# How long an answered-but-undelivered intake question gets left alone before
+# it's considered stale enough to reset. Must comfortably outlast the polling
+# gap between answering here and a /manager session's next poll_answer() —
+# too short and this races with a completely normal answer that just hasn't
+# been picked up yet a few seconds later (this exact bug: /api/state's own
+# empty-board auto-trigger re-ran on the very next poll, ~1.5-4s after the
+# human answered, and reset a genuinely fresh answer back to pending before
+# anything had a chance to consume it).
+STALE_ANSWER_GRACE_SECS = 120
+
+
 def ensure_intake_question():
     """Make sure the standard task-doc intake question is actually
     answerable right now — used both by the auto-trigger (empty board) and
     the manual "+ New task doc" action (populated board). Identical text to
     what /manager's own Step 3 posts, so a real /manager run finds the same
-    row (via poll_answer) instead of a genuinely duplicate one.
+    row instead of a genuinely duplicate one.
 
-    A stale 'answered' row (someone answered it here on the panel, but no
-    /manager session ever ran to consume it via poll_answer) must NOT be
-    treated as a permanent block on asking again — that would silently make
-    "add a task doc" stop working forever the moment nobody happens to run
-    /manager right after answering. Reset it back to pending instead, so the
-    SAME row becomes answerable again. A 'delivered' row (already consumed
-    by a past run) is done for good — start a fresh one."""
+    While an auto-launched ingest run is already alive (see
+    launch_auto_manager), there is nothing new to ask for — the board should
+    show that run's own real progress instead of a redundant question card.
+
+    An 'answered' row with nothing consuming it yet is retried here too (not
+    just from the direct answer handler) — covers the case where a SECOND
+    doc was answered while a first auto-manager run was still busy, so the
+    launch was skipped at the time; once that run finishes, this poll notices
+    the still-undelivered answer and launches it. Only past that point does a
+    STALE grace period apply: genuinely nothing ever launched for a good
+    while, so reset it back to pending rather than leaving it a permanent
+    dead end. A 'delivered' row (already consumed) is done for good — start
+    a fresh one."""
+    if _auto_manager_alive():
+        return True
     existing = core.find_question("manager-intake", INTAKE_QUESTION)
     if existing and existing["status"] == "pending":
         return True
     if existing and existing["status"] == "answered":
+        if launch_auto_manager(existing["answer"]):
+            core.mark_delivered(existing["id"])
+            return True
+        age = time.time() - (existing.get("answered_at") or 0)
+        if age < STALE_ANSWER_GRACE_SECS:
+            return True   # still fresh — leave it for whatever's about to consume it
         core.reset_question(existing["id"])
         return True
     core.add_question("manager-intake", INTAKE_QUESTION, [], "")
+    return True
+
+
+def _auto_manager_alive():
+    """Is a previously-launched auto-manager ingest run still alive? Checked
+    lazily at launch time (no long-lived watcher thread) — robust to the
+    daemon itself restarting mid-run (every /manager invocation, including
+    this auto-launched one, restarts the daemon via panel-up.sh; the launched
+    `claude` child is detached — see launch_auto_manager — and outlives that
+    restart, so a stale lock file must still be checked against the real PID,
+    not assumed dead just because a new daemon process is answering now)."""
+    try:
+        pid = int(open(AUTO_MANAGER_LOCK).read().strip())
+    except (OSError, ValueError):
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        try: os.remove(AUTO_MANAGER_LOCK)
+        except OSError: pass
+        return False
+    except PermissionError:
+        return True   # exists, just owned by someone else — treat as alive
+
+
+def launch_auto_manager(source):
+    """Automatically start a real, unattended /manager ingest run the moment
+    the panel's own intake question is answered directly on the website —
+    the human doesn't have to separately open a terminal and type /manager
+    for that answer to actually get processed. Mirrors dispatch.sh's existing
+    headless-launch pattern for /ship-task (same --dangerously-skip-permissions
+    posture; see auto-manager.sh's header for the full security note).
+
+    Single-flight: skips launching a second one while one is already running
+    (checked via a PID lock file, not a long-lived watcher — see
+    _auto_manager_alive). Detached (start_new_session) so it survives the
+    daemon restart its own panel-up.sh call will normally trigger almost
+    immediately. That fast restart is what USUALLY reaps this child (once
+    reparented to init after this process dies) — but if the launch fails
+    before ever reaching that restart (bad path, missing `claude`, etc.), the
+    child exits while THIS process is still alive, and nothing else would
+    ever call wait() on it: it'd sit as a zombie whose PID still answers
+    os.kill(pid, 0), permanently wedging _auto_manager_alive() into thinking
+    a run is forever in progress. A background reaper thread closes that gap
+    unconditionally, independent of whether the daemon restarts or not."""
+    if not (source or "").strip():
+        return False
+    if _auto_manager_alive():
+        return False
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_path = os.path.join(LOG_DIR, f"auto-manager-{int(time.time())}.log")
+    try:
+        proc = subprocess.Popen(["bash", AUTO_MANAGER, source, log_path],
+                                start_new_session=True)
+    except Exception as e:
+        progress_add("", f"couldn't start the ingest session: {e}", "error")
+        return False
+    with open(AUTO_MANAGER_LOCK, "w") as f:
+        f.write(str(proc.pid))
+
+    def _reap():
+        proc.wait()
+        try:
+            if open(AUTO_MANAGER_LOCK).read().strip() == str(proc.pid):
+                os.remove(AUTO_MANAGER_LOCK)
+        except OSError:
+            pass
+    threading.Thread(target=_reap, daemon=True).start()
+
+    progress_add("Starting a Claude session to process your task doc…",
+                (source or "")[:100], "active")
     return True
 
 
@@ -1231,7 +1333,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if p.startswith("/api/questions/") and p.endswith("/answer"):
             qid = int(p.split("/")[3])
-            core.answer_question(qid, body.get("answer", ""))
+            q = core.get_question(qid)
+            answer = body.get("answer", "")
+            core.answer_question(qid, answer)
+            # The intake question is special: answering it here IS "start the
+            # batch" — nothing else will otherwise ever consume this answer.
+            # Every other question (a real ship-task run's relayed question,
+            # or a pre-dispatch ask_preference) already has its own live
+            # process polling /api/answer for it; only manager-intake needs
+            # the daemon itself to kick off a consumer.
+            if q and q["session_id"] == "manager-intake":
+                # The auto-launched session receives the answer directly as
+                # /manager's invocation argument (auto-manager.sh), never by
+                # polling /api/answer for it — so poll_answer will never mark
+                # this row 'delivered' on its own. Do it here once the launch
+                # actually starts, or the stale-answer grace period would
+                # later reset this same, already-handled row back to pending.
+                if launch_auto_manager(answer):
+                    core.mark_delivered(qid)
             return self._send(200, {"ok": True})
         if p == "/api/pause":
             open(PAUSE_FILE, "w").close()

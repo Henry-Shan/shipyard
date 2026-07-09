@@ -43,6 +43,13 @@ This package contains three Claude Code skills that work together:
 > and **never merges** — merging is always the human's action. The user should
 > read `dispatch.sh` before first use.
 >
+> **This also happens without a terminal.** Answering the panel's task-doc
+> question directly on the website — no `/manager` session running — makes
+> the daemon launch that same kind of unattended agent itself
+> (`skills/manager/auto-manager.sh`, same permission posture). There is no
+> confirmation step between answering on the panel and a real, unattended
+> session starting in the configured repo.
+>
 > **Never run `git config` (global or local) to set an identity or anything
 > else — not even a plausible-looking guess — and never link a repo to GitHub
 > (`gh repo create`, adding a remote, pushing) without asking first whether

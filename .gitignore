@@ -11,4 +11,6 @@ __pycache__/
 .manager_session
 .source_pdf
 .notion_map
+.auto_manager.pid
 .DS_Store
+.gstack/

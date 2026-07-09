@@ -356,6 +356,12 @@ def ask_if_fixed(task_id, context=""):
                         context, task_id, kind="verify_fixed")
 
 
+def get_question(question_id):
+    with connect() as c:
+        row = c.execute("SELECT * FROM questions WHERE id=?", (question_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def find_question(session_id, question):
     """The most recent question row (any status) matching this exact
     session_id+question text, or None. The caller decides what to do based
@@ -377,6 +383,19 @@ def reset_question(question_id):
     with connect() as c:
         c.execute("UPDATE questions SET answer=NULL, status='pending', answered_at=NULL WHERE id=?",
                   (question_id,))
+
+
+def mark_delivered(question_id):
+    """Mark a question as consumed WITHOUT going through poll_answer — for a
+    consumer that received the answer some other way (e.g. the daemon's
+    auto-manager launch passes the answer directly as /manager's invocation
+    argument, never polling /api/answer for it). Without this, the row would
+    sit 'answered' forever and eventually get treated as stale/undelivered
+    and reset back to pending — reopening a question that was already
+    handled."""
+    with connect() as c:
+        c.execute("UPDATE questions SET status='delivered', delivered_at=? WHERE id=?",
+                  (_now(), question_id))
 
 
 def poll_answer(session_id):
