@@ -170,6 +170,7 @@
   #pausebanner:empty{display:none}
   .banner{background:var(--wait);border-top:3px solid var(--ink);border-bottom:3px solid var(--ink);color:#fff;font-size:12.5px;font-weight:800;padding:9px 22px}
   /* needs-your-input questions */
+  .prnote{font-size:11.5px;color:var(--dim);line-height:1.45;margin:3px 0 5px}
   .qwrap{max-width:840px;margin:18px auto 0;display:flex;flex-direction:column;gap:14px}
   .intakeback{max-width:840px;margin:16px auto 0}
   .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px}
@@ -253,14 +254,23 @@
   /* Projects picker (📁 Projects button -> the shared modal) — see and open
      any registered project, or add a new one, with no /manager session
      needed for this step. */
-  .projrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line)}
+  .projrow{display:flex;flex-direction:column;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line)}
   .projrow:last-child{border-bottom:none}
   .projrow.active{background:var(--ready-bg,rgba(46,166,107,.08));border-left:3px solid var(--ready);padding-left:7px}
+  .projtop{display:flex;align-items:center;gap:10px}
   .projinfo{flex:1;min-width:0;text-decoration:none;color:inherit;display:block;cursor:pointer}
   .projinfo b{font-size:13px}
   .projpath{font-size:11px;color:var(--dim);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .projrow .tbtn:not(.danger){min-width:70px;text-align:center;box-sizing:border-box}
+  /* Actions hug the right edge and share one gap, so the trash can always lines
+     up as the rightmost column whether or not a row has an "Open →". */
+  .projacts{display:flex;align-items:center;gap:8px;flex:none}
+  .projacts .tbtn:not(.danger){min-width:78px;text-align:center;box-sizing:border-box}
+  .projweb{display:flex;align-items:center;gap:8px;padding:2px 0 2px 2px}
+  .projweb input{box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
+    padding:6px 9px;font:inherit;font-size:12px;background:var(--paper)}
+  .projweb .pwcmd{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .projweb .pwport{width:72px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
@@ -571,20 +581,48 @@ function projRow(p, active){
   // Both the name/path block and "Open →" are real <a href>s — navigating to
   // /<slug> is what actually switches the active project (server-side, in
   // do_GET); no click-handler JS needed for that part.
+  const isActive=p.slug===active;
   const pushBtn=`<button class="tbtn ${p.push_mode==="local"?"":"gh"}" title="finished work: PR mode pushes + opens a GitHub PR; local mode stops at a committed local branch"
     onclick="event.preventDefault();toggleProjectMode('${esc(p.slug)}',this)">${p.push_mode==="local"?"💻 Local":"⇧ PR"}</button>`;
-  // Same-shaped element either way (a hidden placeholder when already active)
-  // so every row's buttons line up in the same columns regardless of state.
-  const openBtn=p.slug===active
-    ?`<span class="tbtn primary" style="visibility:hidden">Open →</span>`
-    :`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`;
-  return `<div class="projrow${p.slug===active?" active":""}">
-    <a class="projinfo" href="/${encodeURIComponent(p.slug)}"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></a>
-    ${pushBtn}
-    ${openBtn}
-    <button class="tbtn danger" title="stop tracking this project — never touches your actual repo, git history, branches, or PRs"
-      onclick="event.preventDefault();removeProject('${esc(p.slug)}','${esc(p.name)}')">🗑</button>
+  // Whether this project has a browsable web frontend — when on, task cards get
+  // a live "Test this branch" → "Open app" preview, and the dev command + port
+  // to boot it become editable on the line below.
+  const webOn=p.has_web_ui===true;
+  const webBtn=`<button class="tbtn ${webOn?"":"gh"}" title="does this project have a browsable web frontend? when on, task cards get a live app preview"
+    onclick="event.preventDefault();toggleProjectWeb('${esc(p.slug)}',${webOn})">${webOn?"🌐 Web":"No web"}</button>`;
+  // No hidden placeholder: actions are right-aligned as one group, so 🗑 is
+  // always the rightmost column and there's no empty gap on the active row.
+  const openBtn=isActive?"":`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`;
+  const del=`<button class="tbtn danger" title="stop tracking this project — never touches your actual repo, git history, branches, or PRs"
+      onclick="event.preventDefault();removeProject('${esc(p.slug)}','${esc(p.name)}')">🗑</button>`;
+  const webCfg=webOn?`<div class="projweb">
+      <input class="pwcmd" value="${esc(p.dev_command||"")}" placeholder="dev command — e.g. npm run dev">
+      <input class="pwport" value="${p.dev_port!=null?esc(String(p.dev_port)):""}" placeholder="port"
+        onkeydown="if(event.key==='Enter')saveProjWeb('${esc(p.slug)}',this.parentNode.querySelector('.pwsave'))">
+      <button class="tbtn primary pwsave" onclick="saveProjWeb('${esc(p.slug)}',this)">Save</button>
+    </div>`:"";
+  return `<div class="projrow${isActive?" active":""}">
+    <div class="projtop">
+      <a class="projinfo" href="/${encodeURIComponent(p.slug)}"><b>${esc(p.name)}</b><div class="projpath">${esc(p.path)}</div></a>
+      <div class="projacts">${pushBtn}${webBtn}${openBtn}${del}</div>
+    </div>
+    ${webCfg}
   </div>`;
+}
+async function toggleProjectWeb(slug,on){
+  try{ await apiPost("/api/projects/web-config",{slug, has_web_ui:!on}); }catch(e){}
+  renderHome();
+}
+async function saveProjWeb(slug,btn){
+  const box=btn.closest(".projweb");
+  const cmd=(box.querySelector(".pwcmd").value||"").trim();
+  const portRaw=(box.querySelector(".pwport").value||"").trim();
+  const port=/^\d+$/.test(portRaw)?parseInt(portRaw,10):null;
+  const o=btn.textContent; btn.disabled=true; btn.textContent="Saving…";
+  let r; try{ r=await apiPost("/api/projects/web-config",
+    {slug, has_web_ui:true, dev_command:cmd||null, dev_port:port}); }catch(e){ r={ok:false}; }
+  btn.disabled=false; btn.textContent=(r&&r.ok)?"Saved ✓":"Save";
+  setTimeout(()=>{ if(btn) btn.textContent=o; },1500);
 }
 async function removeProject(slug,name){
   if(!confirm(`Stop tracking "${name}" here?\n\nThis only removes it from this list (and this app's own task/queue history for it) — your actual repo, git history, branches, and PRs are never touched.`))return;
@@ -780,6 +818,11 @@ function featuretestDetail(t){ const f=ftParse(t); if(!f||!f.verdict) return "";
 // quieter secondary row beneath it, smaller and visually de-emphasized. Same
 // buttons, same behavior, just a clear hierarchy instead of 6+ equal-weight
 // buttons crammed into one row.
+// A task's pr_url is only a real link when it's an http(s) URL. A blocked run
+// sometimes stores a STATUS MESSAGE there instead (e.g. "STILL BLOCKED: github
+// unreachable…") — that must never become an <a href> (it'd navigate to junk).
+const prUrl=t=>{ const u=((t&&t.pr_url)||"").trim(); return /^https?:\/\//i.test(u)?u:""; };
+const prBlockedMsg=t=>{ const u=((t&&t.pr_url)||"").trim(); return (u && !/^https?:\/\//i.test(u))?u:""; };
 function taskActions(t){
   const tb=testBtn(t);
   // Mutually exclusive with the live-app button: a project either has a page
@@ -794,7 +837,7 @@ function taskActions(t){
   let main="";
   if(t.status==="failed"){
     const resumeBtn=t.session_id?`<button class="tbtn primary" onclick="resumeTask(${t.id},this)">▶ Resume</button>`:"";
-    const prLink=t.pr_url?`<a class="tbtn gh" href="${esc(t.pr_url)}" target="_blank">partial PR ↗</a>`:"";
+    const prLink=prUrl(t)?`<a class="tbtn gh" href="${esc(prUrl(t))}" target="_blank">partial PR ↗</a>`:"";
     main=`${resumeBtn} ${prLink} <button class="tbtn gh" onclick="setStatus(${t.id},'queued')">Retry fresh</button>`;
   } else if(t.status==="blocked"){
     main=`<button class="tbtn primary" onclick="setStatus(${t.id},'queued')">Queue anyway</button>`;
@@ -804,8 +847,8 @@ function taskActions(t){
     // branch and opens the PR — never the local "copy review cmd", which only
     // belongs to a project deliberately kept in local (no-PR) mode.
     let finished="";
-    if(t.pr_url){
-      finished=`<a class="tbtn primary" href="${esc(t.pr_url)}" target="_blank">Open PR to merge ↗</a>`;
+    if(prUrl(t)){
+      finished=`<a class="tbtn primary" href="${esc(prUrl(t))}" target="_blank">Open PR to merge ↗</a>`;
     } else if(t.branch && PUSHMODE!=="local"){
       finished=`<button class="tbtn primary" onclick="openPR(${t.id},this)" title="push this branch to GitHub and open its pull request">Open PR to merge ↗</button>`;
     } else if(t.branch){
@@ -814,8 +857,12 @@ function taskActions(t){
     main=`${finished} ${tb}`;
   } else if(t.status==="running"||t.status==="parked"){ main=tb; }
   const primaryRow=main.trim()?`<div class="tact">${main}</div>`:"";
+  // Explain a done task that has no PR link: its run recorded a status message
+  // (github was unreachable) instead of a URL. The full message is the tooltip.
+  const blockedNote=(t.status==="done" && prBlockedMsg(t))
+    ?`<div class="prnote" title="${esc(prBlockedMsg(t))}">⚠ The PR wasn't opened when this ran (GitHub was unreachable). Click "Open PR to merge" to open it now.</div>`:"";
   const more=[viewBtn,reworkBtn].filter(Boolean).join(" ");
-  return `${primaryRow}<div class="tact tact-more">${more}<span class="tspacer"></span>${sess}${remove}</div>`;
+  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
 async function removeTask(tid){

@@ -184,6 +184,31 @@ def set_project_push_mode(slug, mode):
     _write_json(project_config_path(slug), cur)
 
 
+def project_web(slug):
+    """A specific project's web-preview settings, read from its own config —
+    so the projects list can show/edit them for ANY project without switching
+    into it. has_web_ui: null=undecided, true/false=decided."""
+    cfg = _read_json(project_config_path(slug), {})
+    return {"has_web_ui": cfg.get("has_web_ui"),
+            "dev_command": cfg.get("dev_command"),
+            "dev_port": cfg.get("dev_port")}
+
+
+def set_project_config(slug, updates):
+    """Merge a small whitelist of panel-settable keys into a specific project's
+    config.json — a pure per-project preference, same spirit as
+    set_project_push_mode, and works for any registered project without
+    activating it first."""
+    if not any(p["slug"] == slug for p in load_projects()["projects"]):
+        raise ValueError(f"no such project: {slug}")
+    allowed = {"has_web_ui", "dev_command", "dev_port", "push_mode"}
+    cur = _read_json(project_config_path(slug), {})
+    for k, v in updates.items():
+        if k in allowed:
+            cur[k] = v
+    _write_json(project_config_path(slug), cur)
+
+
 def add_project(path, name=None):
     """Register a new project (does NOT activate it — that's a separate,
     explicit step, same as the panel's Add vs. Open). Returns the registry

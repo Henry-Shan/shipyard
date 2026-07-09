@@ -1233,6 +1233,7 @@ class Handler(BaseHTTPRequestHandler):
             d = skill_config.load_projects()
             for proj in d["projects"]:
                 proj["push_mode"] = skill_config.project_push_mode(proj["slug"])
+                proj.update(skill_config.project_web(proj["slug"]))
             return self._send(200, d)
         if p == "/api/docs":
             # The active project's task-doc history — every source ever
@@ -1636,6 +1637,34 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._send(400, {"ok": False, "error": str(e)})
             return self._send(200, {"ok": True})
+        if p == "/api/projects/web-config":
+            # Set a project's web-preview settings (does it have a browsable
+            # frontend, and the dev command + port to boot it) straight from the
+            # projects list — for ANY project, no need to open it first.
+            slug = str(body.get("slug") or "").strip()
+            updates = {}
+            if "has_web_ui" in body:
+                updates["has_web_ui"] = bool(body["has_web_ui"])
+            if "dev_command" in body:
+                v = body["dev_command"]
+                updates["dev_command"] = (str(v).strip() or None) if v is not None else None
+            if "dev_port" in body:
+                v = body["dev_port"]
+                try:
+                    updates["dev_port"] = int(v) if v not in (None, "") else None
+                except (TypeError, ValueError):
+                    updates["dev_port"] = None
+            try:
+                skill_config.set_project_config(slug, updates)
+            except ValueError as e:
+                return self._send(400, {"ok": False, "error": str(e)})
+            # has_web_ui is read live; dev_command/dev_port are import-time
+            # globals, so only re-exec when they change for the ACTIVE project.
+            restart = (slug == _active_project_slug()
+                       and bool({"dev_command", "dev_port"} & set(updates)))
+            if restart:
+                threading.Timer(0.6, _reexec).start()
+            return self._send(200, {"ok": True, "restarting": restart})
         if p == "/api/projects/remove":
             # Stops tracking a project — never touches the actual repo, git
             # history, branches, or PRs, exactly like Clear All never touches
@@ -1716,8 +1745,14 @@ class Handler(BaseHTTPRequestHandler):
                     "error": "this task has no branch — nothing to open a PR from"})
             ok, pr_url, out = open_pr(branch, t.get("worktree"))
             if ok and pr_url:
+                def _is_url(u):
+                    return isinstance(u, str) and u.strip().lower().startswith(
+                        ("http://", "https://"))
+                # Fill EVERY task on this branch that lacks a real PR link —
+                # including ones whose pr_url holds a stale "still blocked…"
+                # status message rather than an actual URL.
                 for other in core.list_tasks():
-                    if (other.get("branch") or "") == branch and not other.get("pr_url"):
+                    if (other.get("branch") or "") == branch and not _is_url(other.get("pr_url")):
                         core.update_task(other["id"], pr_url=pr_url)
             return self._send(200 if ok else 502,
                               {"ok": ok, "pr_url": pr_url, "output": out})
