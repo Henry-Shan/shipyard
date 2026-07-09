@@ -1115,6 +1115,17 @@ function renderNotion(){
   $("#index").innerHTML=`<div class="ihead">findings · ${finds.length}</div>`+finds.map(f=>{const c=cssv(findState(f).v);
     return `<div class="irow" data-id="${esc(f.id)}"><span class="sd" style="background:${c}"></span><span class="it" title="${esc(f.text)}">${esc(f.id)} ${esc(f.text)}</span></div>`;}).join("");
   let html="";
+  // Place each pending question INLINE at its finding — in the document, right
+  // where that item lives — instead of stacking them all on top. Map every
+  // question to the finding(s) its task belongs to.
+  const findIds=new Set(finds.map(f=>f.id));
+  const qByFinding={}, placedQ=new Set();
+  for(const q of BOARD_QS){
+    const t=q.task_id!=null ? TASKS.find(x=>x.id===q.task_id) : null;
+    const fids=t ? idsOf(t.source).filter(id=>findIds.has(id)) : [];
+    for(const fid of fids){ (qByFinding[fid]=qByFinding[fid]||[]).push(q); }
+    if(fids.length) placedQ.add(q.id);
+  }
   for(const b of NMAP.blocks){
     if(b.t==="test") html+=`<h2 class="ntest">${esc(b.text)}</h2>`;
     else if(b.t==="feature") html+=`<h3 class="nfeat">${esc(b.text)}</h3>`;
@@ -1126,6 +1137,7 @@ function renderNotion(){
     else if(b.t==="finding"){ const st=findState(b), c=cssv(st.v), ts=findTasks(b.id);
       const sevv=b.sev==="bug"?"--fail":b.sev==="feature"?"--prog":"--queued", sc=cssv(sevv);
       const tasksHtml=ts.length?ts.map(t=>taskRow(t,true)).join(""):`<div class="nnotask">no task recorded yet</div>`;
+      const qHere=(qByFinding[b.id]||[]).map(questionCard).join("");   // its pending question(s), inline
       // Screenshot evidence for this finding — the actual image when captured,
       // otherwise the tester's description, shown right under the finding.
       const eviHtml=(b.evidence||[]).map(ev=>{
@@ -1140,17 +1152,17 @@ function renderNotion(){
           <span class="chev">▾</span>
           <span class="sevtag" style="color:${sc};background:${sc}22">${esc(b.sev||b.kind)} ${esc(b.id)}</span>
           ${pipelineRow(st.l)}</div>
-        <div class="nbody"><div class="nft">${mdi(b.text)}</div>${eviHtml}${tasksHtml}</div></div>`;
+        <div class="nbody"><div class="nft">${mdi(b.text)}</div>${eviHtml}${tasksHtml}${qHere}</div></div>`;
     }
   }
   if(NMAP.url && /^https?:/i.test(NMAP.url)) html+=`<div style="text-align:center;margin:22px 0 0"><a href="${esc(NMAP.url)}" target="_blank">open the source doc ↗</a></div>`;
 
-  // Pending questions ride at the very top — they block a run and need you now.
-  // (The intake question is excluded — it lives on its own "＋ New task doc" page.)
-  const qHtml=BOARD_QS.length
-    ? `<div class="qwrap"><div class="qhead">Needs your input · ${BOARD_QS.length}</div>${BOARD_QS.map(questionCard).join("")}</div>` : "";
+  // Only questions that AREN'T tied to a finding still ride on top (nothing to
+  // anchor them to in the document); the rest now render inline at their finding.
+  const orphanQs=BOARD_QS.filter(q=>!placedQ.has(q.id));
+  const qHtml=orphanQs.length
+    ? `<div class="qwrap"><div class="qhead">Needs your input · ${orphanQs.length}</div>${orphanQs.map(questionCard).join("")}</div>` : "";
   // Tasks not tied to any finding still surface here, so nothing is hidden.
-  const findIds=new Set((NMAP.findings||[]).map(f=>f.id));
   const other=TASKS.filter(t=>t.status!=="rejected" && !idsOf(t.source).some(id=>findIds.has(id)));
   const otherHtml=other.length
     ? `<div class="ndoc otherdoc"><h2 class="ntest">Other tasks · ${other.length}</h2>${other.map(t=>taskRow(t,false)).join("")}</div>` : "";
