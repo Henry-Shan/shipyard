@@ -58,7 +58,8 @@
 <script>
 const RELAY=location.origin;
 function randHex(n){const a=new Uint8Array(n/2);crypto.getRandomValues(a);return[...a].map(b=>b.toString(16).padStart(2,'0')).join('')}
-let TOKEN=localStorage.getItem('mc_token'); if(!TOKEN){TOKEN='sk_machine_'+randHex(24);localStorage.setItem('mc_token',TOKEN);}
+let TOKEN=null;                          // the active machine's token (set by auth, or token-mode fallback)
+let SB=null, USER=null, POLLING=false;   // Supabase client / logged-in user / poll guard
 let VIEW='onboard', LAST=null, ONB_SIG='', PROJ_SIG='', BOARD_READY=false, Q_SIG='';
 const $=s=>document.querySelector(s), enc=encodeURIComponent;
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -191,6 +192,79 @@ function route(){
   if(VIEW==='projects'){ renderProjects(st); return; }
   if(VIEW==='board'){ if(!BOARD_READY) renderBoardShell(); updateBoard(st); return; }
 }
-async function poll(){ try{ LAST=await api('/api/dash/state?token='+enc(TOKEN)); }catch(e){ return; } route(); }
-setInterval(poll,2000); poll();
+async function poll(){ if(!TOKEN)return; try{ LAST=await api('/api/dash/state?token='+enc(TOKEN)); }catch(e){ return; } route(); }
+function startPolling(){ if(POLLING)return; POLLING=true; setInterval(poll,2000); poll(); }
+
+// ================= auth (Supabase) — backward-compatible =================
+// If Supabase env is configured (/api/config), require login and issue
+// machine tokens per account. If NOT configured, fall back to today's
+// browser-generated token so the site keeps working.
+async function bootstrap(){
+  let cfg={}; try{ cfg=await api('/api/config'); }catch(e){}
+  if(!cfg.supabaseUrl || !cfg.supabaseAnonKey){ return tokenModeStart(); }
+  try{
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    SB = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  }catch(e){ return tokenModeStart(); }   // CDN blocked etc. — don't lock the user out
+  SB.auth.onAuthStateChange(()=>afterAuth());
+  afterAuth();
+}
+function tokenModeStart(){
+  TOKEN=localStorage.getItem('mc_token'); if(!TOKEN){TOKEN='sk_machine_'+randHex(24);localStorage.setItem('mc_token',TOKEN);}
+  startPolling();
+}
+async function afterAuth(){
+  const { data:{ session } } = await SB.auth.getSession();
+  if(!session){ USER=null; return renderLogin(); }
+  USER=session.user;
+  const saved=localStorage.getItem('mc_machine_token');
+  if(saved){ TOKEN=saved; authBar(); startPolling(); return; }
+  renderMachines();
+}
+function authBar(){
+  let el=document.getElementById('authbar');
+  if(!el){ el=document.createElement('div'); el.id='authbar'; el.style.cssText='font-size:12px;color:var(--dim);margin:0 0 8px'; document.querySelector('.wrap').insertBefore(el,$('#stage')); }
+  el.innerHTML = USER ? `signed in as <b>${esc(USER.email)}</b> · <button class="link" onclick="switchMachine()">machines</button> · <button class="link" onclick="signOut()">sign out</button>` : '';
+}
+async function renderLogin(){
+  authBar();
+  $('#stage').innerHTML=`<div class="card"><h2>Sign in</h2>
+    <p class="muted">We'll email you a magic link — no password.</p>
+    <div class="bar"><input id="email" type="email" placeholder="you@example.com" style="max-width:300px">
+      <button class="primary" onclick="sendLink(this)">Send link</button><span id="loginmsg" class="muted"></span></div></div>`;
+}
+async function sendLink(btn){
+  const email=$('#email').value.trim(); if(!email)return; btn.disabled=true;
+  const { error } = await SB.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin } });
+  btn.disabled=false; $('#loginmsg').textContent = error? ('✗ '+error.message) : 'check your email ✓';
+}
+async function signOut(){ await SB.auth.signOut(); TOKEN=null; POLLING=false; localStorage.removeItem('mc_machine_token'); }
+function switchMachine(){ localStorage.removeItem('mc_machine_token'); TOKEN=null; renderMachines(); }
+async function renderMachines(){
+  authBar();
+  const { data:machines=[], error } = await SB.from('machines').select('*').order('created_at');
+  const rows=(machines||[]).map(m=>`<div class="projrow">
+      <div class="projinfo" onclick="useMachine('${esc(m.token)}')"><b>${esc(m.name)}</b>
+        <div class="projpath">${esc(m.token.slice(0,18))}…</div></div>
+      <button class="primary" onclick="useMachine('${esc(m.token)}')">Use →</button>
+      <button class="danger" onclick="delMachine('${esc(m.id)}')">🗑</button>
+    </div>`).join('') || `<p class="muted">No machines yet — add one below.</p>`;
+  $('#stage').innerHTML=`<div class="bar" style="margin-top:6px"><h2 style="margin:0">Your machines</h2></div>
+    ${error?`<p class="warn">${esc(error.message)} — did you run schema.sql?</p>`:''}
+    ${rows}
+    <div class="card"><div class="bar"><input id="mname" placeholder="name this computer (e.g. laptop)" style="max-width:280px">
+      <button class="primary" onclick="addMachine(this)">+ Add machine</button></div></div>`;
+}
+async function addMachine(btn){
+  btn.disabled=true;
+  const name=($('#mname').value.trim())||'my computer';
+  const { error } = await SB.from('machines').insert({ name });
+  btn.disabled=false;
+  if(error){ alert('Could not add machine: '+error.message); return; }
+  renderMachines();
+}
+async function delMachine(id){ if(!confirm('Remove this machine?')) return; await SB.from('machines').delete().eq('id',id); renderMachines(); }
+function useMachine(token){ TOKEN=token; localStorage.setItem('mc_machine_token',token); VIEW='onboard'; ONB_SIG=''; authBar(); startPolling(); }
+
+bootstrap();
 </script>
