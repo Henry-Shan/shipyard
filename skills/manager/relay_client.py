@@ -89,10 +89,22 @@ def _filtered_state():
         s = _local_get("/api/state")
     except Exception:
         return None
+    try:
+        pj = _local_get("/api/projects")
+    except Exception:
+        pj = {"projects": [], "active": None}
     tasks = [{k: t.get(k) for k in _TASK_FIELDS}
              for t in s.get("tasks", []) if t.get("status") != "rejected"]
     questions = [{k: q.get(k) for k in _Q_FIELDS} for q in s.get("questions", [])]
     repo = s.get("repo") or ""
+    # The projects list for the dashboard's home page. The repo PATH is
+    # included (the user drives their own machine from their own token-gated
+    # dashboard and needs to tell projects apart) — but still nothing about
+    # the repo's CONTENTS ever crosses; this is a display label, not code.
+    projects = [{"slug": p.get("slug"), "name": p.get("name"), "path": p.get("path"),
+                 "push_mode": p.get("push_mode"),
+                 "active": p.get("slug") == pj.get("active")}
+                for p in pj.get("projects", [])]
     return {
         "tasks": tasks,
         "questions": questions,
@@ -100,6 +112,8 @@ def _filtered_state():
         "counts": s.get("counts", {}),
         "paused": s.get("paused"),
         "cap": s.get("cap"),
+        "projects": projects,
+        "active_slug": pj.get("active"),
         "project": {
             # basename only — never the full local filesystem path
             "repo_name": os.path.basename(repo.rstrip("/")) if repo else None,
@@ -181,6 +195,23 @@ def _handle(cmd):
         route = {"pause": "/api/pause", "resume": "/api/resume",
                  "clear_all": "/api/reset", "set_cap": "/api/cap"}[ctype]
         body = {"cap": payload.get("cap")} if ctype == "set_cap" else {}
+        try:
+            _local_post(route, body)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # Project management (home-page actions) — switch which project is active,
+    # stop tracking one, or flip its PR/local mode. Not code execution, so no
+    # arm gate. remove_project only stops TRACKING; it never touches the repo,
+    # branches, or PRs (same as the local panel's 🗑).
+    if ctype in ("activate_project", "remove_project", "set_push_mode"):
+        route = {"activate_project": "/api/projects/activate",
+                 "remove_project": "/api/projects/remove",
+                 "set_push_mode": "/api/projects/push-mode"}[ctype]
+        body = {"slug": payload.get("slug")}
+        if ctype == "set_push_mode":
+            body["push_mode"] = payload.get("push_mode")
         try:
             _local_post(route, body)
             return {"ok": True}
