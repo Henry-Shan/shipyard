@@ -43,7 +43,7 @@ async function api(path, opts){ const r = await fetch(path, opts); return r.json
 async function sendDoc(){
   const doc = document.getElementById("doc").value.trim(); if(!doc||!TOKEN) return;
   const sent = document.getElementById("sent"); sent.textContent = "sending…";
-  const r = await api("/dash/command", {method:"POST", headers:{"Content-Type":"application/json"},
+  const r = await api("/api/dash/command", {method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({token:TOKEN, type:"post_intake", payload:{answer:doc}})});
   sent.textContent = r.ok ? "queued for the machine ✓" : "failed";
   document.getElementById("doc").value = "";
@@ -59,7 +59,7 @@ function taskCard(t){
 async function poll(){
   const stage = document.getElementById("stage");
   if(!TOKEN){ stage.innerHTML = `<p class="muted">Paste a machine token to connect.</p>`; return; }
-  let d; try{ d = await api("/dash/state?token="+encodeURIComponent(TOKEN)); }catch(e){ return; }
+  let d; try{ d = await api("/api/dash/state?token="+encodeURIComponent(TOKEN)); }catch(e){ return; }
   document.getElementById("conn").className = "pill " + (d.online?"on":"off");
   document.getElementById("conn").textContent = d.online?"online":"offline";
   document.getElementById("machine").textContent = d.name ? "machine: "+d.name : "";

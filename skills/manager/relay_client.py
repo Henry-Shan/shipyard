@@ -40,7 +40,9 @@ RELAY_URL = os.environ.get("MANAGER_RELAY_URL", "").rstrip("/")
 TOKEN = os.environ.get("MANAGER_MACHINE_TOKEN", "").strip()
 MACHINE_NAME = os.environ.get("MANAGER_MACHINE_NAME") or os.uname().nodename
 STATE_PUSH_EVERY = 3          # seconds between metadata pushes up
-POLL_TIMEOUT = 30             # must exceed the relay's POLL_MAX_WAIT (25s)
+POLL_EVERY = 1.5             # seconds between command polls (SHORT-poll — works
+                            # against a serverless relay like Vercel that can't
+                            # hold a connection open; also fine for the local one)
 
 
 def _local_url():
@@ -112,7 +114,7 @@ def _uplink_loop():
         st = _filtered_state()
         if st is not None:
             try:
-                _http("POST", RELAY_URL + "/relay/state",
+                _http("POST", RELAY_URL + "/api/relay/state",
                       {"token": TOKEN, "name": MACHINE_NAME, "state": st})
             except Exception:
                 pass
@@ -175,10 +177,10 @@ def _handle(cmd):
 
 def _downlink_loop():
     backoff = 1
-    poll = RELAY_URL + "/relay/poll?" + urllib.parse.urlencode({"token": TOKEN})
+    poll = RELAY_URL + "/api/relay/poll?" + urllib.parse.urlencode({"token": TOKEN})
     while True:
         try:
-            r = _http("GET", poll, timeout=POLL_TIMEOUT)
+            r = _http("GET", poll, timeout=15)
             backoff = 1
         except Exception:
             time.sleep(min(backoff, 15))
@@ -186,10 +188,11 @@ def _downlink_loop():
             continue
         cmd = r.get("command")
         if not cmd:
-            continue     # long-poll timed out with nothing queued — re-poll
+            time.sleep(POLL_EVERY)   # nothing queued — wait, then poll again
+            continue
         result = _handle(cmd)
         try:
-            _http("POST", RELAY_URL + "/relay/ack",
+            _http("POST", RELAY_URL + "/api/relay/ack",
                   {"token": TOKEN, "cmd_id": cmd.get("id"), "result": result})
         except Exception:
             pass

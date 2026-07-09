@@ -2,18 +2,21 @@
 """
 relay_server.py — the hosted RELAY HUB for the manager cloud control plane.
 
-This is the ONE new networking primitive the hosted product needs (see
-../PLAN.md). It is a dumb, security-neutral message mover: it holds a
-persistent outbound long-poll from each machine's `relay_client.py`, mirrors
-the METADATA that client pushes up, and queues commands the dashboard sends
-down. It executes NOTHING and never sees code — the machine is the trust
-boundary, not this server (a compromised relay cannot, by itself, run
-anything: arming is local-only, enforced in relay_client.py).
+This is the LOCAL-DEV version of the new networking primitive the hosted
+product needs (see ../PLAN.md). It is a dumb, security-neutral message mover:
+each machine's `relay_client.py` SHORT-polls it for commands, pushes its
+METADATA snapshot up, and the dashboard queues commands down. It executes
+NOTHING and never sees code — the machine is the trust boundary, not this
+server (a compromised relay cannot, by itself, run anything: arming is
+local-only, enforced in relay_client.py).
 
-Transport is plain HTTP long-poll (not WebSocket) on purpose: the daemon
-dials OUT to here with stdlib urllib (works behind NAT, no inbound ports),
-and this server is stdlib http.server — so the whole package keeps its
-zero-pip-install property. WebSocket is a later latency optimization.
+Transport is plain HTTP short-poll: the daemon dials OUT to here with stdlib
+urllib (works behind NAT, no inbound ports), and this server is stdlib
+http.server — so the local demo keeps the package's zero-pip-install
+property. The DEPLOYABLE version of this exact API lives in ./vercel/ as
+serverless functions + Upstash Redis (short-poll is what makes it work on
+serverless, where a held long-poll couldn't). One `relay_client.py` speaks to
+both — same `/api/relay/*` + `/api/dash/*` routes.
 
 Phase 0 scope: in-memory store, dev tokens accepted as-is. Real per-user
 hashed/revocable tokens + Postgres are Phase 2 (see PLAN.md).
@@ -90,27 +93,20 @@ class Handler(BaseHTTPRequestHandler):
         p, qs = u.path, parse_qs(u.query)
         if p in ("/", "/index.html"):
             return self._serve_dashboard()
-        if p == "/relay/poll":
-            # Long-poll: block until a command is queued for this machine, or
-            # POLL_MAX_WAIT elapses (then return empty so the client re-polls).
+        if p == "/api/relay/poll":
+            # SHORT-poll: return the next queued command (or null) immediately.
+            # The client (relay_client.py) does the waiting between polls, so
+            # this matches the serverless Vercel relay's behavior exactly —
+            # one bridge works against both.
             token = (qs.get("token") or [""])[0]
             if not token:
                 return self._send(400, {"error": "token required"})
             with _LOCK:
                 m = _machine(token)
                 m["last_seen"] = time.time()
-                if m["queue"]:
-                    return self._send(200, {"command": m["queue"].popleft()})
-                ev = m["event"]
-                ev.clear()
-            got = ev.wait(POLL_MAX_WAIT)
-            with _LOCK:
-                m = _machine(token)
-                m["last_seen"] = time.time()
-                if got and m["queue"]:
-                    return self._send(200, {"command": m["queue"].popleft()})
-            return self._send(200, {"command": None})
-        if p == "/dash/state":
+                cmd = m["queue"].popleft() if m["queue"] else None
+            return self._send(200, {"command": cmd})
+        if p == "/api/dash/state":
             # what a dashboard renders — the metadata the machine last pushed up
             token = (qs.get("token") or [""])[0]
             with _LOCK:
@@ -119,13 +115,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, {"online": False, "state": {}, "name": None})
                 return self._send(200, {"online": _online(m), "name": m["name"],
                                         "state": m["state"], "state_ts": m["state_ts"]})
-        if p == "/dash/result":
+        if p == "/api/dash/result":
             token = (qs.get("token") or [""])[0]
             cid = (qs.get("cmd_id") or [""])[0]
             with _LOCK:
                 m = _MACHINES.get(token) or {}
                 return self._send(200, {"result": (m.get("results") or {}).get(cid)})
-        if p == "/relay/machines":
+        if p == "/api/relay/machines":
             # dev/debug: list known machines (no secrets)
             with _LOCK:
                 out = [{"name": m["name"], "online": _online(m),
@@ -138,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         p = u.path
         body = self._body()
         token = (body.get("token") or "").strip()
-        if p == "/relay/state":
+        if p == "/api/relay/state":
             # the machine pushes its filtered metadata snapshot up
             if not token:
                 return self._send(400, {"error": "token required"})
@@ -150,13 +146,13 @@ class Handler(BaseHTTPRequestHandler):
                 m["state"] = body.get("state", {})
                 m["state_ts"] = time.time()
             return self._send(200, {"ok": True})
-        if p == "/relay/ack":
+        if p == "/api/relay/ack":
             cid = str(body.get("cmd_id", ""))
             with _LOCK:
                 m = _machine(token)
                 m["results"][cid] = body.get("result")
             return self._send(200, {"ok": True})
-        if p == "/dash/command":
+        if p == "/api/dash/command":
             # the dashboard (user side) queues a command for the machine
             if not token:
                 return self._send(400, {"error": "token required"})

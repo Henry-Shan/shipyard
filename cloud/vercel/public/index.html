@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>manager cloud</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{font:14px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#111}
+  h1{font-size:18px} .muted{color:#6b7280;font-size:12px}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  input,textarea{border:1px solid #ccc;border-radius:8px;padding:8px 10px;font:inherit}
+  input{flex:1;min-width:220px}
+  button{border:1px solid #111;background:#111;color:#fff;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+  button.ghost{background:#fff;color:#111}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .on{background:#dcfce7;color:#166534}.off{background:#fee2e2;color:#991b1b}
+  .task{border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin:8px 0}
+  .task b{font-size:13px} .st{font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280}
+  .warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:8px 10px;font-size:13px;margin:8px 0}
+  a{color:#1d4ed8} textarea{width:100%;box-sizing:border-box} code{background:#f3f4f6;padding:1px 5px;border-radius:4px}
+</style>
+<h1>manager cloud</h1>
+
+<div class="bar">
+  <input id="token" placeholder="machine token (sk_machine_…)">
+  <button class="ghost" onclick="saveToken()">Use</button>
+  <span id="conn" class="pill off">offline</span>
+  <span id="arm" class="pill off" title="armed is set on the machine, not here">arm: ?</span>
+</div>
+<div class="muted" id="machine"></div>
+
+<div class="bar">
+  <textarea id="doc" rows="3" placeholder="Task doc — a Notion URL, a PDF/.md path on the machine, or type tasks one per line. Sending runs /manager ON THE MACHINE (only if it's armed)."></textarea>
+</div>
+<div class="bar"><button onclick="sendDoc()">Send task doc → machine</button><span id="sent" class="muted"></span></div>
+
+<div id="stage"></div>
+
+<script>
+let TOKEN = localStorage.getItem("relay_token") || new URLSearchParams(location.search).get("token") || "";
+document.getElementById("token").value = TOKEN;
+function saveToken(){ TOKEN = document.getElementById("token").value.trim(); localStorage.setItem("relay_token", TOKEN); poll(); }
+async function api(path, opts){ const r = await fetch(path, opts); return r.json(); }
+
+async function sendDoc(){
+  const doc = document.getElementById("doc").value.trim(); if(!doc||!TOKEN) return;
+  const sent = document.getElementById("sent"); sent.textContent = "sending…";
+  const r = await api("/api/dash/command", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token:TOKEN, type:"post_intake", payload:{answer:doc}})});
+  sent.textContent = r.ok ? "queued for the machine ✓" : "failed";
+  document.getElementById("doc").value = "";
+}
+
+function esc(s){ return (s||"").replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function taskCard(t){
+  return `<div class="task"><span class="st">${esc(t.status)}${t.tier!=null?" · tier "+t.tier:""}</span>
+    <div><b>${esc(t.title)}</b></div>
+    ${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:""}</div>`;
+}
+
+async function poll(){
+  const stage = document.getElementById("stage");
+  if(!TOKEN){ stage.innerHTML = `<p class="muted">Paste a machine token to connect.</p>`; return; }
+  let d; try{ d = await api("/api/dash/state?token="+encodeURIComponent(TOKEN)); }catch(e){ return; }
+  document.getElementById("conn").className = "pill " + (d.online?"on":"off");
+  document.getElementById("conn").textContent = d.online?"online":"offline";
+  document.getElementById("machine").textContent = d.name ? "machine: "+d.name : "";
+  const st = d.state || {};
+  const proj = st.project || {};
+  const armed = !!proj.armed;
+  const a = document.getElementById("arm");
+  a.className = "pill " + (armed?"on":"off"); a.textContent = "arm: " + (armed?"on":"off");
+
+  const live = (st.progress && st.progress.steps || []).slice(-1)[0];
+  const feed = live ? `<div class="task"><span class="st">activity</span><div>${esc(live.label)}</div>
+    ${live.detail?`<div class="muted">${esc(live.detail)}</div>`:""}</div>` : "";
+  const armWarn = !armed ? `<div class="warn">This machine isn't <b>armed</b> for remote runs — sending a task doc
+    queues it but won't start until someone sets <code>remote_exec_armed: true</code> in the machine's config.json.
+    On purpose: arming can only be done on the machine, never from here.</div>` : "";
+  const tasks = (st.tasks||[]);
+  const body = tasks.length ? tasks.map(taskCard).join("") : `<p class="muted">No tasks yet.</p>`;
+  stage.innerHTML = armWarn + feed + `<h3>Tasks · ${tasks.length}</h3>` + body;
+}
+setInterval(poll, 2000); poll();
+</script>
