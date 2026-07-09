@@ -171,13 +171,17 @@
   .banner{background:var(--wait);border-top:3px solid var(--ink);border-bottom:3px solid var(--ink);color:#fff;font-size:12.5px;font-weight:800;padding:9px 22px}
   /* needs-your-input questions */
   .qwrap{max-width:840px;margin:18px auto 0;display:flex;flex-direction:column;gap:14px}
+  .intakeback{max-width:840px;margin:16px auto 0}
   .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px}
   .qcard{background:#FFF8DC;border:3px solid var(--ink);border-left-width:9px;border-left-color:var(--wait);
     border-radius:var(--rl);padding:15px 17px;box-shadow:5px 5px 0 var(--ink)}
   .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-weight:800}
   .qq{margin:7px 0 4px;font-weight:900;font-size:14.5px;color:var(--ink)}
   .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px;white-space:pre-wrap}
-  .qopts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .qopts{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:6px 0}
+  /* A whole recommendation can be a paragraph — let an option wrap onto as many
+     lines as it needs inside the card instead of stretching into one long strip. */
+  .qopts .tbtn{white-space:normal;text-align:left;line-height:1.5;padding:8px 12px}
   .qcard textarea,.rwbox textarea{width:100%;box-sizing:border-box;border:2.5px solid var(--ink);border-radius:var(--r);
     padding:8px 10px;font:inherit;font-size:13px;resize:vertical;margin-top:8px;background:var(--paper)}
   .qcard textarea:focus,.rwbox textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
@@ -458,6 +462,11 @@ function toggleFind(id){
 // ============================ full task controls ==========================
 // Everything the classic panel does, brought onto the review board.
 let PAUSED=true, MANAGER_SESSION=null, QUESTIONS=[], CAP=1, COOLDOWN=0, PUSHMODE="pr";
+// BOARD_QS = the questions that actually belong in "Needs your input" (real
+// task questions). The standing intake ("add a task doc") is deliberately NOT
+// one of them — it's the "add more work" entry point, shown as its own page.
+let BOARD_QS=[], INTAKE_PAGE=false;
+const isIntake=q=>q.session_id==="manager-intake";
 // Whether the project has a browsable web frontend — a one-time project fact
 // (config has_web_ui), not guessed per task. null = not asked yet.
 let HASWEB=null;
@@ -523,7 +532,7 @@ function cycleCov(label){
   COV_CYCLE[label]=i+1;
 }
 
-async function answer(qid,text){ if(!text)return; await apiPost(`/api/questions/${qid}/answer`,{answer:text}); refresh(); }
+async function answer(qid,text){ if(!text)return; await apiPost(`/api/questions/${qid}/answer`,{answer:text}); INTAKE_PAGE=false; LAST_SIG=""; refresh(); }
 // ---------- Notion connector check: BEFORE the user submits a Notion URL as
 // a task doc, not after — catches the doomed case early (auto-launch would
 // otherwise fail deep in a headless session with no easy way to see why).
@@ -612,8 +621,9 @@ async function activateDoc(id){
   refresh();
 }
 async function newTaskDoc(btn){
-  btn.disabled=true; btn.textContent="Adding…";
+  btn.disabled=true; btn.textContent="Opening…";
   try{ await apiPost("/api/intake/new",{}); }catch(e){}
+  INTAKE_PAGE=true; LAST_SIG="";   // jump straight to the full intake page
   closeModal();
   refresh();
 }
@@ -1038,8 +1048,9 @@ function renderNotion(){
   if(NMAP.url && /^https?:/i.test(NMAP.url)) html+=`<div style="text-align:center;margin:22px 0 0"><a href="${esc(NMAP.url)}" target="_blank">open the source doc ↗</a></div>`;
 
   // Pending questions ride at the very top — they block a run and need you now.
-  const qHtml=QUESTIONS.length
-    ? `<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>` : "";
+  // (The intake question is excluded — it lives on its own "＋ New task doc" page.)
+  const qHtml=BOARD_QS.length
+    ? `<div class="qwrap"><div class="qhead">Needs your input · ${BOARD_QS.length}</div>${BOARD_QS.map(questionCard).join("")}</div>` : "";
   // Tasks not tied to any finding still surface here, so nothing is hidden.
   const findIds=new Set((NMAP.findings||[]).map(f=>f.id));
   const other=TASKS.filter(t=>t.status!=="rejected" && !idsOf(t.source).some(id=>findIds.has(id)));
@@ -1108,6 +1119,20 @@ function exampleInline(){
     <div class="exframe">${exampleDocHtml()}</div></div>`;
 }
 
+// ---------- Intake page: the intake question on its own full page, reading
+// like the "start a new project" screen but scoped to THIS folder. Reached
+// automatically on a blank board, or via "＋ New task doc". A back link shows
+// only when there's already a board to go back to.
+function renderIntakePage(q,hasBoard){
+  document.title="New task doc — manager";
+  $("#sub").textContent="new task doc";
+  $("#cov").innerHTML="";
+  $("#index").innerHTML=`<div class="ihead">new task doc</div>`;
+  const back=hasBoard?`<div class="intakeback"><button class="tbtn gh" onclick="closeIntake()">← Back to the board</button></div>`:"";
+  $("#stage").innerHTML=back+`<div class="qwrap">${questionCard(q)}</div>`;
+}
+function closeIntake(){ INTAKE_PAGE=false; LAST_SIG=""; refresh(); }
+
 // ---------- Plain mode: no doc-map and no PDF (typed-list source, or a file
 // the ingest couldn't parse). The board still shows everything that matters:
 // the live setup feed, pending questions, and every task grouped by state.
@@ -1119,11 +1144,11 @@ function renderPlain(){
     live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
   if(sig===LAST_SIG) return; LAST_SIG=sig;
   // Waiting on the user with nothing running yet? Show ONLY the question
-  // card(s) — the intake card embeds its own example-doc preview inline.
-  if(QUESTIONS.length && !live.length){
+  // card(s). (The intake question is handled separately as its own full page.)
+  if(BOARD_QS.length && !live.length){
     $("#sub").textContent="waiting for you";
     $("#cov").innerHTML=""; $("#index").innerHTML=`<div class="ihead">tasks · 0</div>`;
-    $("#stage").innerHTML=`<div class="qwrap">${QUESTIONS.map(questionCard).join("")}</div>`;
+    $("#stage").innerHTML=`<div class="qwrap">${BOARD_QS.map(questionCard).join("")}</div>`;
     return;
   }
   $("#sub").textContent=live.length?live.length+" tasks":"getting started…";
@@ -1148,12 +1173,12 @@ function renderPlain(){
   // Only the genuine "nothing happening at all" case gets this — never
   // alongside real ingest activity or a pending question, both of which
   // already explain what's going on far more accurately than this could.
-  if(!html && !PROGRESS.active && !QUESTIONS.length)
+  if(!html && !PROGRESS.active && !BOARD_QS.length)
     html=`<p class="ntext" style="color:var(--dim)">Nothing queued yet.</p>`;
   // Same rule as the doc view: a stale/stuck progress banner never covers a
   // board that already has real tasks on it.
   const setupHtml=((PROGRESS.steps||[]).length && !live.length)?`<div class="setupwrap doc">${setupCard()}</div>`:"";
-  const qHtml=QUESTIONS.length?`<div class="qwrap"><div class="qhead">Needs your input · ${QUESTIONS.length}</div>${QUESTIONS.map(questionCard).join("")}</div>`:"";
+  const qHtml=BOARD_QS.length?`<div class="qwrap"><div class="qhead">Needs your input · ${BOARD_QS.length}</div>${BOARD_QS.map(questionCard).join("")}</div>`:"";
   $("#stage").innerHTML=setupHtml+qHtml+`<div class="ndoc">${html}</div>`;
   document.querySelectorAll("#index .irow").forEach(r=>{ r.onclick=()=>{ const el=document.getElementById("task-"+r.dataset.t);
     if(el) $("#stage").scrollTo({top:Math.max(0,el.offsetTop-14),behavior:"smooth"});
@@ -1168,6 +1193,7 @@ async function refresh(){
   TASKS=s.tasks||[];
   TESTSRV=s.test_server||null;
   QUESTIONS=s.pending_questions||[];
+  BOARD_QS=QUESTIONS.filter(q=>!isIntake(q));
   PAUSED=!!s.paused; MANAGER_SESSION=s.manager_session||null;
   if(s.repo) REPO=s.repo;
   if(s.skill_dir) SKILLDIR=s.skill_dir;
@@ -1178,6 +1204,18 @@ async function refresh(){
   PROGRESS=s.progress||{steps:[],active:false,done:false};
   renderControls(s);
   LAST_ACTIVE=((s.counts&&((s.counts.running||0)+(s.counts.parked||0)))>0) || PROGRESS.active;
+  // The intake ("add a task doc") gets its own full page — like starting a new
+  // project, but in this same folder. It opens automatically on a blank board
+  // (nothing else to show), or on demand when the user hits "＋ New task doc".
+  // Either way it never sits inside "Needs your input" next to real questions.
+  const intakeQ=QUESTIONS.find(isIntake);
+  const liveNow=TASKS.filter(t=>t.status!=="rejected");
+  if(intakeQ && (INTAKE_PAGE || !liveNow.length)){
+    const isig=JSON.stringify(["intake",intakeQ.id,liveNow.length>0,!!EXAMPLES,PROGRESS.active]);
+    if(isig!==LAST_SIG){ LAST_SIG=isig; renderIntakePage(intakeQ,liveNow.length>0); }
+    return;
+  }
+  if(INTAKE_PAGE && !intakeQ) INTAKE_PAGE=false;   // intake answered → back to board
   if(s.notion){ return refreshNotion(); }   // doc-map source (Notion page or ingested .md) → doc mode
   // No doc-map and no PDF (typed-list source, an unparsed file, or still
   // loading): render the PLAIN TASK BOARD — live feed + questions + every task
