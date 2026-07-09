@@ -786,6 +786,8 @@ TEST_FILE = os.path.join(LOG_DIR, "testserver.json")
 # so the panel boots the branch under test on that same port.
 DEV_PORT = CFG["dev_port"]
 DEV_COMMAND = CFG["dev_command"]
+BACKEND_PORT = CFG.get("backend_port")
+BACKEND_COMMAND = CFG.get("backend_command")
 WORKTREE_BASE = CFG["worktree_dir"]
 
 
@@ -834,11 +836,15 @@ def _port_up(port):
 
 
 def _testserver_error():
-    """A failure signature from the dev server's log tail (first match wins)."""
-    log = os.path.join(LOG_DIR, "testserver", "dev.log")
-    try:
-        lines = open(log, errors="ignore").read().splitlines()
-    except OSError:
+    """A failure signature from the dev/backend server log tails (first match wins)."""
+    lines = []
+    for name in ("backend.log", "dev.log"):
+        try:
+            lines += open(os.path.join(LOG_DIR, "testserver", name),
+                          errors="ignore").read().splitlines()
+        except OSError:
+            pass
+    if not lines:
         return ""
     tail = lines[-60:]
     for keys in (("EADDRINUSE", "address already in use", "already running"),
@@ -857,11 +863,12 @@ def test_server_info():
         info = json.load(open(TEST_FILE))
     except (OSError, ValueError):
         return None
-    up = _port_up(DEV_PORT)
-    # The panel UI keys on web_up/backend_up; a single configured dev_command
-    # gives one health signal, so both track the same port.
-    info["web_up"] = info["backend_up"] = up
-    if not up:
+    info["web_up"] = _port_up(DEV_PORT)
+    # When a separate backend is configured, health-check its own port; if not,
+    # there's only one process, so backend just mirrors the frontend signal.
+    has_backend = bool(info.get("has_backend") and BACKEND_PORT)
+    info["backend_up"] = _port_up(BACKEND_PORT) if has_backend else info["web_up"]
+    if not info["web_up"] or (has_backend and not info["backend_up"]):
         info["error"] = _testserver_error()
     return info
 
@@ -877,8 +884,10 @@ def stop_test_server():
                     os.kill(pid, signal.SIGTERM)
                 except OSError:
                     pass
-    # also free the dev port definitively
-    subprocess.run(f"lsof -ti tcp:{DEV_PORT} | xargs kill 2>/dev/null", shell=True)
+    # also free the dev (and backend) port definitively
+    for port in (DEV_PORT, BACKEND_PORT):
+        if port:
+            subprocess.run(f"lsof -ti tcp:{port} | xargs kill 2>/dev/null", shell=True)
     try:
         os.remove(TEST_FILE)
     except OSError:
@@ -896,13 +905,22 @@ def start_test_server(wt):
     time.sleep(1)  # let the old process release its locks/port before relaunch
     logd = os.path.join(LOG_DIR, "testserver")
     os.makedirs(logd, exist_ok=True)
-    cmd = f"cd '{wt}' && exec {DEV_COMMAND}"
-    p = subprocess.Popen(["bash", "-c", cmd], stdin=subprocess.DEVNULL,
-                         stdout=open(os.path.join(logd, "dev.log"), "w"),
-                         stderr=subprocess.STDOUT, start_new_session=True)
+
+    def _launch(command, logname):
+        return subprocess.Popen(
+            ["bash", "-c", f"cd '{wt}' && exec {command}"],
+            stdin=subprocess.DEVNULL,
+            stdout=open(os.path.join(logd, logname), "w"),
+            stderr=subprocess.STDOUT, start_new_session=True).pid
+
+    pids = []
+    # Backend first — the frontend usually needs its API already listening.
+    if BACKEND_COMMAND:
+        pids.append(_launch(BACKEND_COMMAND, "backend.log"))
+    pids.append(_launch(DEV_COMMAND, "dev.log"))
     url = f"http://localhost:{DEV_PORT}"
-    json.dump({"worktree": wt, "slug": os.path.basename(wt), "pids": [p.pid],
-               "web_url": url},
+    json.dump({"worktree": wt, "slug": os.path.basename(wt), "pids": pids,
+               "web_url": url, "has_backend": bool(BACKEND_COMMAND)},
               open(TEST_FILE, "w"))
     return url
 
@@ -1645,23 +1663,27 @@ class Handler(BaseHTTPRequestHandler):
             updates = {}
             if "has_web_ui" in body:
                 updates["has_web_ui"] = bool(body["has_web_ui"])
-            if "dev_command" in body:
-                v = body["dev_command"]
-                updates["dev_command"] = (str(v).strip() or None) if v is not None else None
-            if "dev_port" in body:
-                v = body["dev_port"]
-                try:
-                    updates["dev_port"] = int(v) if v not in (None, "") else None
-                except (TypeError, ValueError):
-                    updates["dev_port"] = None
+            for cmd_key in ("dev_command", "backend_command"):
+                if cmd_key in body:
+                    v = body[cmd_key]
+                    updates[cmd_key] = (str(v).strip() or None) if v is not None else None
+            for port_key in ("dev_port", "backend_port"):
+                if port_key in body:
+                    v = body[port_key]
+                    try:
+                        updates[port_key] = int(v) if v not in (None, "") else None
+                    except (TypeError, ValueError):
+                        updates[port_key] = None
             try:
                 skill_config.set_project_config(slug, updates)
             except ValueError as e:
                 return self._send(400, {"ok": False, "error": str(e)})
-            # has_web_ui is read live; dev_command/dev_port are import-time
-            # globals, so only re-exec when they change for the ACTIVE project.
-            restart = (slug == _active_project_slug()
-                       and bool({"dev_command", "dev_port"} & set(updates)))
+            # has_web_ui is read live; the dev/backend command+port are
+            # import-time globals, so only re-exec when they change for the
+            # ACTIVE project.
+            restart = (slug == _active_project_slug() and bool(
+                {"dev_command", "dev_port", "backend_command", "backend_port"}
+                & set(updates)))
             if restart:
                 threading.Timer(0.6, _reexec).start()
             return self._send(200, {"ok": True, "restarting": restart})

@@ -191,7 +191,9 @@ def project_web(slug):
     cfg = _read_json(project_config_path(slug), {})
     return {"has_web_ui": cfg.get("has_web_ui"),
             "dev_command": cfg.get("dev_command"),
-            "dev_port": cfg.get("dev_port")}
+            "dev_port": cfg.get("dev_port"),
+            "backend_command": cfg.get("backend_command"),
+            "backend_port": cfg.get("backend_port")}
 
 
 def set_project_config(slug, updates):
@@ -201,7 +203,8 @@ def set_project_config(slug, updates):
     activating it first."""
     if not any(p["slug"] == slug for p in load_projects()["projects"]):
         raise ValueError(f"no such project: {slug}")
-    allowed = {"has_web_ui", "dev_command", "dev_port", "push_mode"}
+    allowed = {"has_web_ui", "dev_command", "dev_port", "push_mode",
+               "backend_command", "backend_port"}
     cur = _read_json(project_config_path(slug), {})
     for k, v in updates.items():
         if k in allowed:
@@ -344,6 +347,13 @@ DEFAULTS = {
     "dev_command": "npm run dev",
     # The localhost port dev_command serves on — the panel health-checks it.
     "dev_port": 3000,
+    # Optional SECOND process the app needs — e.g. a backend API the frontend
+    # talks to ("cd apps/server && go run main.go"). Started alongside
+    # dev_command from the worktree root when the panel boots a branch to test.
+    # null/"" = the project is a single process (frontend only).
+    "backend_command": None,
+    # The localhost port backend_command serves on (health-checked like dev_port).
+    "backend_port": None,
     # The full quality gate ship-task must pass before committing.
     "verify_command": "npm run lint && npm test",
     # Files (paths relative to the repo root) to symlink from the main checkout

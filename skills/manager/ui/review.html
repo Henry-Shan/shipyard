@@ -266,11 +266,15 @@
      up as the rightmost column whether or not a row has an "Open →". */
   .projacts{display:flex;align-items:center;gap:8px;flex:none}
   .projacts .tbtn:not(.danger){min-width:78px;text-align:center;box-sizing:border-box}
-  .projweb{display:flex;align-items:center;gap:8px;padding:2px 0 2px 2px}
+  .projweb{display:flex;flex-direction:column;gap:6px;padding:2px 0 5px 2px}
+  .pwline{display:flex;align-items:center;gap:8px}
+  .pwlbl{width:60px;flex:none;font-size:10px;font-weight:800;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.4px}
   .projweb input{box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:6px 9px;font:inherit;font-size:12px;background:var(--paper)}
   .projweb .pwcmd{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   .projweb .pwport{width:72px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .pwsaverow{justify-content:flex-end}
   .projadd{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
   .projadd input{flex:1;box-sizing:border-box;border:2px solid var(--ink);border-radius:7px;
     padding:7px 9px;font:inherit;font-size:13px}
@@ -395,6 +399,18 @@ function testBtn(t){
   if(TESTSRV.error) return `<span class="terr">✗ dev server crashed</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
   if(TESTSRV.web_up) return `<a class="applink" href="${TESTSRV.web_url}" target="_blank" title="${esc(TESTSRV.web_url||"")}">▶ Open app</a> <button class="tbtn gh" onclick="stopTest(this)">Stop test</button>`;
   return `<span class="tstarting"><span class="pulse"></span>starting dev server… (first boot can take a minute)</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
+}
+// Patch every card's test-button slot in place from the current TESTSRV, so a
+// dev server coming up/down only touches that one button. This is why TESTSRV
+// is kept OUT of the board's render signatures — the board must not rebuild
+// (and yank scroll + repaint every card) just because a preview started.
+function syncTestButtons(){
+  document.querySelectorAll(".tbslot").forEach(el=>{
+    const t=TASKS.find(x=>String(x.id)===el.dataset.tbtid);
+    if(!t) return;
+    const html=testBtn(t);
+    if(el.innerHTML!==html) el.innerHTML=html;
+  });
 }
 
 // ---- Before → After: a plain-language product view of what a fix did — no
@@ -595,11 +611,15 @@ function projRow(p, active){
   const openBtn=isActive?"":`<a class="tbtn primary" href="/${encodeURIComponent(p.slug)}">Open →</a>`;
   const del=`<button class="tbtn danger" title="stop tracking this project — never touches your actual repo, git history, branches, or PRs"
       onclick="event.preventDefault();removeProject('${esc(p.slug)}','${esc(p.name)}')">🗑</button>`;
+  const enter=`onkeydown="if(event.key==='Enter')saveProjWeb('${esc(p.slug)}',this.closest('.projweb').querySelector('.pwsave'))"`;
   const webCfg=webOn?`<div class="projweb">
-      <input class="pwcmd" value="${esc(p.dev_command||"")}" placeholder="dev command — e.g. npm run dev">
-      <input class="pwport" value="${p.dev_port!=null?esc(String(p.dev_port)):""}" placeholder="port"
-        onkeydown="if(event.key==='Enter')saveProjWeb('${esc(p.slug)}',this.parentNode.querySelector('.pwsave'))">
-      <button class="tbtn primary pwsave" onclick="saveProjWeb('${esc(p.slug)}',this)">Save</button>
+      <div class="pwline"><span class="pwlbl">Frontend</span>
+        <input class="pwcmd" ${enter} value="${esc(p.dev_command||"")}" placeholder="dev command — e.g. npm run dev">
+        <input class="pwport" ${enter} inputmode="numeric" value="${p.dev_port!=null?esc(String(p.dev_port)):""}" placeholder="port"></div>
+      <div class="pwline"><span class="pwlbl">Backend</span>
+        <input class="pwbcmd" ${enter} value="${esc(p.backend_command||"")}" placeholder="optional — e.g. cd apps/server && go run main.go">
+        <input class="pwbport" ${enter} inputmode="numeric" value="${p.backend_port!=null?esc(String(p.backend_port)):""}" placeholder="port"></div>
+      <div class="pwline pwsaverow"><button class="tbtn primary pwsave" onclick="saveProjWeb('${esc(p.slug)}',this)">Save</button></div>
     </div>`:"";
   return `<div class="projrow${isActive?" active":""}">
     <div class="projtop">
@@ -615,12 +635,12 @@ async function toggleProjectWeb(slug,on){
 }
 async function saveProjWeb(slug,btn){
   const box=btn.closest(".projweb");
-  const cmd=(box.querySelector(".pwcmd").value||"").trim();
-  const portRaw=(box.querySelector(".pwport").value||"").trim();
-  const port=/^\d+$/.test(portRaw)?parseInt(portRaw,10):null;
+  const val=s=>(box.querySelector(s)?.value||"").trim();
+  const num=s=>{ const v=val(s); return /^\d+$/.test(v)?parseInt(v,10):null; };
   const o=btn.textContent; btn.disabled=true; btn.textContent="Saving…";
-  let r; try{ r=await apiPost("/api/projects/web-config",
-    {slug, has_web_ui:true, dev_command:cmd||null, dev_port:port}); }catch(e){ r={ok:false}; }
+  let r; try{ r=await apiPost("/api/projects/web-config",{slug, has_web_ui:true,
+    dev_command:val(".pwcmd")||null, dev_port:num(".pwport"),
+    backend_command:val(".pwbcmd")||null, backend_port:num(".pwbport")}); }catch(e){ r={ok:false}; }
   btn.disabled=false; btn.textContent=(r&&r.ok)?"Saved ✓":"Save";
   setTimeout(()=>{ if(btn) btn.textContent=o; },1500);
 }
@@ -824,7 +844,10 @@ function featuretestDetail(t){ const f=ftParse(t); if(!f||!f.verdict) return "";
 const prUrl=t=>{ const u=((t&&t.pr_url)||"").trim(); return /^https?:\/\//i.test(u)?u:""; };
 const prBlockedMsg=t=>{ const u=((t&&t.pr_url)||"").trim(); return (u && !/^https?:\/\//i.test(u))?u:""; };
 function taskActions(t){
-  const tb=testBtn(t);
+  // The live test-server button lives in its own patchable slot so starting or
+  // stopping ONE card's dev server updates only that card (via syncTestButtons)
+  // — the rest of the board never re-renders just because a preview came up.
+  const tb=`<span class="tbslot" data-tbtid="${t.id}">${testBtn(t)}</span>`;
   // Mutually exclusive with the live-app button: a project either has a page
   // to open (tb) or it doesn't — never show both, never show neither.
   const viewBtn=(!HASWEB && (t.worktree||t.pr_url))?`<button class="tbtn gh" onclick="viewEffect(${t.id})">👀 See the effect</button>`:"";
@@ -1062,11 +1085,13 @@ function findState(f){
 }
 async function refreshNotion(){
   if(!NMAP){ try{ NMAP=await api("/api/notion-map"); }catch(e){} }
-  const tsSig = TESTSRV ? [TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error] : null;
-  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, tsSig, PAUSED, CAP, COOLDOWN>0, progSig(), HASWEB,
+  // TESTSRV is intentionally NOT in this signature — its changes are patched
+  // into the test buttons in place (syncTestButtons) so the board never rebuilds.
+  const sig=JSON.stringify(["n", NMAP&&(NMAP.findings||[]).length, PAUSED, CAP, COOLDOWN>0, progSig(), HASWEB,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]), [...REWORK_OPEN], [...TESTPLAN_OPEN],
     TASKS.map(t=>[t.id,t.status,t.progress,t.pr_url,t.source,t.worktree,t.stopped_reason,t.featuretest,t.session_id])]);
   if(sig!==LAST_SIG){ LAST_SIG=sig; renderNotion(); }
+  syncTestButtons();
 }
 function renderNotion(){
   const stage=$("#stage");
@@ -1201,11 +1226,11 @@ function closeIntake(){ INTAKE_PAGE=false; LAST_SIG=""; refresh(); }
 // the live setup feed, pending questions, and every task grouped by state.
 function renderPlain(){
   const live=TASKS.filter(t=>t.status!=="rejected");
+  // TESTSRV is deliberately omitted — patched into the buttons in place below.
   const sig=JSON.stringify(["plain",progSig(),!!EXAMPLES,PAUSED,CAP,COOLDOWN>0,HASWEB,
     QUESTIONS.map(q=>[q.id,q.status,q.answer]),[...REWORK_OPEN],[...TESTPLAN_OPEN],
-    TESTSRV&&[TESTSRV.worktree,TESTSRV.backend_up,TESTSRV.web_up,!!TESTSRV.error],
     live.map(t=>[t.id,t.status,t.progress,t.pr_url,t.worktree,t.stopped_reason,t.featuretest,t.test_plan?1:0])]);
-  if(sig===LAST_SIG) return; LAST_SIG=sig;
+  if(sig===LAST_SIG){ syncTestButtons(); return; } LAST_SIG=sig;
   // Waiting on the user with nothing running yet? Show ONLY the question
   // card(s). (The intake question is handled separately as its own full page.)
   if(BOARD_QS.length && !live.length){
