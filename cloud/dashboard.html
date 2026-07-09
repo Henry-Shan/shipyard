@@ -1,84 +1,136 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>manager cloud — relay demo</title>
+<title>manager cloud</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font:14px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#111}
-  h1{font-size:18px} .muted{color:#6b7280;font-size:12px}
-  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
-  input,textarea{border:1px solid #ccc;border-radius:8px;padding:8px 10px;font:inherit}
-  input{flex:1;min-width:220px}
-  button{border:1px solid #111;background:#111;color:#fff;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
-  button.ghost{background:#fff;color:#111}
-  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
-  .on{background:#dcfce7;color:#166534}.off{background:#fee2e2;color:#991b1b}
-  .task{border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin:8px 0}
-  .task b{font-size:13px} .st{font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280}
-  .warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:8px 10px;font-size:13px;margin:8px 0}
-  a{color:#1d4ed8} textarea{width:100%;box-sizing:border-box}
+  :root{--ink:#111;--dim:#6b7280;--line:#e5e7eb;--bg:#fff}
+  *{box-sizing:border-box}
+  body{font:15px/1.55 system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:28px 18px 80px;color:var(--ink);background:var(--bg)}
+  h1{font-size:19px;margin:0 0 2px} h2{font-size:15px;margin:22px 0 8px}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 18px}
+  .muted{color:var(--dim);font-size:12.5px}
+  .card{border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .step{display:flex;gap:12px;margin:14px 0}
+  .num{flex:none;width:24px;height:24px;border-radius:999px;background:var(--ink);color:#fff;font-size:13px;font-weight:700;display:grid;place-items:center}
+  .step .b{flex:1;min-width:0}
+  pre{background:#0d1117;color:#e6edf3;border-radius:10px;padding:12px 14px;overflow:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0 0;white-space:pre}
+  .cmdwrap{position:relative}
+  .copy{position:absolute;top:8px;right:8px;border:1px solid #30363d;background:#161b22;color:#e6edf3;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer}
+  button{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:9px;padding:9px 16px;font:inherit;font-size:14px;cursor:pointer}
+  button.ghost{background:#fff;color:var(--ink)}
+  button:disabled{opacity:.5;cursor:default}
+  input,textarea{border:1px solid #ccc;border-radius:9px;padding:9px 11px;font:inherit;width:100%}
+  textarea{resize:vertical}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .on{background:#dcfce7;color:#166534}.off{background:#f3f4f6;color:#6b7280}
+  .dot{width:7px;height:7px;border-radius:999px;background:currentColor;display:inline-block}
+  .waiting .dot{animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .task{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin:8px 0}
+  .task b{font-size:13.5px} .st{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--dim);letter-spacing:.03em}
+  .warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:11px;padding:10px 12px;font-size:13px;margin:10px 0}
+  a{color:#1d4ed8}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tok{font:12px ui-monospace,Menlo,monospace;color:var(--dim);word-break:break-all}
+  .link{background:none;border:none;color:#1d4ed8;padding:0;font:inherit;font-size:12.5px;cursor:pointer}
 </style>
-<h1>manager cloud <span class="muted">relay demo (Phase 0)</span></h1>
 
-<div class="bar">
-  <input id="token" placeholder="machine token (sk_machine_…)">
-  <button class="ghost" onclick="saveToken()">Use</button>
-  <span id="conn" class="pill off">offline</span>
-  <span id="arm" class="pill off" title="armed is set on the machine, not here">arm: ?</span>
-</div>
-<div class="muted" id="machine"></div>
-
-<div class="bar">
-  <textarea id="doc" rows="3" placeholder="Task doc — a Notion URL, a PDF/.md path on the machine, or type tasks one per line. Sending this runs /manager ON THE MACHINE (only if it's armed)."></textarea>
-</div>
-<div class="bar"><button onclick="sendDoc()">Send task doc → machine</button><span id="sent" class="muted"></span></div>
+<h1>manager cloud</h1>
+<p class="sub">Drive Claude Code on your own computer from here. Nothing runs on this
+site — your code and your Claude login never leave your machine.</p>
 
 <div id="stage"></div>
 
 <script>
-let TOKEN = localStorage.getItem("relay_token") || new URLSearchParams(location.search).get("token") || "";
-document.getElementById("token").value = TOKEN;
-function saveToken(){ TOKEN = document.getElementById("token").value.trim(); localStorage.setItem("relay_token", TOKEN); poll(); }
-async function api(path, opts){ const r = await fetch(path, opts); return r.json(); }
+const RELAY = location.origin;
+function randHex(n){const a=new Uint8Array(n/2);crypto.getRandomValues(a);return[...a].map(b=>b.toString(16).padStart(2,'0')).join('')}
+let TOKEN = localStorage.getItem('mc_token');
+if(!TOKEN){ TOKEN = 'sk_machine_' + randHex(24); localStorage.setItem('mc_token', TOKEN); }
+let MODE = null;               // 'onboard' | 'board'
+const $ = s => document.querySelector(s);
+const enc = encodeURIComponent;
+const esc = s => (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+async function api(p,o){ const r=await fetch(p,o); return r.json(); }
 
-async function sendDoc(){
-  const doc = document.getElementById("doc").value.trim(); if(!doc||!TOKEN) return;
-  const sent = document.getElementById("sent"); sent.textContent = "sending…";
-  const r = await api("/api/dash/command", {method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({token:TOKEN, type:"post_intake", payload:{answer:doc}})});
-  sent.textContent = r.ok ? "queued for the machine ✓" : "failed";
-  document.getElementById("doc").value = "";
+function connectCmd(){
+  return `MANAGER_RELAY_URL=${RELAY} \\\n`+
+         `MANAGER_MACHINE_TOKEN=${TOKEN} \\\n`+
+         `MANAGER_MACHINE_NAME="$(hostname)" \\\n`+
+         `python3 ~/.claude/skills/manager/relay_client.py`;
 }
 
-function esc(s){ return (s||"").replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-function taskCard(t){
-  return `<div class="task"><span class="st">${esc(t.status)}${t.tier!=null?" · tier "+t.tier:""}</span>
-    <div><b>${esc(t.title)}</b></div>
-    ${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:""}</div>`;
+// ---------- onboarding: "connect your computer" ----------
+function renderOnboard(){
+  MODE='onboard';
+  $('#stage').innerHTML = `
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b>Connect your computer</b>
+      <span id="conn" class="pill off waiting"><span class="dot"></span>waiting for your computer…</span>
+    </div>
+    <div class="step"><div class="num">1</div><div class="b">
+      <div>Make sure that computer has <a href="https://www.anthropic.com/claude-code" target="_blank">Claude Code</a>
+      installed &amp; signed in, the <b>manager</b> skill installed, and you've opened the panel for a project at least once
+      (<span class="muted">so the local daemon is running</span>).</div>
+    </div></div>
+    <div class="step"><div class="num">2</div><div class="b">
+      <div>Paste this into a terminal on that computer:</div>
+      <div class="cmdwrap"><button class="copy" onclick="copyCmd(this)">Copy</button><pre id="cmd">${esc(connectCmd())}</pre></div>
+    </div></div>
+    <div class="step"><div class="num">3</div><div class="b">
+      <div>This page flips to your board automatically the moment it connects.</div>
+      <div class="muted" style="margin-top:6px">This machine token is generated for you and saved in this browser —
+        keep it private (it's what pairs your computer). <button class="link" onclick="resetToken()">reset token</button></div>
+    </div></div>
+  </div>`;
+}
+function copyCmd(btn){ navigator.clipboard.writeText(connectCmd()).then(()=>{ btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent='Copy',1400); }); }
+function resetToken(){ TOKEN='sk_machine_'+randHex(24); localStorage.setItem('mc_token',TOKEN); MODE=null; renderOnboard(); }
+
+// ---------- board: the connected machine ----------
+function renderBoardShell(name){
+  MODE='board';
+  $('#stage').innerHTML = `
+  <div class="row" style="justify-content:space-between;margin-bottom:6px">
+    <span class="pill on"><span class="dot"></span>${esc(name||'machine')} · online</span>
+    <span id="arm" class="pill off">arm: ?</span>
+  </div>
+  <div class="card">
+    <b>Send work to this computer</b>
+    <textarea id="doc" rows="3" style="margin-top:8px" placeholder="A Notion URL, a PDF/.md path on that computer, or type tasks one per line."></textarea>
+    <div class="row" style="margin-top:8px"><button onclick="sendDoc(this)">Send → run /manager</button>
+      <span id="sent" class="muted"></span>
+      <button class="link" style="margin-left:auto" onclick="MODE=null;renderOnboard()">connection command</button></div>
+    <div id="armwarn"></div>
+  </div>
+  <div id="board"></div>`;
+}
+async function sendDoc(btn){
+  const doc=$('#doc').value.trim(); if(!doc) return;
+  btn.disabled=true; $('#sent').textContent='sending…';
+  const r=await api('/api/dash/command',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:TOKEN,type:'post_intake',payload:{answer:doc}})});
+  btn.disabled=false; $('#sent').textContent=r.ok?'sent to your computer ✓':'failed'; $('#doc').value='';
+}
+function taskCard(t){ return `<div class="task"><span class="st">${esc(t.status)}${t.tier!=null?' · tier '+t.tier:''}</span>
+  <div><b>${esc(t.title)}</b></div>${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:''}</div>`; }
+function updateBoard(st){
+  const proj=st.project||{}, armed=!!proj.armed;
+  const a=$('#arm'); if(a){ a.className='pill '+(armed?'on':'off'); a.textContent='arm: '+(armed?'on':'off'); }
+  const w=$('#armwarn'); if(w) w.innerHTML = armed?'' :
+    `<div class="warn">This computer isn't <b>armed</b> for remote runs, so sent work waits instead of starting.
+     To allow it, set <code>remote_exec_armed: true</code> in that project's config.json <b>on the machine</b>
+     (only doable there, never from here — that's the safety boundary).</div>`;
+  const live=(st.progress&&st.progress.steps||[]).slice(-1)[0];
+  const feed=live?`<div class="task"><span class="st">activity</span><div>${esc(live.label)}</div>${live.detail?`<div class="muted">${esc(live.detail)}</div>`:''}</div>`:'';
+  const tasks=st.tasks||[];
+  $('#board').innerHTML = feed + `<h2>Tasks · ${tasks.length}</h2>` + (tasks.length?tasks.map(taskCard).join(''):`<p class="muted">Nothing yet — send a task doc above.</p>`);
 }
 
 async function poll(){
-  const stage = document.getElementById("stage");
-  if(!TOKEN){ stage.innerHTML = `<p class="muted">Paste a machine token to connect.</p>`; return; }
-  let d; try{ d = await api("/api/dash/state?token="+encodeURIComponent(TOKEN)); }catch(e){ return; }
-  document.getElementById("conn").className = "pill " + (d.online?"on":"off");
-  document.getElementById("conn").textContent = d.online?"online":"offline";
-  document.getElementById("machine").textContent = d.name ? "machine: "+d.name : "";
-  const st = d.state || {};
-  const proj = st.project || {};
-  const armed = !!proj.armed;
-  const a = document.getElementById("arm");
-  a.className = "pill " + (armed?"on":"off"); a.textContent = "arm: " + (armed?"on":"off");
-
-  const live = (st.progress && st.progress.steps || []).slice(-1)[0];
-  const feed = live ? `<div class="task"><span class="st">activity</span><div>${esc(live.label)}</div>
-    ${live.detail?`<div class="muted">${esc(live.detail)}</div>`:""}</div>` : "";
-  const armWarn = !armed ? `<div class="warn">This machine isn't <b>armed</b> for remote runs — sending a task doc
-    will queue it but won't start until someone sets <code>remote_exec_armed: true</code> in the machine's config.json.
-    That's on purpose: arming can only be done on the machine, never from here.</div>` : "";
-  const tasks = (st.tasks||[]);
-  const body = tasks.length ? tasks.map(taskCard).join("")
-    : `<p class="muted">No tasks yet.</p>`;
-  stage.innerHTML = armWarn + feed + `<h3>Tasks · ${tasks.length}</h3>` + body;
+  let d; try{ d=await api('/api/dash/state?token='+enc(TOKEN)); }catch(e){ return; }
+  if(d.online){ if(MODE!=='board') renderBoardShell(d.name); updateBoard(d.state||{}); }
+  else{ if(MODE!=='onboard') renderOnboard(); }
 }
-setInterval(poll, 2000); poll();
+setInterval(poll,2000); poll();
 </script>
