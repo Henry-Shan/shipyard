@@ -11,5 +11,6 @@ export default async function handler(req, res) {
   if (!token) return res.status(400).json({ error: 'token required' });
   await redis.set(`seen:${token}`, Date.now(), { ex: STATE_TTL });
   const cmd = await redis.lpop(`queue:${token}`);   // FIFO; auto-deserialized
-  res.json({ command: cmd || null });
+  const armed = await redis.get(`armed:${token}`);  // cloud-controlled arm state
+  res.json({ command: cmd || null, armed: armed == 1 });
 }

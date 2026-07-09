@@ -15,11 +15,12 @@ single place where the two security guarantees are enforced:
      never puts them on the wire.
 
   2. THE ARM GATE. A relayed command that would actually run `claude` is
-     REFUSED unless the user has armed this machine LOCALLY
-     (`remote_exec_armed: true` in config.json, default false). Arming cannot
-     be set over the relay — otherwise a compromised cloud could forge it and
-     the gate would be theatre. The machine is the trust boundary, not the
-     cloud.
+     REFUSED unless the machine is armed. Arming is now CLOUD-controlled: the
+     relay reports armed=true/false on each poll (the dashboard's Arm button),
+     and this bridge obeys it (REMOTE_ARMED, default false). This was an
+     explicit product choice for a one-click web button over a machine-local
+     switch — the trade-off is that the machine token now also confers the
+     power to arm + run, so treat the token as a machine-control credential.
 
 Run:  MANAGER_RELAY_URL=https://relay.example \\
       MANAGER_MACHINE_TOKEN=sk_machine_... \\
@@ -44,15 +45,16 @@ POLL_EVERY = 1.5             # seconds between command polls (SHORT-poll — wor
                             # against a serverless relay like Vercel that can't
                             # hold a connection open; also fine for the local one)
 
+# The arm gate is now CLOUD-controlled: the relay tells us armed=true/false on
+# every poll (set by the dashboard's Arm button), and we obey it. This replaced
+# the machine-local `remote_exec_armed` config switch by explicit choice — the
+# trade is that whoever holds the machine token can arm + run code here. Default
+# False, so a machine that has never heard "armed" from the relay stays locked.
+REMOTE_ARMED = False
+
 
 def _local_url():
     return f"http://127.0.0.1:{skill_config.get('panel_port')}"
-
-
-def _armed():
-    """Read LIVE from config each call so toggling it takes effect with no
-    restart — and so a stale in-memory value can never leave the gate open."""
-    return bool(skill_config.get("remote_exec_armed"))
 
 
 def _http(method, url, body=None, timeout=15):
@@ -120,7 +122,7 @@ def _filtered_state():
             "base_branch": s.get("base_branch"),
             "push_mode": s.get("push_mode"),
             "has_web_ui": s.get("has_web_ui"),
-            "armed": _armed(),        # shown in the dashboard; settable only here
+            "armed": REMOTE_ARMED,    # cloud-controlled; reflected from the relay
         },
     }
 
@@ -144,7 +146,7 @@ def _handle(cmd):
     ctype = cmd.get("type")
     payload = cmd.get("payload") or {}
     if ctype == "ping":
-        return {"ok": True, "pong": True, "armed": _armed()}
+        return {"ok": True, "pong": True, "armed": REMOTE_ARMED}
 
     if ctype == "new_intake":
         # Safe: just makes the task-doc question available. Executes nothing.
@@ -155,20 +157,18 @@ def _handle(cmd):
             return {"ok": False, "error": str(e)}
 
     if ctype == "post_intake":
-        # This is the one that can START A RUN — gate it hard on local arming.
+        # This is the one that can START A RUN — gate it on the CLOUD arm flag
+        # (REMOTE_ARMED, set from the relay each poll by the dashboard's Arm
+        # button). Default False, so an un-armed machine refuses.
         answer = (payload.get("answer") or "").strip()
         if not answer:
             return {"ok": False, "error": "empty answer"}
-        if not _armed():
-            # Refuse to execute. Surface WHY on the local board so the human
-            # (who is the only one who can arm) sees it, and report the refusal
-            # back up so the dashboard can say "waiting for local approval".
+        if not REMOTE_ARMED:
             try:
                 _local_post("/api/progress", {
                     "label": "⚠ Remote task doc received — not started",
-                    "detail": "This machine isn't armed for remote runs. Set "
-                              "\"remote_exec_armed\": true in config.json here to "
-                              "allow it, then resend.",
+                    "detail": "This machine isn't armed. Click Arm on the "
+                              "dashboard, then resend.",
                     "status": "error"})
             except Exception:
                 pass
@@ -222,6 +222,7 @@ def _handle(cmd):
 
 
 def _downlink_loop():
+    global REMOTE_ARMED
     backoff = 1
     poll = RELAY_URL + "/api/relay/poll?" + urllib.parse.urlencode({"token": TOKEN})
     while True:
@@ -232,6 +233,7 @@ def _downlink_loop():
             time.sleep(min(backoff, 15))
             backoff *= 2
             continue
+        REMOTE_ARMED = bool(r.get("armed"))   # cloud arm state, refreshed each poll
         cmd = r.get("command")
         if not cmd:
             time.sleep(POLL_EVERY)   # nothing queued — wait, then poll again
@@ -247,7 +249,7 @@ def _downlink_loop():
 def main():
     if not RELAY_URL or not TOKEN:
         sys.exit("relay_client: set MANAGER_RELAY_URL and MANAGER_MACHINE_TOKEN")
-    print(f"relay_client: machine={MACHINE_NAME!r} armed={_armed()} "
+    print(f"relay_client: machine={MACHINE_NAME!r} armed={REMOTE_ARMED} "
           f"relay={RELAY_URL} local={_local_url()}")
     t = threading.Thread(target=_uplink_loop, daemon=True)
     t.start()

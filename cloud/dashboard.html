@@ -129,8 +129,12 @@ function renderBoardShell(){
     <button id="pausebtn" onclick="togglePause()">⏸ Pause</button>
     <button class="danger" onclick="clearAll()">🗑 Clear</button>
   </div>
-  <div class="bar" style="margin-bottom:2px"><span id="mach" class="muted"></span><span id="arm" class="pill off">arm: ?</span></div>
+  <div class="bar" style="margin-bottom:2px"><span id="mach" class="muted"></span>
+    <button id="armbtn" onclick="toggleArm()" title="allow work you send to actually run on this machine">🔒 Arm</button></div>
   <div id="qcard"></div><div id="board"></div>`;
+}
+async function sendArm(armed){ try{ await api('/api/dash/arm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,armed})}); }catch(e){} if(LAST)LAST.armed=armed; poll(); }
+function toggleArm(){ sendArm(!(LAST&&LAST.armed));
 }
 let CAPV=1,PAUSED=false;
 function bumpCap(d){const n=Math.max(1,CAPV+d);CAPV=n;$('#capv').textContent=n;sendCmd('set_cap',{cap:n});}
@@ -157,10 +161,10 @@ function taskCard(t){const c={done:'var(--ready)',running:'var(--prog)',failed:'
   return `<div class="task"><span class="st" style="color:${c}">${esc(t.status)}${t.tier!=null?' · T'+t.tier:''}</span>
     <div style="margin-top:5px"><b>${esc(t.title)}</b></div>${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:''}</div>`;}
 function updateBoard(st){
-  const proj=st.project||{},armed=!!proj.armed;
+  const proj=st.project||{},armed=!!(LAST&&LAST.armed);
   PAUSED=!!st.paused;CAPV=st.cap||CAPV||1;$('#capv').textContent=CAPV;
   $('#pausebtn').textContent=PAUSED?'▶ Resume':'⏸ Pause';$('#pausebtn').className=PAUSED?'primary':'';
-  const a=$('#arm');a.className='pill '+(armed?'on':'off');a.textContent='arm: '+(armed?'on':'off');
+  const ab=$('#armbtn');if(ab){ab.textContent=armed?'🔓 Armed':'🔒 Arm';ab.className=armed?'primary':'';}
   $('#mach').textContent=proj.repo_name?('project: '+proj.repo_name):'';
   const q=(st.questions||[]).filter(x=>x.status==='pending');
   const tasks=(st.tasks||[]).filter(t=>t.status!=='rejected');
@@ -172,7 +176,7 @@ function updateBoard(st){
       ${iq.context?`<div class="muted" style="white-space:pre-wrap">${esc(iq.context)}</div>`:''}
       <textarea id="docbox" rows="2" style="margin-top:8px" placeholder="Notion URL, a PDF/.md path on your computer, or type tasks — one per line"></textarea>
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="sendDoc(this)">Send reply</button><span id="sent" class="muted"></span></div>
-      ${armed?'':'<div class="warn">Not <b>armed</b> — this waits until you set <code>remote_exec_armed: true</code> in the project’s config.json <b>on the machine</b>. Machine-only, on purpose.</div>'}
+      ${armed?'':'<div class="warn">Not <b>armed</b> — click <b>🔒 Arm</b> above to let this machine run what you send.</div>'}
     </div>`:'';}
   $('#board').innerHTML=`<h2 style="margin-top:14px">Tasks · ${tasks.length}</h2>`+
     (tasks.length?tasks.map(taskCard).join(''):`<p class="muted">Nothing yet — reply above to start a batch.</p>`);

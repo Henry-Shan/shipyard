@@ -48,7 +48,7 @@ def _machine(token):
     if m is None:
         m = {"name": None, "state": {}, "state_ts": 0,
              "queue": deque(), "results": {}, "event": threading.Event(),
-             "last_seen": 0}
+             "last_seen": 0, "armed": False}
         _MACHINES[token] = m
     return m
 
@@ -105,16 +105,21 @@ class Handler(BaseHTTPRequestHandler):
                 m = _machine(token)
                 m["last_seen"] = time.time()
                 cmd = m["queue"].popleft() if m["queue"] else None
-            return self._send(200, {"command": cmd})
+                armed = m["armed"]
+            # armed travels DOWN to the machine each poll — it's now the relay's
+            # call (set by the dashboard's Arm button), not the machine's local
+            # config. relay_client obeys this for the post_intake gate.
+            return self._send(200, {"command": cmd, "armed": armed})
         if p == "/api/dash/state":
             # what a dashboard renders — the metadata the machine last pushed up
             token = (qs.get("token") or [""])[0]
             with _LOCK:
                 m = _MACHINES.get(token)
                 if not m:
-                    return self._send(200, {"online": False, "state": {}, "name": None})
+                    return self._send(200, {"online": False, "state": {}, "name": None, "armed": False})
                 return self._send(200, {"online": _online(m), "name": m["name"],
-                                        "state": m["state"], "state_ts": m["state_ts"]})
+                                        "state": m["state"], "state_ts": m["state_ts"],
+                                        "armed": m["armed"]})
         if p == "/api/dash/result":
             token = (qs.get("token") or [""])[0]
             cid = (qs.get("cmd_id") or [""])[0]
@@ -151,6 +156,15 @@ class Handler(BaseHTTPRequestHandler):
             with _LOCK:
                 m = _machine(token)
                 m["results"][cid] = body.get("result")
+            return self._send(200, {"ok": True})
+        if p == "/api/dash/arm":
+            # The dashboard's Arm/Disarm button. Cloud-controlled now (the
+            # user chose a pure website button over the machine-local switch),
+            # so whoever holds the token can arm+run — that is the trade.
+            if not token:
+                return self._send(400, {"error": "token required"})
+            with _LOCK:
+                _machine(token)["armed"] = bool(body.get("armed"))
             return self._send(200, {"ok": True})
         if p == "/api/dash/command":
             # the dashboard (user side) queues a command for the machine
