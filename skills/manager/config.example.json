@@ -14,5 +14,6 @@
   "push_mode": "pr",
   "has_web_ui": null,
   "memory_mcp": null,
-  "gh_available": null
+  "gh_available": null,
+  "remote_exec_armed": false
 }

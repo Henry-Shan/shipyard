@@ -347,6 +347,12 @@ DEFAULTS = {
     # copied by hand). true/false lets a fresh "create a new repo for me" flow
     # skip the GitHub-linked-vs-local question entirely and just act on it.
     "gh_available": None,
+    # SECURITY GATE for the hosted control plane (see PLAN.md / relay_client.py).
+    # When the machine is paired to a relay, a remotely-triggered task doc will
+    # only actually launch a run if this is true. Defaults FALSE and is settable
+    # ONLY here on the machine — never over the relay — so a compromised cloud
+    # can't forge it. Off = remote commands queue and wait for local approval.
+    "remote_exec_armed": False,
 }
 
 # Env overrides — same names the scripts have always honored.
