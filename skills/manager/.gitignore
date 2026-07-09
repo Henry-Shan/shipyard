@@ -12,3 +12,4 @@ __pycache__/
 .source_pdf
 .notion_map
 .auto_manager.pid
+.notion_blocked_notice

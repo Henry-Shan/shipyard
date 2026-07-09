@@ -181,6 +181,9 @@
   .qcard textarea,.rwbox textarea{width:100%;box-sizing:border-box;border:2.5px solid var(--ink);border-radius:var(--r);
     padding:8px 10px;font:inherit;font-size:13px;resize:vertical;margin-top:8px;background:var(--paper)}
   .qcard textarea:focus,.rwbox textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
+  .notionwarn{font-size:12px;line-height:1.5;color:var(--fail);background:color-mix(in srgb,var(--fail) 10%,var(--paper));
+    border:2px solid var(--fail);border-radius:8px;padding:8px 10px;margin-top:8px}
+  .notionwarn code{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   /* task action bar / feature-test / test-plan / modal */
   .ntask-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .ntask-h .tt{font-weight:800;color:var(--ink);font-size:13.5px}
@@ -521,6 +524,27 @@ function cycleCov(label){
 }
 
 async function answer(qid,text){ if(!text)return; await apiPost(`/api/questions/${qid}/answer`,{answer:text}); refresh(); }
+// ---------- Notion connector check: BEFORE the user submits a Notion URL as
+// a task doc, not after — catches the doomed case early (auto-launch would
+// otherwise fail deep in a headless session with no easy way to see why).
+// Deterministic on the backend (/api/notion-status calls `claude mcp list`);
+// this is just the debounced client-side trigger + inline warning render.
+const NOTION_URL_RE=/https?:\/\/(www\.)?(notion\.so|app\.notion\.com)\//i;
+let NOTION_CHECK_TIMER=null;
+function checkNotionInline(qid){
+  clearTimeout(NOTION_CHECK_TIMER);
+  const box=$(`#notionWarn${qid}`); if(!box) return;
+  const val=($(`#ta${qid}`)?.value||"");
+  if(!NOTION_URL_RE.test(val)){ box.innerHTML=""; return; }
+  NOTION_CHECK_TIMER=setTimeout(async()=>{
+    let r; try{ r=await api("/api/notion-status"); }catch(e){ return; }
+    box.innerHTML = r.connected===false
+      ? `<div class="notionwarn">⚠ Notion isn't connected yet — this won't start until it is.
+         Open a Claude Code session in this project and run <code>/mcp</code> → select
+         "claude.ai Notion" → sign in. Then just leave this answered; it starts automatically.</div>`
+      : "";
+  }, 400);
+}
 async function setStatus(tid,status){ await apiPost(`/api/tasks/${tid}/status`,{status}); refresh(); }
 async function togglePause(){ await apiPost(PAUSED?"/api/resume":"/api/pause",{}); refresh(); }
 async function setCap(n){ if(n<1)return; await apiPost("/api/cap",{cap:n}); refresh(); }
@@ -808,7 +832,9 @@ function questionCard(q){
     ${q.context?`<div class="qctx">${esc(q.context)}</div>`:""}
     ${example}
     ${opts?`<div class="qopts">${opts}</div>`:""}
-    <textarea id="ta${q.id}" rows="2" placeholder="Notion URL, PDF, .md, any format"></textarea>
+    <textarea id="ta${q.id}" rows="2" placeholder="Notion URL, PDF, .md, any format"
+      oninput="checkNotionInline(${q.id})"></textarea>
+    <div id="notionWarn${q.id}"></div>
     <div class="tact"><button class="tbtn primary" onclick="answer(${q.id}, $('#ta${q.id}').value)">Send reply</button>${q.task_id?` <button class="tbtn gh" onclick="deleteTask(${q.task_id})">🗑 Delete task</button>`:""}</div>
   </div>`;
 }

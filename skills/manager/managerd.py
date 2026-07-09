@@ -103,6 +103,70 @@ def demo_examples():
     return out
 
 
+# Matches a Notion page URL in either its notion.so or app.notion.com form —
+# used to gate auto-launch on a deterministic connector check before ever
+# spending an LLM invocation on a source that's doomed to fail without it.
+NOTION_URL_RE = re.compile(r"https?://(www\.)?(notion\.so|app\.notion\.com)/", re.I)
+
+_NOTION_STATUS_CACHE = {"ts": 0, "connected": None}
+NOTION_STATUS_TTL = 30   # seconds — `claude mcp list` does a live health check per call
+
+
+def notion_connected():
+    """Deterministic (no LLM involved) check of whether the Notion MCP
+    connector is actually authorized right now, via `claude mcp list`'s own
+    health check — the same source of truth Claude Code itself uses. This is
+    the ONLY reliable way to know: connector OAuth state lives in Claude
+    Code's own account-level config, not something this daemon can inspect
+    directly. Cached briefly since `claude mcp list` re-checks every
+    configured server's health on each call (not free or instant).
+    Returns True/False, or None if the check itself failed (missing `claude`
+    CLI, timeout, etc.) — callers should NOT treat None as "connected"."""
+    now = time.time()
+    if now - _NOTION_STATUS_CACHE["ts"] < NOTION_STATUS_TTL and _NOTION_STATUS_CACHE["connected"] is not None:
+        return _NOTION_STATUS_CACHE["connected"]
+    try:
+        out = subprocess.run(["claude", "mcp", "list"], capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return None
+    line = next((l for l in out.splitlines() if "notion" in l.lower()), None)
+    if line is None:
+        result = None   # Notion connector isn't configured at all here
+    else:
+        result = "✔" in line   # the exact marker `claude mcp list` prints for a healthy connection
+    _NOTION_STATUS_CACHE["ts"] = now
+    _NOTION_STATUS_CACHE["connected"] = result
+    return result
+
+
+NOTION_BLOCKED_NOTICE_FILE = os.path.join(HERE, ".notion_blocked_notice")
+NOTION_BLOCKED_NOTICE_TTL = 30   # don't spam the same notice on every poll retry
+
+
+def _notify_notion_not_connected():
+    """A launch attempt is retried automatically on every /api/state poll
+    while the question stays 'answered' and undelivered (see
+    ensure_intake_question) — without throttling, that would append a fresh
+    identical progress-feed entry every 1.5-4s forever until the human
+    connects Notion. One notice per NOTION_BLOCKED_NOTICE_TTL is enough; the
+    retries themselves stay silent and cheap (notion_connected() is cached)."""
+    try:
+        last = float(open(NOTION_BLOCKED_NOTICE_FILE).read().strip())
+    except (OSError, ValueError):
+        last = 0
+    if time.time() - last < NOTION_BLOCKED_NOTICE_TTL:
+        return
+    progress_add(
+        "⚠ Notion isn't connected",
+        "Open a Claude Code session in this project and run /mcp → select "
+        "\"claude.ai Notion\" → sign in. This task doc starts automatically "
+        "once it's connected — no need to resubmit.",
+        "error",
+    )
+    with open(NOTION_BLOCKED_NOTICE_FILE, "w") as f:
+        f.write(str(time.time()))
+
+
 def notion_map_path():
     """The active project's active task doc, IF it's a Notion/markdown
     ingest (registered by /manager at ingest via /api/source-notion)."""
@@ -207,11 +271,24 @@ def launch_auto_manager(source):
     ever call wait() on it: it'd sit as a zombie whose PID still answers
     os.kill(pid, 0), permanently wedging _auto_manager_alive() into thinking
     a run is forever in progress. A background reaper thread closes that gap
-    unconditionally, independent of whether the daemon restarts or not."""
+    unconditionally, independent of whether the daemon restarts or not.
+
+    A Notion URL source gets ONE extra, deterministic pre-check: whether the
+    Notion MCP connector is actually authorized (notion_connected()) — never
+    just attempted and left to fail deep inside a headless run with a cryptic
+    "not authorized" error the human has no easy way to see. If it's not
+    connected, this refuses to launch (returns False, same as any other
+    launch failure — the caller leaves the question 'answered' so it's
+    retried automatically once Notion connects) and posts ONE throttled
+    progress notice with the exact fix (open a session, run /mcp, sign in)."""
     if not (source or "").strip():
         return False
     if _auto_manager_alive():
         return False
+    if NOTION_URL_RE.search(source):
+        if notion_connected() is not True:
+            _notify_notion_not_connected()
+            return False
     os.makedirs(LOG_DIR, exist_ok=True)
     log_path = os.path.join(LOG_DIR, f"auto-manager-{int(time.time())}.log")
     try:
@@ -1131,6 +1208,13 @@ class Handler(BaseHTTPRequestHandler):
             # one's findings are displayed (not just the single latest one).
             slug = _active_project_slug()
             return self._send(200, skill_config.load_docs(slug) if slug else {"docs": [], "active": None})
+        if p == "/api/notion-status":
+            # A deterministic (no LLM) check the panel calls BEFORE letting
+            # the user submit a Notion URL — connector OAuth state lives in
+            # Claude Code's own account config, so `claude mcp list`'s own
+            # health check is the only real source of truth for it.
+            connected = notion_connected()
+            return self._send(200, {"connected": connected})
         if p == "/api/state":
             try:    # a live panel tab is polling — remember, so restarts don't open dupes
                 with open(LAST_POLL_FILE, "w") as f:
