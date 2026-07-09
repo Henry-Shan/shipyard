@@ -40,8 +40,14 @@
   .projpath{font:12px ui-monospace,Menlo,monospace;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cap{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--ink);border-radius:999px;padding:2px 6px;font-size:12px;font-weight:800}
   .capb{border:none;box-shadow:none;background:none;padding:0 5px;font-size:15px;cursor:pointer}
-  .task{background:#fff;border:2.5px solid var(--ink);border-radius:12px;padding:11px 13px;margin:9px 0;box-shadow:3px 3px 0 var(--ink)}
   .st{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.03em;border:2px solid var(--ink);border-radius:6px;padding:1px 7px;display:inline-block}
+  /* one continuous document (grouped by state), not separate cards */
+  .doc{background:#fff;border:2.5px solid var(--ink);border-radius:14px;padding:8px 18px 18px;margin-top:12px;box-shadow:5px 5px 0 var(--ink)}
+  .doch{font-size:15px;font-weight:900;margin:20px 0 0;padding-bottom:5px;border-bottom:2.5px solid var(--ink)}
+  .doch:first-child{margin-top:8px}
+  .docrow{padding:12px 0;border-bottom:1px solid var(--line)}
+  .docrow:last-child{border-bottom:none}
+  .docrow b{font-size:14px}
   .qcard{background:#FFFDF5;border:2.5px solid var(--ink);border-radius:12px;padding:14px;margin:12px 0;box-shadow:4px 4px 0 var(--ink)}
   .qh{font-size:12px;font-weight:900;color:var(--dim);text-transform:uppercase;letter-spacing:.03em}
   .qq{font-weight:900;font-size:15px;margin:5px 0}
@@ -158,9 +164,30 @@ async function sendDoc(btn){
   }
   btn.disabled=false;$('#sent').textContent='sent — waiting for your machine';
 }
-function taskCard(t){const c={done:'var(--ready)',running:'var(--prog)',failed:'var(--fail)',needs_input:'var(--wait)'}[t.status]||'var(--ink)';
-  return `<div class="task"><span class="st" style="color:${c}">${esc(t.status)}${t.tier!=null?' · T'+t.tier:''}</span>
-    <div style="margin-top:5px"><b>${esc(t.title)}</b></div>${t.pr_url?`<a href="${esc(t.pr_url)}" target="_blank">${esc(t.pr_url)}</a>`:''}</div>`;}
+// Render the tasks as ONE document grouped by state (like the local panel),
+// not separate cards — headings + rule-separated rows reading top to bottom.
+const STCOL={done:'var(--ready)',running:'var(--prog)',parked:'var(--prog)',failed:'var(--fail)',needs_input:'var(--wait)',blocked:'var(--fail)',queued:'var(--dim)',draft:'var(--dim)'};
+const BUCKETS=[
+  ['In progress', t=>t.status==='running'||t.status==='parked'],
+  ['Stopped — needs your attention', t=>t.status==='failed'],
+  ['PR ready — merge when you’re happy', t=>t.status==='done'],
+  ['Waiting on your answer', t=>t.status==='needs_input'],
+  ['Queued', t=>t.status==='queued'],
+  ['Can’t be done here', t=>t.status==='blocked'],
+  ['Drafts', t=>t.status==='draft'],
+];
+function docRow(t){const c=STCOL[t.status]||'var(--ink)';
+  return `<div class="docrow">
+    <div><b>${esc(t.title)}</b></div>
+    <div style="margin-top:4px"><span class="st" style="color:${c}">${esc(t.status.replace('_',' '))}${t.tier!=null?' · T'+t.tier:''}</span>
+      ${t.pr_url?` <a href="${esc(t.pr_url)}" target="_blank">PR ↗</a>`:''}</div>
+  </div>`;}
+function renderTasksDoc(tasks){
+  let html='';
+  for(const [label,f] of BUCKETS){ const ts=tasks.filter(f); if(!ts.length)continue;
+    html+=`<h2 class="doch">${label} · ${ts.length}</h2>`+ts.map(docRow).join(''); }
+  return html;
+}
 function updateBoard(st){
   const proj=st.project||{},armed=!!(LAST&&LAST.armed);
   PAUSED=!!st.paused;CAPV=st.cap||CAPV||1;$('#capv').textContent=CAPV;
@@ -179,8 +206,9 @@ function updateBoard(st){
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="sendDoc(this)">Send reply</button><span id="sent" class="muted"></span></div>
       ${armed?'':'<div class="warn">Not <b>armed</b> — click <b>🔒 Arm</b> above to let this machine run what you send.</div>'}
     </div>`:'';}
-  $('#board').innerHTML=`<h2 style="margin-top:14px">Tasks · ${tasks.length}</h2>`+
-    (tasks.length?tasks.map(taskCard).join(''):`<p class="muted">Nothing yet — reply above to start a batch.</p>`);
+  $('#board').innerHTML = tasks.length
+    ? `<div class="doc">${renderTasksDoc(tasks)}</div>`
+    : `<p class="muted" style="margin-top:14px">Nothing yet — reply above to start a batch.</p>`;
 }
 
 // ---------- routing ----------
