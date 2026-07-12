@@ -777,6 +777,10 @@ async function deleteTask(tid){
 }
 function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claude --resume ${sid}`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
+// Copy a `cd` into this task's worktree (already checked out on its branch) so
+// you can run commands there directly.
+function copyCd(wt,btn){ navigator.clipboard.writeText(`cd ${wt}`)
+  .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
 function copyBranchReview(branch,btn){
   navigator.clipboard.writeText(`cd ${REPO} && git diff ${BASEBR}...${branch}   # review; merge when happy: git merge --squash ${branch} && git commit`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1400);} }); }
@@ -878,6 +882,8 @@ function taskActions(t){
   const rerunBtn=(["done","failed","blocked"].includes(t.status))
     ?`<button class="tbtn gh" onclick="rerunTask(${t.id})" title="run this task again from scratch — fresh worktree + branch off the current base, then a new PR (re-links it correctly)">🔁 Rerun</button>`:"";
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
+  // Copy a cd into this task's worktree (already on its branch) to run commands there.
+  const cdBtn=t.worktree?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick="copyCd(${JSON.stringify(t.worktree)},this)">📁 cd</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
   const remove=`<button class="tbtn danger" onclick="removeTask(${t.id})" title="stop servers, remove the worktree, delete the branch, and clear this task">🗑 Remove</button>`;
@@ -909,7 +915,7 @@ function taskActions(t){
   const blockedNote=(t.status==="done" && prBlockedMsg(t))
     ?`<div class="prnote" title="${esc(prBlockedMsg(t))}">⚠ The PR wasn't opened when this ran (GitHub was unreachable). Click "Open PR to merge" to open it now.</div>`:"";
   const more=[viewBtn,reworkBtn,rerunBtn].filter(Boolean).join(" ");
-  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${sess}${remove}</div>`;
+  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${cdBtn}${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
 async function removeTask(tid){
