@@ -1892,6 +1892,30 @@ class Handler(BaseHTTPRequestHandler):
             tid = int(p.split("/")[3])
             ok = start_rework(tid, body.get("feedback", ""))
             return self._send(200, {"ok": ok})
+        if p.startswith("/api/tasks/") and p.endswith("/rerun"):
+            # Run a task again FROM SCRATCH: drop every trace of the prior
+            # attempt (session, worktree, branch, PR, logs, test artifacts) and
+            # re-queue it. The dispatcher then gives it a fresh worktree off the
+            # current base branch and links it correctly — the fix for a task
+            # left with a stale/mismatched worktree. resume=0 guarantees it does
+            # NOT reuse the old session. The old branch/PR on GitHub is left
+            # untouched; the old local worktree is left in place (may be shared).
+            tid = int(p.split("/")[3])
+            if not core.get_task(tid):
+                return self._send(404, {"ok": False, "error": "no such task"})
+            # If the stale worktree happens to be the one under test, stop it.
+            t = core.get_task(tid)
+            ts = test_server_info()
+            if ts and t.get("worktree") and ts.get("worktree") and \
+                    os.path.abspath(ts["worktree"]) == os.path.abspath(t["worktree"]):
+                stop_test_server()
+            core.update_task(
+                tid, status="queued", resume=0, attempts=0,
+                session_id=None, worktree=None, branch=None, pr_url=None,
+                log_path=None, web_port=None, web_url=None, server_url=None,
+                test_plan=None, stopped_reason=None, failtest_info=None,
+                featuretest=None)
+            return self._send(200, {"ok": True})
         if p.startswith("/api/tasks/") and p.endswith("/resume"):
             # Continue a run that was cut off mid-task (session limit / wifi).
             tid = int(p.split("/")[3])

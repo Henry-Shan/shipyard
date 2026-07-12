@@ -760,6 +760,9 @@ async function sendRework(tid){ const v=($("#rw"+tid)?.value||"").trim(); if(!v)
   REWORK_OPEN.delete(tid); await apiPost(`/api/tasks/${tid}/rework`,{feedback:v}); refresh(); }
 async function resumeTask(tid,btn){ if(btn){btn.disabled=true;btn.textContent="Resuming…";}
   await apiPost(`/api/tasks/${tid}/resume`,{}); refresh(); }
+async function rerunTask(tid){
+  if(!confirm("Re-run this task from scratch?\n\nIt starts over on a FRESH worktree + branch off the current base, produces a new PR, and re-links correctly. The previous branch/PR on GitHub is left untouched; it just re-queues and runs.")) return;
+  await apiPost(`/api/tasks/${tid}/rerun`,{}); LAST_SIG=""; refresh(); }
 async function cleanupTask(tid){
   if(!confirm("All done with this one?\n\nRemoves its git worktree and deletes the branch (only if merged), then clears the task.\n\nMake sure you've MERGED the PR first.")) return;
   showModal("🧹 Cleaning up…","▸ stopping dev servers\n▸ removing the worktree\n▸ pruning + de-registering\n▸ deleting the branch (only if merged)\n\nworking…");
@@ -869,6 +872,11 @@ function taskActions(t){
   const viewBtn=(!HASWEB && (t.worktree||t.pr_url))?`<button class="tbtn gh" onclick="viewEffect(${t.id})">👀 See the effect</button>`:"";
   const reworkBtn=(t.session_id && (t.status==="done"||t.status==="failed"))
     ?`<button class="tbtn gh" onclick="toggleRework(${t.id})">Doesn't work →</button>`:"";
+  // Re-run from scratch: a completed/failed/blocked task starts over on a FRESH
+  // worktree + branch off the current base, so a stale or mislinked worktree
+  // gets rebuilt and re-linked correctly.
+  const rerunBtn=(["done","failed","blocked"].includes(t.status))
+    ?`<button class="tbtn gh" onclick="rerunTask(${t.id})" title="run this task again from scratch — fresh worktree + branch off the current base, then a new PR (re-links it correctly)">🔁 Rerun</button>`:"";
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
@@ -900,7 +908,7 @@ function taskActions(t){
   // (github was unreachable) instead of a URL. The full message is the tooltip.
   const blockedNote=(t.status==="done" && prBlockedMsg(t))
     ?`<div class="prnote" title="${esc(prBlockedMsg(t))}">⚠ The PR wasn't opened when this ran (GitHub was unreachable). Click "Open PR to merge" to open it now.</div>`:"";
-  const more=[viewBtn,reworkBtn].filter(Boolean).join(" ");
+  const more=[viewBtn,reworkBtn,rerunBtn].filter(Boolean).join(" ");
   return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
