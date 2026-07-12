@@ -782,9 +782,9 @@ function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claud
 // you can run commands there directly.
 function copyCd(wt,btn){ navigator.clipboard.writeText(`cd ${wt}`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
-// Copy the one-liner to build + run this branch's mobile app on the iOS
-// simulator (the web "Test this branch" can't preview a native Expo app).
-function copyMobileRun(wt,btn){ navigator.clipboard.writeText(`cd ${wt}/apps/mobile && npx expo run:ios`)
+// Copy an `npx expo <cmd>` one-liner (cd'd into this branch's mobile app) —
+// e.g. run:ios (native build + simulator) or start (Metro / JS reload).
+function copyExpo(wt,cmd,btn){ navigator.clipboard.writeText(`cd ${wt}/apps/mobile && npx expo ${cmd}`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
 function copyBranchReview(branch,btn){
   navigator.clipboard.writeText(`cd ${REPO} && git diff ${BASEBR}...${branch}   # review; merge when happy: git merge --squash ${branch} && git commit`)
@@ -888,9 +888,13 @@ function taskActions(t){
     ?`<button class="tbtn gh" onclick="rerunTask(${t.id})" title="run this task again from scratch — fresh worktree + branch off the current base, then a new PR (re-links it correctly)">🔁 Rerun</button>`:"";
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
   // Copy a cd into this task's worktree (already on its branch) to run commands there.
-  const cdBtn=t.worktree?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick='copyCd(${JSON.stringify(t.worktree)},this)'>📁 cd</button>`:"";
-  // Mobile monorepo → also offer the iOS-simulator run command for this branch.
-  const iosBtn=(t.worktree && HASMOBILE)?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}/apps/mobile && npx expo run:ios — build + launch this branch on the iOS simulator" onclick='copyMobileRun(${JSON.stringify(t.worktree)},this)'>📱 iOS</button>`:"";
+  // Mobile monorepo → two Expo commands for this branch: run:ios (native build
+  // + simulator) and start (Metro / fast JS reload). Otherwise a plain cd into
+  // the worktree root for general commands.
+  const wtj=t.worktree?JSON.stringify(t.worktree):"";
+  const runIosBtn=(t.worktree && HASMOBILE)?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}/apps/mobile && npx expo run:ios — native build + launch on the iOS simulator" onclick='copyExpo(${wtj},"run:ios",this)'>▶ run:ios</button>`:"";
+  const startBtn=(t.worktree && HASMOBILE)?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}/apps/mobile && npx expo start — start Metro (fast JS reload against an already-installed dev build)" onclick='copyExpo(${wtj},"start",this)'>▶ start</button>`:"";
+  const cdBtn=(t.worktree && !HASMOBILE)?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick='copyCd(${wtj},this)'>📁 cd</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
   const remove=`<button class="tbtn danger" onclick="removeTask(${t.id})" title="stop servers, remove the worktree, delete the branch, and clear this task">🗑 Remove</button>`;
@@ -922,7 +926,7 @@ function taskActions(t){
   const blockedNote=(t.status==="done" && prBlockedMsg(t))
     ?`<div class="prnote" title="${esc(prBlockedMsg(t))}">⚠ The PR wasn't opened when this ran (GitHub was unreachable). Click "Open PR to merge" to open it now.</div>`:"";
   const more=[viewBtn,reworkBtn,rerunBtn].filter(Boolean).join(" ");
-  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${iosBtn}${cdBtn}${sess}${remove}</div>`;
+  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${runIosBtn}${startBtn}${cdBtn}${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
 async function removeTask(tid){
