@@ -1296,9 +1296,13 @@ function renderPlain(){
 }
 
 async function refresh(){
-  if(uiBusy()) return;
   let s; try{ s=await api("/api/state"); }catch(e){ return; }
+  // Check for a shipped code update BEFORE the uiBusy guard: a tab sitting with
+  // a focused input (e.g. answering the intake) must still pick up new JS —
+  // otherwise it stays frozen on a stale render (e.g. an old plain view even
+  // though the doc-map is active) until the field is blurred.
   if(s.ui_version){ if(UIV===null)UIV=s.ui_version; else if(s.ui_version!==UIV){ location.reload(); return; } }
+  if(uiBusy()) return;   // past here we re-render — never yank the DOM out from under the cursor
   if(s.repo_ok===false){ renderSetup(s); return; }   // daemon in setup mode — no repo yet
   TASKS=s.tasks||[];
   TESTSRV=s.test_server||null;
