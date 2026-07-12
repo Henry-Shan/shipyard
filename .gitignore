@@ -17,3 +17,4 @@ __pycache__/
 .gstack/
 .env
 .env.*
+relay.json

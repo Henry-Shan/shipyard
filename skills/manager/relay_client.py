@@ -37,9 +37,24 @@ import urllib.parse
 
 import skill_config
 
-RELAY_URL = os.environ.get("MANAGER_RELAY_URL", "").rstrip("/")
-TOKEN = os.environ.get("MANAGER_MACHINE_TOKEN", "").strip()
-MACHINE_NAME = os.environ.get("MANAGER_MACHINE_NAME") or os.uname().nodename
+def _saved_relay():
+    """Relay config saved once to relay.json next to this script, so you never
+    have to export MANAGER_RELAY_URL / MANAGER_MACHINE_TOKEN by hand again.
+    Env vars still win when set. Gitignored — it holds the machine token."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "relay.json")) as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+_SAVED = _saved_relay()
+RELAY_URL = (os.environ.get("MANAGER_RELAY_URL") or _SAVED.get("relay_url") or "").rstrip("/")
+TOKEN = (os.environ.get("MANAGER_MACHINE_TOKEN") or _SAVED.get("machine_token") or "").strip()
+MACHINE_NAME = (os.environ.get("MANAGER_MACHINE_NAME") or _SAVED.get("machine_name")
+                or os.uname().nodename)
 STATE_PUSH_EVERY = 3          # seconds between metadata pushes up
 POLL_EVERY = 1.5             # seconds between command polls (SHORT-poll — works
                             # against a serverless relay like Vercel that can't
@@ -246,9 +261,26 @@ def _downlink_loop():
             pass
 
 
+def _save_config():
+    """Persist the current relay URL + token to relay.json so future runs need
+    no env vars. Written 0600 (owner-only) — it holds the machine token."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "relay.json")
+    data = {"relay_url": RELAY_URL, "machine_token": TOKEN, "machine_name": MACHINE_NAME}
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    print(f"relay_client: saved config to {path} — future runs need no env vars.")
+
+
 def main():
     if not RELAY_URL or not TOKEN:
-        sys.exit("relay_client: set MANAGER_RELAY_URL and MANAGER_MACHINE_TOKEN")
+        sys.exit("relay_client: set MANAGER_RELAY_URL and MANAGER_MACHINE_TOKEN "
+                 "(once), or save them with --save.")
+    if "--save" in sys.argv:
+        return _save_config()
     print(f"relay_client: machine={MACHINE_NAME!r} armed={REMOTE_ARMED} "
           f"relay={RELAY_URL} local={_local_url()}")
     t = threading.Thread(target=_uplink_loop, daemon=True)
