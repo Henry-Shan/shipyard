@@ -512,6 +512,7 @@ const isIntake=q=>q.session_id==="manager-intake";
 // Whether the project has a browsable web frontend — a one-time project fact
 // (config has_web_ui), not guessed per task. null = not asked yet.
 let HASWEB=null;
+let HASMOBILE=false;   // repo has an apps/mobile Expo app → offer a "📱 iOS" run command
 // REPO + SKILLDIR come from /api/state (the configured target repo and the
 // manager skill's install dir) — used in copy-to-terminal commands.
 let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager", BASEBR="main";
@@ -781,6 +782,10 @@ function copyResume(sid,btn){ navigator.clipboard.writeText(`cd ${REPO} && claud
 // you can run commands there directly.
 function copyCd(wt,btn){ navigator.clipboard.writeText(`cd ${wt}`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
+// Copy the one-liner to build + run this branch's mobile app on the iOS
+// simulator (the web "Test this branch" can't preview a native Expo app).
+function copyMobileRun(wt,btn){ navigator.clipboard.writeText(`cd ${wt}/apps/mobile && npx expo run:ios`)
+  .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1200);} }); }
 function copyBranchReview(branch,btn){
   navigator.clipboard.writeText(`cd ${REPO} && git diff ${BASEBR}...${branch}   # review; merge when happy: git merge --squash ${branch} && git commit`)
   .then(()=>{ if(btn){const o=btn.textContent;btn.textContent="copied ✓";setTimeout(()=>btn.textContent=o,1400);} }); }
@@ -884,6 +889,8 @@ function taskActions(t){
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
   // Copy a cd into this task's worktree (already on its branch) to run commands there.
   const cdBtn=t.worktree?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick='copyCd(${JSON.stringify(t.worktree)},this)'>📁 cd</button>`:"";
+  // Mobile monorepo → also offer the iOS-simulator run command for this branch.
+  const iosBtn=(t.worktree && HASMOBILE)?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}/apps/mobile && npx expo run:ios — build + launch this branch on the iOS simulator" onclick='copyMobileRun(${JSON.stringify(t.worktree)},this)'>📱 iOS</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
   const remove=`<button class="tbtn danger" onclick="removeTask(${t.id})" title="stop servers, remove the worktree, delete the branch, and clear this task">🗑 Remove</button>`;
@@ -915,7 +922,7 @@ function taskActions(t){
   const blockedNote=(t.status==="done" && prBlockedMsg(t))
     ?`<div class="prnote" title="${esc(prBlockedMsg(t))}">⚠ The PR wasn't opened when this ran (GitHub was unreachable). Click "Open PR to merge" to open it now.</div>`:"";
   const more=[viewBtn,reworkBtn,rerunBtn].filter(Boolean).join(" ");
-  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${cdBtn}${sess}${remove}</div>`;
+  return `${primaryRow}${blockedNote}<div class="tact tact-more">${more}<span class="tspacer"></span>${iosBtn}${cdBtn}${sess}${remove}</div>`;
 }
 // One consolidated removal (replaces the old "clean up" + "delete" pair).
 async function removeTask(tid){
@@ -1334,6 +1341,7 @@ async function refresh(){
   if(s.base_branch) BASEBR=s.base_branch;
   PUSHMODE=s.push_mode||"pr";
   HASWEB=s.has_web_ui;
+  HASMOBILE=!!s.has_mobile;
   CAP=s.cap||1; COOLDOWN=s.cooldown_left||0;
   PROGRESS=s.progress||{steps:[],active:false,done:false};
   renderControls(s);

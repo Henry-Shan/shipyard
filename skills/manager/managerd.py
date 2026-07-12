@@ -1450,6 +1450,10 @@ class Handler(BaseHTTPRequestHandler):
             # without a restart, and each dispatch reads it fresh anyway.
             st["push_mode"] = skill_config.get("push_mode")
             st["has_web_ui"] = skill_config.get("has_web_ui")   # null=not yet asked, true/false=decided
+            # Repo has an Expo/React-Native app at apps/mobile → the panel offers
+            # a "📱 iOS" copy-command (build + run on the simulator), since that
+            # can't be previewed by the web "Test this branch" flow.
+            st["has_mobile"] = os.path.isdir(os.path.join(REPO, "apps", "mobile"))
             st["gh_available"] = skill_config.get("gh_available")  # decided once at install time
             st["base_branch"] = BASE_BRANCH
             st["skill_dir"] = HERE           # for panel-shown shell snippets (e.g. PDF copy)
