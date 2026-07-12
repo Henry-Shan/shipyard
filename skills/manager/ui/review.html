@@ -147,7 +147,7 @@
   .applink:hover{text-decoration:none;background:#136E3A}
   .terr{font-size:12px;color:var(--fail);font-weight:800}
   .tstarting{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);font-weight:700}
-  .bewarn{font-size:11px;font-weight:800;color:var(--wait);cursor:help}
+  .bewarn{font-size:11px;font-weight:800;color:var(--wait);cursor:pointer;text-decoration:underline dotted}
   .pulse{width:7px;height:7px;border-radius:50%;background:var(--prog);border:1.5px solid var(--ink);display:inline-block;animation:pulse 1.4s infinite}
   /* ---- migrated panel controls ---- */
   .hbtn{font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);
@@ -403,8 +403,10 @@ function testBtn(t){
   // Frontend serving? Always offer to open it — a backend that's still coming
   // up (or down) is a non-blocking warning, never a wall in front of the app.
   if(TESTSRV.web_up){
+    // Non-blocking backend warning — click it to see the ACTUAL reason (e.g. a
+    // MongoDB/network failure), so "backend not up" is never a mystery.
     const beWarn=(TESTSRV.has_backend && TESTSRV.backend_up===false)
-      ?` <span class="bewarn" title="the backend isn't answering on its port yet — the page loads but API calls may fail">⚠ backend not up</span>`:"";
+      ?` <span class="bewarn" onclick="showBackendError()" title="${esc(TESTSRV.error||'the backend is not answering on its port yet — the page loads but API calls may fail. Click for details.')}">⚠ backend not up</span>`:"";
     return `<a class="applink" href="${TESTSRV.web_url}" target="_blank" title="${esc(TESTSRV.web_url||"")}">▶ Open app</a> <button class="tbtn gh" onclick="stopTest(this)">Stop test</button>${beWarn}`;
   }
   if(TESTSRV.error) return `<span class="terr">✗ dev server crashed</span> <button class="tbtn gh" onclick="stopTest(this)">Stop</button>`;
@@ -414,6 +416,10 @@ function testBtn(t){
 // dev server coming up/down only touches that one button. This is why TESTSRV
 // is kept OUT of the board's render signatures — the board must not rebuild
 // (and yank scroll + repaint every card) just because a preview started.
+function showBackendError(){
+  showModal("Backend not up", (TESTSRV&&TESTSRV.error)
+    || "The backend server isn't answering on its port yet. The page still loads,\nbut API calls may fail until it comes up.");
+}
 function syncTestButtons(){
   document.querySelectorAll(".tbslot").forEach(el=>{
     const t=TASKS.find(x=>String(x.id)===el.dataset.tbtid);
