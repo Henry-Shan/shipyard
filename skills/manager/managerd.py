@@ -849,6 +849,10 @@ def _testserver_error():
     tail = lines[-60:]
     for keys in (("EADDRINUSE", "address already in use", "already running"),
                  ("points out of the filesystem root", "TurbopackInternalError"),
+                 # A stale worktree (older commit) whose layout predates the
+                 # configured dev/backend command — surface the specific miss,
+                 # not the generic npm-log-path line that follows it.
+                 ("Missing script",), ("no such file or directory",),
                  ("FATAL", "panic:"), ("command not found", "not found"),
                  ("npm error", "Lifecycle script"),
                  ("Error:", "error:"), ("exit status",)):
