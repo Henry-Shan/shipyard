@@ -195,6 +195,13 @@
   .ntask-h .tt{font-weight:800;color:var(--ink);font-size:13.5px}
   .nprog.err{background:#FFE3E9;border-color:var(--ink);color:#7A0E28}
   .rwbox{margin-top:8px}
+  .rwimgs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}
+  .rwimgs:empty{display:none}
+  .rwthumb{position:relative;display:inline-block}
+  .rwthumb img{height:56px;width:auto;max-width:120px;border:2px solid var(--ink);border-radius:8px;object-fit:cover;display:block}
+  .rwx{position:absolute;top:-7px;right:-7px;width:18px;height:18px;line-height:15px;text-align:center;
+    border:2px solid var(--ink);border-radius:50%;background:var(--fail);color:#fff;font-weight:900;
+    font-size:12px;cursor:pointer;padding:0}
   .testplan{margin-top:9px;font-size:12px}
   .testplan>summary{cursor:pointer;color:var(--ink);font-weight:800;list-style:none;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
   .tpbody{position:relative;margin-top:7px}
@@ -518,6 +525,7 @@ let HASMOBILE=false;   // repo has an apps/mobile Expo app → offer a "📱 iOS
 let REPO="<your repo>", SKILLDIR="~/.claude/skills/manager", BASEBR="main";
 let PROGRESS={steps:[],active:false,done:false};
 const REWORK_OPEN=new Set(), TESTPLAN_OPEN=new Set();
+let RENDER_MODE="plain";   // "notion" | "plain" — which board renderer is live
 // Live setup feed shown while a /manager run ingests a source (fetch → parse →
 // download → register → triage → dispatch). A clean vertical stepper.
 function setupCard(){
@@ -756,9 +764,45 @@ async function toggleProjectMode(slug,btn){
   renderHome();
 }
 
-function toggleRework(tid){ REWORK_OPEN.has(tid)?REWORK_OPEN.delete(tid):REWORK_OPEN.add(tid); renderNotion(); }
-async function sendRework(tid){ const v=($("#rw"+tid)?.value||"").trim(); if(!v)return;
-  REWORK_OPEN.delete(tid); await apiPost(`/api/tasks/${tid}/rework`,{feedback:v}); refresh(); }
+function toggleRework(tid){ REWORK_OPEN.has(tid)?REWORK_OPEN.delete(tid):REWORK_OPEN.add(tid); rerenderBoard(); }
+async function sendRework(tid){ const v=($("#rw"+tid)?.value||"").trim();
+  const imgs=(REWORK_IMGS[tid]||[]).map(im=>im.path);
+  if(!v && !imgs.length) return;
+  REWORK_OPEN.delete(tid); delete REWORK_IMGS[tid];
+  await apiPost(`/api/tasks/${tid}/rework`,{feedback:v,images:imgs}); refresh(); }
+// ---- Rework screenshots: attach/paste images into the "Doesn't work →" box;
+// they upload to the daemon and their paths ride along to the same session.
+const REWORK_IMGS={};   // tid -> [{path,name}]
+async function uploadImage(file){
+  try{
+    const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+    const r=await apiPost("/api/upload",{name:file.name||"image.png",data});
+    return (r&&r.ok&&r.path)?{path:r.path,name:file.name||"image.png"}:null;
+  }catch(e){ return null; }
+}
+async function addReworkImgs(tid,files){
+  REWORK_IMGS[tid]=REWORK_IMGS[tid]||[];
+  for(const f of [...(files||[])]){ if(!f.type||f.type.startsWith("image/")){ const im=await uploadImage(f); if(im) REWORK_IMGS[tid].push(im); } }
+  renderReworkThumbs(tid);
+}
+function rmReworkImg(tid,i){ if(REWORK_IMGS[tid]){ REWORK_IMGS[tid].splice(i,1); renderReworkThumbs(tid); } }
+async function onReworkPaste(ev,tid){
+  const imgItems=[...((ev.clipboardData&&ev.clipboardData.items)||[])].filter(it=>it.type&&it.type.startsWith("image/"));
+  if(!imgItems.length) return;   // let normal text paste through
+  ev.preventDefault();
+  REWORK_IMGS[tid]=REWORK_IMGS[tid]||[];
+  for(const it of imgItems){ const f=it.getAsFile(); if(f){ const im=await uploadImage(f); if(im) REWORK_IMGS[tid].push(im); } }
+  renderReworkThumbs(tid);
+}
+// Patch just this box's thumbnail strip in place — avoids a full board re-render
+// (which uiBusy would skip while the textarea is focused, e.g. right after paste).
+function renderReworkThumbs(tid){
+  const el=document.getElementById("rwimgs"+tid); if(!el) return;
+  el.innerHTML=(REWORK_IMGS[tid]||[]).map((im,i)=>
+    `<span class="rwthumb"><img src="/api/image?path=${encodeURIComponent(im.path)}" title="${esc(im.name||"")}"><button class="rwx" title="remove" onclick="rmReworkImg(${tid},${i})">×</button></span>`).join("");
+}
+// Re-render whichever board mode is active (doc vs plain).
+function rerenderBoard(){ LAST_SIG=""; if(RENDER_MODE==="notion") renderNotion(); else renderPlain(); }
 async function resumeTask(tid,btn){ if(btn){btn.disabled=true;btn.textContent="Resuming…";}
   await apiPost(`/api/tasks/${tid}/resume`,{}); refresh(); }
 async function rerunTask(tid){
@@ -943,7 +987,15 @@ async function removeTask(tid){
 function taskRow(t, bare){
   const prog=(t.status==="running"||t.status==="parked")&&t.progress?`<div class="nprog"><span class="pulse"></span>${esc(t.progress)}</div>`:"";
   const stopMsg=(t.status==="failed"&&t.stopped_reason)?`<div class="nprog err">⚠ ${esc(t.stopped_reason)}</div>`:"";
-  const rw=REWORK_OPEN.has(t.id)?`<div class="rwbox"><textarea id="rw${t.id}" rows="3" placeholder="What went wrong when you tested it? This goes to the SAME Claude session — it fixes the same worktree + PR."></textarea><div class="tact"><button class="tbtn primary" onclick="sendRework(${t.id})">Send to Claude →</button> <button class="tbtn gh" onclick="toggleRework(${t.id})">Cancel</button></div></div>`:"";
+  const rwThumbs=(REWORK_IMGS[t.id]||[]).map((im,i)=>
+    `<span class="rwthumb"><img src="/api/image?path=${encodeURIComponent(im.path)}" title="${esc(im.name||"")}"><button class="rwx" title="remove" onclick="rmReworkImg(${t.id},${i})">×</button></span>`).join("");
+  const rw=REWORK_OPEN.has(t.id)?`<div class="rwbox">
+      <textarea id="rw${t.id}" rows="3" placeholder="What went wrong when you tested it? Paste or attach screenshots too. This goes to the SAME Claude session — it fixes the same worktree + PR." onpaste="onReworkPaste(event,${t.id})"></textarea>
+      <div class="rwimgs" id="rwimgs${t.id}">${rwThumbs}</div>
+      <div class="tact"><button class="tbtn primary" onclick="sendRework(${t.id})">Send to Claude →</button>
+        <label class="tbtn gh" style="cursor:pointer">📎 Add image<input type="file" accept="image/*" multiple style="display:none" onchange="addReworkImgs(${t.id},this.files);this.value=''"></label>
+        <button class="tbtn gh" onclick="toggleRework(${t.id})">Cancel</button></div>
+    </div>`:"";
   let testplan="";
   if(t.status==="done"&&t.test_plan){ const id="tp"+t.id;
     testplan=`<details class="testplan" ${TESTPLAN_OPEN.has(t.id)?'open':''} ontoggle="onTestPlanToggle(${t.id},this.open)"><summary>🧪 Test steps</summary><div class="tpbody"><button class="cp" onclick="copyTestPlan(event,'${id}')">Copy</button><pre id="${id}">${esc(t.test_plan)}</pre></div></details>`;
@@ -1362,11 +1414,11 @@ async function refresh(){
     return;
   }
   if(INTAKE_PAGE && !intakeQ) INTAKE_PAGE=false;   // intake answered → back to board
-  if(s.notion){ return refreshNotion(); }   // doc-map source (Notion page or ingested .md) → doc mode
+  if(s.notion){ RENDER_MODE="notion"; return refreshNotion(); }   // doc-map source → doc mode
   // No doc-map and no PDF (typed-list source, an unparsed file, or still
   // loading): render the PLAIN TASK BOARD — live feed + questions + every task
   // by state. Never strand the user on just the stepper.
-  if(!s.source_pdf){ return renderPlain(); }
+  if(!s.source_pdf){ RENDER_MODE="plain"; return renderPlain(); }
   const pdf=s.source_pdf;
   if(pdf!==PDF){ PDF=pdf; MAP=null;
     if(PDF){ try{ MAP=await api("/api/pdf-map?path="+encodeURIComponent(PDF)); }catch(e){ MAP=null; } }

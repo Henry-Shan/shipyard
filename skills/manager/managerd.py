@@ -15,6 +15,7 @@ The agent (SKILL.md) talks to this same module via the CLI subcommands below.
 """
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -494,26 +495,35 @@ def _run_task(task):
     _settle(tid, log_path, rc)
 
 
-def start_rework(tid, feedback):
+def start_rework(tid, feedback, images=None):
     """Bounce a PR-ready/failed task back to its own ship-task session with the
-    human's test feedback. Resumes the same session (same worktree + PR) to fix it."""
+    human's test feedback (and any screenshots they attached). Resumes the same
+    session (same worktree + PR) to fix it."""
     t = core.get_task(tid)
     if not t or not t.get("session_id"):
         return False
-    threading.Thread(target=_run_rework, args=(tid, t["session_id"], feedback),
+    threading.Thread(target=_run_rework, args=(tid, t["session_id"], feedback, images),
                      daemon=True).start()
     return True
 
 
-def _run_rework(tid, sid, feedback):
+def _run_rework(tid, sid, feedback, images=None):
     os.makedirs(LOG_DIR, exist_ok=True)
     log_path = os.path.join(LOG_DIR, f"task-{tid}-{sid}-rework-{int(time.time())}.log")
     core.update_task(tid, status="running", log_path=log_path, failtest_info=None, featuretest=None)
     with core.connect() as c:
         core.log_event(c, "task.rework", feedback[:120], tid)
+    # Screenshots the human attached to their feedback — point the resumed
+    # session at the exact files to Read, same as dispatch does with evidence.
+    imgs = [p for p in (images or []) if p and os.path.isfile(p)]
+    img_block = ""
+    if imgs:
+        img_block = ("\n\nThe human ATTACHED screenshots of the failure. Use the Read "
+                     "tool on each of these image files to SEE it before changing code:\n"
+                     + "\n".join(f"- {p}" for p in imgs))
     prompt = (
         "The human tested your PR and it did NOT work. Their feedback:\n\n"
-        f"{feedback}\n\n"
+        f"{feedback or '(no text — see the attached screenshot(s))'}{img_block}\n\n"
         "Fix it in the SAME worktree you already created, push to the SAME branch/PR, "
         "keep CI green, and stop at PR-ready (do NOT merge). Investigate the real cause "
         "first — reproduce the failure before changing code. When the PR is updated, POST "
@@ -1910,8 +1920,31 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if p.startswith("/api/tasks/") and p.endswith("/rework"):
             tid = int(p.split("/")[3])
-            ok = start_rework(tid, body.get("feedback", ""))
+            ok = start_rework(tid, body.get("feedback", ""), body.get("images"))
             return self._send(200, {"ok": ok})
+        if p == "/api/upload":
+            # A base64 image from the panel (e.g. a rework screenshot). Saved
+            # locally under runs/uploads; its absolute path is handed back so a
+            # prompt can point a Claude session at it to Read.
+            data = str(body.get("data") or "")
+            name = os.path.basename(str(body.get("name") or "image.png"))
+            m = re.match(r"data:image/(\w+);base64,(.*)$", data, re.S)
+            b64 = m.group(2) if m else data
+            try:
+                raw = base64.b64decode(b64)
+            except Exception:
+                return self._send(400, {"ok": False, "error": "bad image data"})
+            if not raw or len(raw) > 25 * 1024 * 1024:
+                return self._send(400, {"ok": False, "error": "empty or >25MB image"})
+            ext = (os.path.splitext(name)[1] or ("." + m.group(1) if m else ".png")).lower()
+            if ext not in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+                ext = ".png"
+            updir = os.path.join(LOG_DIR, "uploads")
+            os.makedirs(updir, exist_ok=True)
+            path = os.path.join(updir, hashlib.sha1(raw).hexdigest()[:16] + ext)
+            with open(path, "wb") as f:
+                f.write(raw)
+            return self._send(200, {"ok": True, "path": path})
         if p.startswith("/api/tasks/") and p.endswith("/rerun"):
             # Run a task again FROM SCRATCH: drop every trace of the prior
             # attempt (session, worktree, branch, PR, logs, test artifacts) and
