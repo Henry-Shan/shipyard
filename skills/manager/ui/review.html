@@ -883,7 +883,7 @@ function taskActions(t){
     ?`<button class="tbtn gh" onclick="rerunTask(${t.id})" title="run this task again from scratch — fresh worktree + branch off the current base, then a new PR (re-links it correctly)">🔁 Rerun</button>`:"";
   const sess=t.session_id?`<button class="tbtn gh mono" title="copy: cd ${esc(REPO)} && claude --resume ${t.session_id}" onclick="copyResume('${t.session_id}',this)">⧉ ${esc(t.session_id.slice(0,4))}</button>`:"";
   // Copy a cd into this task's worktree (already on its branch) to run commands there.
-  const cdBtn=t.worktree?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick="copyCd(${JSON.stringify(t.worktree)},this)">📁 cd</button>`:"";
+  const cdBtn=t.worktree?`<button class="tbtn gh mono" title="copy: cd ${esc(t.worktree)}${t.branch?"   (on branch "+esc(t.branch)+")":""}" onclick='copyCd(${JSON.stringify(t.worktree)},this)'>📁 cd</button>`:"";
   // ONE removal control on every task: full teardown — stops servers, removes
   // the worktree, deletes the branch, drops the task. "Delete everything here."
   const remove=`<button class="tbtn danger" onclick="removeTask(${t.id})" title="stop servers, remove the worktree, delete the branch, and clear this task">🗑 Remove</button>`;
@@ -905,7 +905,7 @@ function taskActions(t){
     } else if(t.branch && PUSHMODE!=="local"){
       finished=`<button class="tbtn primary" onclick="openPR(${t.id},this)" title="push this branch to GitHub and open its pull request">Open PR to merge ↗</button>`;
     } else if(t.branch){
-      finished=`<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick="copyBranchReview(${JSON.stringify(t.branch)},this)">⎇ ${esc(t.branch)} · copy review cmd</button>`;
+      finished=`<button class="tbtn primary mono" title="copy: git -C ${esc(REPO)} diff ${esc(t.branch)} — review, then merge locally with git merge --squash ${esc(t.branch)}" onclick='copyBranchReview(${JSON.stringify(t.branch)},this)'>⎇ ${esc(t.branch)} · copy review cmd</button>`;
     }
     main=`${finished} ${tb}`;
   } else if(t.status==="running"||t.status==="parked"){ main=tb; }
