@@ -955,13 +955,29 @@ def _link_env_files(wt):
         dst = os.path.join(wt, rel)
         if not os.path.exists(src) or os.path.lexists(dst):
             continue  # nothing to link, or the worktree already has its own
+        if not os.path.isdir(os.path.dirname(dst)):
+            continue  # this worktree/branch doesn't have that app dir — skip
         try:
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
             os.symlink(os.path.abspath(src), dst)
             linked.append(rel)
         except OSError:
             pass
     return linked
+
+
+def _link_env_files_all():
+    """Backfill env_files into EVERY existing worktree. _link_env_files only
+    runs on a web test-server start, but a mobile branch is tested by hand
+    (npx expo run:ios) and never goes through it — so a worktree created before
+    an env_files entry existed would be missing it. Runs on daemon startup (and
+    thus after every config re-exec), idempotent, so any worktree the user cd's
+    into already has its gitignored env linked."""
+    if not (skill_config.get("env_files") and os.path.isdir(WORKTREE_BASE)):
+        return
+    for name in os.listdir(WORKTREE_BASE):
+        wt = os.path.join(WORKTREE_BASE, name)
+        if os.path.isdir(wt):
+            _link_env_files(wt)
 
 
 def _prepare_node_modules(wt):
@@ -2161,6 +2177,7 @@ def serve():
         set_cap(DEFAULT_CAP)
     reconcile_orphans()       # re-attach watchers to runs from a prior daemon
     rescan_done_for_interruptions()  # demote interrupted runs out of PR-ready
+    _link_env_files_all()     # backfill env_files into every existing worktree
     threading.Thread(target=dispatcher_loop, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"manager up:  {URL}   (cap={get_cap()}, repo={REPO})")
