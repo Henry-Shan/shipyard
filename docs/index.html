@@ -3,150 +3,92 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Shipyard playground</title>
-<meta name="description" content="Run /manager on a sample QA doc in your browser and watch it become PR-ready branches. A simulation of the Shipyard skills for Claude Code — nothing is installed, no agent runs.">
+<title>Shipyard demo</title>
+<meta name="description" content="Watch /manager turn a QA pass into pull requests: three autonomous workers, live reports, one human in the loop. A simulation of the Shipyard skills for Claude Code.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FFE14D'/%3E%3Crect x='3' y='3' width='26' height='26' fill='none' stroke='%23141414' stroke-width='3'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial Black,Arial' font-weight='900' font-size='18' fill='%23141414'%3ES%3C/text%3E%3C/svg%3E">
 <style>
   /* Same tokens as the real control panel (skills/manager/ui/review.html). */
-  :root{
-    --canvas:#F3EFE4; --paper:#ffffff; --ink:#141414; --dim:#54524A; --line:#141414;
-    --queued:#5B6472; --prog:#1E48E0; --test:#6B2FE0; --ready:#178A46;
-    --wait:#B27B00; --block:#C1440E; --fail:#C4183C; --none:#6B7280;
-    --yellow:#FFE14D; --r:8px; --rl:14px;
-  }
+  :root{--canvas:#F3EFE4;--paper:#fff;--ink:#141414;--dim:#54524A;--queued:#5B6472;--prog:#1E48E0;--test:#6B2FE0;--ready:#178A46;--wait:#B27B00;--block:#C1440E;--fail:#C4183C;--none:#6B7280;--yellow:#FFE14D;--r:8px;--rl:14px}
   *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;color:var(--ink);
-    background:radial-gradient(circle at 1px 1px, rgba(20,20,20,.07) 1px, transparent 0) 0 0/18px 18px, var(--canvas);
-    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  body{margin:0;color:var(--ink);background:radial-gradient(circle at 1px 1px,rgba(20,20,20,.07) 1px,transparent 0) 0 0/18px 18px,var(--canvas);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   a{color:var(--prog);font-weight:700;text-decoration:none} a:hover{text-decoration:underline;text-decoration-thickness:2px}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
   button{font:inherit;color:inherit}
   :focus-visible{outline:3px solid var(--prog);outline-offset:2px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
 
-  /* ---- header ---- */
-  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-    padding:10px 18px;background:var(--paper);border-bottom:3px solid var(--ink)}
-  header .title{font-size:15px;font-weight:900;letter-spacing:-.01em;display:inline-block;background:var(--yellow);
-    border:2.5px solid var(--ink);border-radius:6px;padding:2px 10px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);color:inherit;cursor:pointer}
-  header .sub{color:var(--dim);font-size:12px;font-weight:700}
-  header .spacer{flex:1}
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 18px;background:var(--paper);border-bottom:3px solid var(--ink)}
+  .title{font-size:15px;font-weight:900;display:inline-block;background:var(--yellow);border:2.5px solid var(--ink);border-radius:6px;padding:2px 10px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);color:inherit}
+  .sub{color:var(--dim);font-size:12px;font-weight:700}
+  .spacer{flex:1}
   .cov{display:flex;gap:6px;flex-wrap:wrap}
-  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;cursor:pointer;background:var(--paper);
-    border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em;transition:transform .08s,box-shadow .08s}
-  .pillc:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
-  .pillc:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
-  .pillc[data-n="0"]{opacity:.45}
+  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;background:var(--paper);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em}
+  .pillc[data-n="0"]{opacity:.4}
   .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;font-weight:700}
   .live i{width:8px;height:8px;border-radius:50%;background:var(--ready);border:1.5px solid var(--ink);animation:pulse 1.4s infinite}
   .live.idle i{background:var(--none);animation:none}
   @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
-  .hbtn{font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:var(--r);
-    padding:6px 13px;box-shadow:3px 3px 0 var(--ink);white-space:nowrap;transition:transform .08s,box-shadow .08s}
-  .hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
-  .hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
-  .hbtn.primary{background:var(--ready);color:#fff}
-  .hbtn.danger{background:var(--fail);color:#fff}
-  .hbtn:disabled{opacity:.5;cursor:default;transform:none;box-shadow:1px 1px 0 var(--ink)}
-  .capctl{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
-  .caplbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:900}
-  .capb{cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:7px;width:24px;height:24px;line-height:1;font-weight:900;
-    box-shadow:2px 2px 0 var(--ink);transition:transform .08s,box-shadow .08s;padding:0}
-  .capb:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)} .capb:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
-  .capctl b{min-width:22px;text-align:center;font-size:13px;font-weight:900}
-  #pausebanner{display:none;background:var(--wait);border-bottom:3px solid var(--ink);color:#fff;font-size:12.5px;font-weight:800;padding:8px 22px}
-  #pausebanner.on{display:block}
+  .hbtn{font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:var(--r);padding:6px 13px;box-shadow:3px 3px 0 var(--ink);white-space:nowrap;transition:transform .08s,box-shadow .08s}
+  .hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)} .hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .hbtn.primary{background:var(--ready);color:#fff} .hbtn.gh{background:transparent;box-shadow:none;font-weight:700} .hbtn.gh:hover{background:rgba(20,20,20,.06);transform:none;box-shadow:none}
+  .hbtn:disabled{opacity:.45;cursor:default;transform:none;box-shadow:1px 1px 0 var(--ink)}
 
-  /* ---- shell ---- */
-  #shell{display:grid;grid-template-columns:212px 1fr;min-height:calc(100vh - 52px)}
-  #index{background:var(--paper);border-right:3px solid var(--ink);padding:10px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
-  #index .ihead{font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:900;padding:8px 14px 6px}
-  .irow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;border-left:4px solid transparent;font-weight:600;background:none;border-top:0;border-right:0;border-bottom:0;width:100%;text-align:left}
-  .irow:hover{background:#FFF3B0} .irow.on{background:#E3EBFF;border-left-color:var(--ink);font-weight:800}
-  .irow .sd{width:9px;height:9px;border-radius:50%;flex:none;border:1.5px solid var(--ink)}
-  .irow .it{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #index .none{padding:6px 14px;color:var(--dim);font-size:12px;font-weight:600}
-  #stage{padding:18px 22px 120px;max-width:980px;width:100%}
-  @media (max-width:860px){#shell{grid-template-columns:1fr}#index{position:static;height:auto;border-right:0;border-bottom:3px solid var(--ink);max-height:180px}#stage{padding:14px 12px 100px}}
+  main{max-width:900px;margin:0 auto;padding:22px 18px 100px}
 
-  /* ---- intake ---- */
-  .intake{background:#FFF3B0;border:3px solid var(--ink);border-radius:var(--rl);padding:16px 18px;box-shadow:5px 5px 0 var(--ink);margin-bottom:18px}
-  .intake h1{margin:0 0 6px;font-size:16px;font-weight:900}
-  .intake p{margin:0 0 10px;font-size:13px;color:#3A3934;line-height:1.55}
-  .srcpick{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 8px}
-  .srcpick .tbtn[aria-pressed="true"]{background:var(--ink);color:var(--yellow)}
-  .intake textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:13px;min-height:86px;resize:vertical;background:var(--paper);display:none}
-  .intake textarea.on{display:block}
-  .intake textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
-  .intake .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  .intake .fine{font-size:11.5px;color:var(--dim);font-weight:600}
-  .beacons{margin-top:12px;display:none;flex-direction:column;gap:5px}
-  .beacons.on{display:flex}
-  .beacon{display:flex;align-items:baseline;gap:9px;font-size:12.5px;font-weight:700;opacity:.35}
-  .beacon.on{opacity:1} .beacon.done .k::before{content:"✓ ";color:var(--ready)}
-  .beacon .k{font-family:ui-monospace,Menlo,monospace;font-weight:800;min-width:118px}
-  .beacon .v{color:#3A3934;font-weight:600}
-  .intake.compact{padding:10px 16px}
-  .intake.compact h1,.intake.compact p,.intake.compact .srcpick,.intake.compact textarea,.intake.compact .row{display:none}
-  .intake.compact .beacons{margin-top:0}
+  /* intro */
+  .intro{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);box-shadow:6px 6px 0 var(--ink);padding:26px 28px;margin-bottom:22px}
+  .intro h1{margin:0 0 10px;font-size:26px;font-weight:900;letter-spacing:-.01em;line-height:1.2}
+  .intro p{margin:0 0 10px;font-size:14.5px;line-height:1.6;color:#2B2A26}
+  .intro .big{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:900;cursor:pointer;border:3px solid var(--ink);background:var(--ready);color:#fff;border-radius:10px;padding:12px 22px;box-shadow:5px 5px 0 var(--ink);margin-top:8px;transition:transform .08s,box-shadow .08s}
+  .intro .big:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 var(--ink)} .intro .big:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+  .intro .fine{margin:12px 0 0;font-size:12.5px;color:var(--dim);font-weight:600}
+  .scenario{display:none;align-items:center;gap:10px;flex-wrap:wrap;background:#FFF3B0;border:2.5px solid var(--ink);border-radius:10px;padding:9px 14px;margin-bottom:18px;font-size:13px;font-weight:700;box-shadow:3px 3px 0 var(--ink)}
+  .scenario.on{display:flex}
+  .scenario .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:900;color:var(--dim)}
+  .feed{font-size:12.5px;color:var(--dim);font-weight:600;min-height:1.3em;margin:0 0 16px;font-family:ui-monospace,Menlo,monospace}
+  .feed b{color:var(--ink)}
 
-  /* ---- buttons ---- */
-  .tbtn{font-size:12px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:var(--r);
-    padding:5px 12px;line-height:1.4;white-space:nowrap;box-shadow:3px 3px 0 var(--ink);transition:transform .08s,box-shadow .08s,background .12s}
-  .tbtn:hover{background:#FFF6C7} .tbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
-  .tbtn:disabled,.tbtn[aria-disabled="true"]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:1px 1px 0 var(--ink)}
-  .tbtn.primary{background:var(--prog);color:#fff} .tbtn.primary:hover{background:#1B3EC4}
-  .tbtn.gh{background:transparent;box-shadow:none;font-weight:700} .tbtn.gh:hover{background:rgba(20,20,20,.06)} .tbtn.gh:active{transform:none}
-  .tbtn.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px}
-  .applink{position:relative;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;background:var(--ready);color:#fff;border:2.5px solid var(--ink);
-    border-radius:var(--r);padding:5px 12px;box-shadow:3px 3px 0 var(--ink);opacity:.55;cursor:not-allowed}
-  .applink::after{content:"Humans merge. Always. The pipeline stops at PR-ready — this button opens GitHub, it never merges for you.";
-    position:absolute;left:0;top:calc(100% + 8px);width:260px;background:var(--ink);color:var(--yellow);font-size:11.5px;font-weight:700;line-height:1.4;
-    padding:8px 10px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5;text-align:left}
-  .applink:hover::after,.applink:focus-visible::after{opacity:1}
-
-  /* ---- sections ---- */
-  .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px;margin:4px 0 8px}
-  .qwrap{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
-  .qwrap:empty,.qwrap:empty+.qhead{display:none}
-  .qcard{background:#FFF8DC;border:3px solid var(--ink);border-left-width:9px;border-left-color:var(--wait);border-radius:var(--rl);padding:15px 17px;box-shadow:5px 5px 0 var(--ink)}
-  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-weight:800}
-  .qq{margin:7px 0 4px;font-weight:900;font-size:14.5px}
-  .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px}
-  .qopts{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:6px 0}
-  .qopts .tbtn{white-space:normal;text-align:left;line-height:1.5;padding:8px 12px}
-  .qopts .tbtn.rec{background:var(--yellow)}
-  .qcard textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:8px 10px;font:inherit;font-size:13px;resize:vertical;margin-top:8px;background:var(--paper)}
-  .qcard .acts{display:flex;gap:8px;margin-top:8px;align-items:center}
-  .qcard.answered .qopts,.qcard.answered textarea,.qcard.answered .acts{display:none}
-  .qcard .ans{display:none;font-size:12.5px;font-weight:800;color:var(--ready);margin-top:4px}
-  .qcard.answered .ans{display:block}
-
+  /* sections */
   section.sec{margin:0 0 22px}
   .sech{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;border-bottom:3px solid var(--ink);padding-bottom:7px;margin-bottom:12px;background:none;border-top:0;border-left:0;border-right:0;width:100%;text-align:left}
-  .sech h2{font-size:20px;font-weight:900;letter-spacing:-.01em;margin:0;flex:1}
-  .sech h2 small{font-size:12px;color:var(--dim);font-weight:700;margin-left:8px}
+  .sech h2{font-size:19px;font-weight:900;margin:0;flex:1} .sech h2 small{font-size:12px;color:var(--dim);font-weight:700;margin-left:8px}
   .sech .chev{font-size:12px;color:var(--dim);transition:transform .15s}
-  section.sec.collapsed .chev{transform:rotate(-90deg)}
-  section.sec.collapsed .cards{display:none}
-  section.sec .emptyline{color:var(--dim);font-size:12.5px;font-weight:600;padding:2px 0 4px}
+  section.sec.collapsed .chev{transform:rotate(-90deg)} section.sec.collapsed .cards{display:none}
+  .emptyline{color:var(--dim);font-size:12.5px;font-weight:600;padding:2px 0 4px}
   section.sec:not(.collapsed) .cards:not(:empty)+.emptyline{display:none}
+  .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px}
+  .qwrap{display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
+  .qwrap:empty{display:none} .qhead:has(+.qwrap:empty){display:none}
 
-  /* ---- task cards ---- */
-  .tcard{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--queued);border-radius:10px;padding:12px 14px;margin:0 0 12px;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink);scroll-margin-top:70px}
-  .tcard.s-running,.tcard.s-testing{border-left-color:var(--prog)} .tcard.s-testing{border-left-color:var(--test)}
-  .tcard.s-parked{border-left-color:var(--wait);background:#FFF8DC} .tcard.s-done{border-left-color:var(--ready)} .tcard.s-blocked{border-left-color:var(--block)}
-  .tcard.flash{outline:3px solid var(--prog);outline-offset:2px}
-  .th{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none}
-  .th .bn{font-size:10px;font-weight:900;color:#fff;border-radius:6px;min-width:22px;text-align:center;padding:2px 5px;border:1.5px solid var(--ink);background:var(--queued)}
-  .tcard.s-running .bn,.tcard.s-testing .bn{background:var(--prog)} .tcard.s-parked .bn{background:var(--wait)} .tcard.s-done .bn{background:var(--ready)} .tcard.s-blocked .bn{background:var(--block)}
-  .th .tt{font-weight:800;font-size:13.5px;flex:1;min-width:200px}
-  .badge{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 8px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;background:var(--paper)}
+  /* question */
+  .qcard{background:#FFF8DC;border:3px solid var(--ink);border-left-width:9px;border-left-color:var(--wait);border-radius:var(--rl);padding:14px 16px;box-shadow:5px 5px 0 var(--ink)}
+  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-weight:800}
+  .qq{margin:6px 0 4px;font-weight:900;font-size:14.5px}
+  .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px}
+  .qopts{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+  .tbtn{font-size:12px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:var(--r);padding:5px 12px;line-height:1.4;box-shadow:3px 3px 0 var(--ink);transition:transform .08s,box-shadow .08s,background .12s}
+  .tbtn:hover{background:#FFF6C7} .tbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .tbtn.gh{background:transparent;box-shadow:none;font-weight:700} .tbtn.gh:hover{background:rgba(20,20,20,.06)} .tbtn.gh:active{transform:none}
+  .tbtn.primary{background:var(--prog);color:#fff}
+  .tbtn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:1px 1px 0 var(--ink)}
+  .qopts .tbtn{white-space:normal;text-align:left;padding:8px 12px} .qopts .tbtn.rec{background:var(--yellow)}
+  .qcard.answered .qopts{display:none} .qcard .ans{display:none;font-size:12.5px;font-weight:800;color:var(--ready)} .qcard.answered .ans{display:block}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--prog);border:1.5px solid var(--ink);display:inline-block;animation:pulse 1.4s infinite}
+
+  /* cards */
+  .tcard{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--queued);border-radius:10px;padding:12px 14px;margin:0 0 12px;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink);transition:opacity .4s,transform .4s}
+  .tcard.s-running{border-left-color:var(--prog)} .tcard.s-testing{border-left-color:var(--test)} .tcard.s-parked{border-left-color:var(--wait);background:#FFF8DC} .tcard.s-done{border-left-color:var(--ready)} .tcard.s-blocked{border-left-color:var(--block)}
+  .tcard.new{animation:arrive .5s ease-out} @keyframes arrive{from{opacity:0;transform:translateY(-8px)}}
+  .tcard.merged{opacity:0;transform:translateX(18px)}
+  .th{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .bn{font-size:10px;font-weight:900;color:#fff;border-radius:6px;min-width:22px;text-align:center;padding:2px 5px;border:1.5px solid var(--ink);background:var(--queued)}
+  .tcard.s-running .bn{background:var(--prog)} .tcard.s-testing .bn{background:var(--test)} .tcard.s-parked .bn{background:var(--wait)} .tcard.s-done .bn{background:var(--ready)} .tcard.s-blocked .bn{background:var(--block)}
+  .tt{font-weight:800;font-size:14px;flex:1;min-width:220px;line-height:1.35}
+  .badge{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 8px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;background:var(--paper);white-space:nowrap}
   .badge.floor{background:var(--yellow)}
-  .th .chev{font-size:11px;color:var(--dim);transition:transform .15s}
-  .tcard.collapsed .chev{transform:rotate(-90deg)} .tcard.collapsed .tbody{display:none}
-  .src{font-size:11.5px;color:var(--dim);font-weight:600;margin-top:3px}
-  .prow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:8px}
+  .kv{display:grid;grid-template-columns:62px 1fr;gap:2px 10px;margin-top:8px;font-size:12.5px}
+  .kv .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:900;color:var(--dim);padding-top:2px}
+  .kv .v{color:#2B2A26;font-weight:600} .kv .v .mono{color:var(--prog);font-weight:700}
+  .prow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:9px}
   .pstep{font-size:10.5px;font-weight:700;border:1.5px solid;border-radius:999px;padding:1px 8px;opacity:.5}
   .pstep.cur{opacity:1;font-weight:900;border-width:2.5px;box-shadow:2px 2px 0 var(--ink)}
   .parr{color:var(--none);font-size:10px;opacity:.7}
@@ -155,170 +97,109 @@
   .gate.done{border-color:var(--ready);color:var(--ready);background:#E3F5EA}
   .gate.cur{border-color:var(--ink);color:var(--ink);background:#FFF3B0;box-shadow:2px 2px 0 var(--ink)}
   .gate.fail{border-color:var(--fail);color:var(--fail);background:#FFE3E9}
-  .gate.parked{border-color:var(--ink);background:var(--yellow);color:var(--ink)}
+  .gate.parked{border-color:var(--ink);background:var(--yellow)}
   .nprog{margin-top:8px;color:#222;background:#F6F4EE;border:2px solid var(--ink);border-radius:7px;padding:5px 8px;font-size:11.5px;line-height:1.45}
-  .nprog.err{background:#FFE3E9;color:#7A0E28}
-  .nprog.ok{background:#E3F5EA;color:#0B4D28}
+  .nprog.err{background:#FFE3E9;color:#7A0E28} .nprog.ok{background:#E3F5EA;color:#0B4D28}
   .tact{margin-top:9px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-  .tspacer{flex:1 1 auto}
-  .testplan{margin-top:9px;font-size:12px}
-  .testplan>summary{cursor:pointer;font-weight:800;list-style:none;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
-  .testplan>summary::before{content:"▸ ";color:var(--dim)} .testplan[open]>summary::before{content:"▾ "}
-  .testplan pre{white-space:pre-wrap;background:var(--ink);color:var(--yellow);border:2.5px solid var(--ink);border-radius:9px;padding:11px 13px;margin:7px 0 0;font-size:11.5px;line-height:1.5}
-  .ftchip{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
-  .ft-pass{color:#0B6B3A;background:#B9F6CA} .ft-fail{color:#7A1330;background:#FFD0DA}
+  .applink{position:relative;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;background:var(--ready);color:#fff;border:2.5px solid var(--ink);border-radius:var(--r);padding:5px 12px;box-shadow:3px 3px 0 var(--ink);opacity:.55;cursor:not-allowed}
+  .applink::after{content:"The pipeline never merges. On the real panel this opens the PR on GitHub — you merge it there.";position:absolute;left:0;top:calc(100% + 8px);width:250px;background:var(--ink);color:var(--yellow);font-size:11.5px;font-weight:700;line-height:1.4;padding:8px 10px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
+  .applink:hover::after,.applink:focus-visible::after{opacity:1}
+  .ftchip{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;color:#0B6B3A;background:#B9F6CA}
+  .mergedtag{font-size:11px;font-weight:900;color:var(--ready)}
 
-  #report{display:none;background:var(--ink);color:#E8F0EA;border-radius:var(--rl);padding:14px 18px;font-size:13px;line-height:1.6;box-shadow:5px 5px 0 rgba(20,20,20,.35);margin-top:6px}
-  #report.on{display:block} #report b{color:var(--yellow)}
+  footer{padding:16px 18px 40px;font-size:12px;color:var(--dim);font-weight:600;border-top:3px solid var(--ink);background:var(--paper)}
+  footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
 
-  /* ---- docs drawer + modal ---- */
+  /* drawer + modal (secondary, reached from the footer) */
   .scrim{display:none;position:fixed;inset:0;background:rgba(20,20,20,.55);z-index:100}
-  .scrim.on{display:flex;align-items:stretch;justify-content:flex-end}
-  .drawer{width:min(820px,100%);background:var(--canvas);border-left:3px solid var(--ink);height:100%;overflow:auto;padding:0 0 60px}
-  .drawer .dh{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--paper);border-bottom:3px solid var(--ink);font-weight:900}
-  .drawer .dh .spacer{flex:1}
-  .ndoc{margin:18px auto;max-width:760px;background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);box-shadow:7px 7px 0 var(--ink);padding:26px 30px}
-  .ntest{font-size:18px;font-weight:900;margin:22px 0 6px;border-bottom:3px solid var(--ink);padding-bottom:6px} .ntest:first-child{margin-top:0}
-  .nfind{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--none);border-radius:10px;padding:11px 13px;margin:12px 0;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink)}
-  .nfind.reading{background:#FFF3B0}
-  .nfind.st-shipped{border-left-color:var(--ready);opacity:.75} .nfind.st-blocked{border-left-color:var(--block)} .nfind.st-task{border-left-color:var(--prog)} .nfind.st-merged{border-left-color:var(--test)}
-  .nfh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none}
-  .nfh .fid{font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px}
-  .nfh .chev{font-size:11px;color:var(--dim);transition:transform .15s;margin-left:auto}
-  .nfind.collapsed .chev{transform:rotate(-90deg)} .nfind.collapsed .nbody{display:none}
-  .sevtag{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
-  .nft{margin-top:7px;font-size:13.5px;font-weight:600;line-height:1.55}
-  .nfind.st-shipped .nft{text-decoration:line-through;color:var(--dim)}
-  .ntask{margin-top:8px;padding-top:8px;border-top:2px solid var(--ink);font-size:12px;font-weight:700}
-  .ntask .mono{font-weight:700;color:var(--prog)}
-  .stamp{display:inline-block;font-size:10.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border:2.5px solid;border-radius:5px;transform:rotate(-4deg);margin-left:auto;opacity:0}
-  .stamp.on{animation:slam .22s cubic-bezier(.2,.9,.3,1.4) forwards}
-  @keyframes slam{from{transform:rotate(-4deg) scale(1.5)}to{transform:rotate(-4deg) scale(1);opacity:1}}
-  .stamp.shipped{color:var(--ready);border-color:var(--ready)} .stamp.blocked{color:var(--block);border-color:var(--block)}
-  .stamp.tier{color:var(--ink);border-color:var(--ink)} .stamp.tier.floor{background:var(--yellow)} .stamp.merged{color:var(--test);border-color:var(--test)}
-
-  .modal-box{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);max-width:720px;width:100%;max-height:86vh;overflow:auto;box-shadow:8px 8px 0 var(--ink);margin:auto}
-  .scrim.center{align-items:center;justify-content:center;padding:20px}
-  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-bottom:2.5px solid var(--ink);font-weight:800}
-  .modal-body{padding:16px 17px}
-  .modal-body p{margin:0 0 10px;font-size:13px;color:#3A3934;line-height:1.55}
-  .modal-body textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:14px;min-height:76px;resize:vertical;background:var(--paper)}
-  .modal-body textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
+  .scrim.on{display:flex;align-items:stretch;justify-content:flex-end} .scrim.center.on{align-items:center;justify-content:center;padding:20px}
+  .drawer{width:min(760px,100%);background:var(--canvas);border-left:3px solid var(--ink);height:100%;overflow:auto}
+  .dh{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--paper);border-bottom:3px solid var(--ink);font-weight:900}
+  .ndoc{margin:18px auto 60px;max-width:700px;background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);box-shadow:7px 7px 0 var(--ink);padding:24px 28px}
+  .ntest{font-size:17px;font-weight:900;margin:20px 0 6px;border-bottom:3px solid var(--ink);padding-bottom:6px} .ntest:first-child{margin-top:0}
+  .nfind{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--none);border-radius:10px;padding:10px 12px;margin:10px 0;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink)}
+  .nfind.st-shipped{border-left-color:var(--ready)} .nfind.st-blocked{border-left-color:var(--block)} .nfind.st-task{border-left-color:var(--prog)} .nfind.st-merged{border-left-color:var(--test)}
+  .nfh{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .fid{font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px}
+  .nft{margin-top:6px;font-size:13px;font-weight:600;line-height:1.5} .nfind.st-shipped .nft{text-decoration:line-through;color:var(--dim)}
+  .ntask{margin-top:7px;padding-top:7px;border-top:2px solid var(--ink);font-size:12px;font-weight:700}
+  .stamp{font-size:10.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border:2.5px solid;border-radius:5px;transform:rotate(-4deg);margin-left:auto}
+  .stamp.shipped{color:var(--ready);border-color:var(--ready)} .stamp.blocked{color:var(--block);border-color:var(--block)} .stamp.task{border-color:var(--ink)} .stamp.task.floor{background:var(--yellow)} .stamp.merged{color:var(--test);border-color:var(--test)}
+  .modal-box{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);max-width:700px;width:100%;max-height:86vh;overflow:auto;box-shadow:8px 8px 0 var(--ink)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:2.5px solid var(--ink);font-weight:800}
+  .modal-body{padding:16px} .modal-body p{margin:0 0 10px;font-size:13px;color:#3A3934;line-height:1.55}
+  .modal-body textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:14px;min-height:72px;resize:vertical}
   .exs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
   .route{border:2.5px solid var(--ink);border-radius:10px;padding:14px 16px;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink)}
-  .route .big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
-  .route .tierbig{font-size:44px;font-weight:900;line-height:1;letter-spacing:-.02em}
-  .route .lbl{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
-  .route .lbl.raised{color:var(--block)}
-  .route .cats{margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap}
-  .route .why{margin:12px 0 0;font-size:13.5px;line-height:1.55}
-  .route .fine{font-size:12px;color:var(--dim);margin-top:12px;line-height:1.5}
-
-  footer{padding:16px 22px 40px;font-size:12px;color:var(--dim);font-weight:600;border-top:3px solid var(--ink);background:var(--paper)}
-  @media (prefers-reduced-motion: reduce){
-    .stamp.on{animation:none;opacity:1;transform:rotate(-4deg)} .live i{animation:none} .pillc,.hbtn,.tbtn,.capb,.chev{transition:none}
-  }
+  .route .big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap} .route .tierbig{font-size:44px;font-weight:900;line-height:1}
+  .route .lbl{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase} .route .lbl.raised{color:var(--block)}
+  .route .cats{margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap} .route .why{margin:12px 0 0;font-size:13.5px;line-height:1.55} .route .fine{font-size:12px;color:var(--dim);margin-top:12px}
+  @media (prefers-reduced-motion:reduce){.live i,.pulse{animation:none}.tcard.new{animation:none}.tcard{transition:none}}
 </style>
 </head>
 <body>
 
 <header>
   <a class="title" href="https://github.com/Henry-Shan/shipyard" title="Shipyard on GitHub">Review</a>
-  <span class="sub" id="sub">playground · simulation · nothing runs on your machine</span>
+  <span class="sub">Castaway Studio · simulation</span>
   <div class="cov" id="cov"></div>
   <span class="spacer"></span>
-  <div class="capctl" title="dispatch_cap — how many /ship-task runs at once"><span class="caplbl">concurrency</span><button class="capb" id="capm" aria-label="fewer workers">−</button><b id="capv">2</b><button class="capb" id="capp" aria-label="more workers">+</button></div>
-  <div class="capctl" title="simulation speed"><span class="caplbl">speed</span><button class="capb" id="spdm" aria-label="slower">−</button><b id="spdv">2×</b><button class="capb" id="spdp" aria-label="faster">+</button></div>
-  <button class="hbtn" id="docsBtn">📄 Docs</button>
-  <button class="hbtn" id="routeBtn">⚙ Route a task</button>
-  <button class="hbtn" id="pauseBtn" disabled>⏸ Pause</button>
-  <button class="hbtn danger" id="clearBtn">🗑 Clear all</button>
   <span class="live idle" id="live"><i></i><span id="liveTxt">idle</span></span>
+  <button class="hbtn primary" id="runBtn">▶ Run demo</button>
+  <button class="hbtn gh" id="resetBtn" hidden>Reset</button>
 </header>
-<div id="pausebanner">Paused — running tasks finish their current step; nothing new is claimed until you resume.</div>
 
-<div id="shell">
-  <aside id="index" aria-label="Task index">
-    <div class="ihead">Tasks · <span id="taskCount">0</span></div>
-    <div id="irows"><div class="none">No batch yet.</div></div>
-  </aside>
+<main>
+  <div class="intro" id="intro">
+    <h1>A QA tester just filed 18 findings. Watch them become pull requests.</h1>
+    <p><b>The scenario.</b> Castaway Studio is a podcast-hosting app. A tester finished an end-to-end pass on staging and wrote everything up: silent upload failures, a timezone bug in scheduling, a guest who can see the billing page, feature asks, two things already fixed last week, and two things nobody should touch yet.</p>
+    <p><b>What runs.</b> <code>/manager</code> reads the write-up, works out which items are real work, and keeps three <code>/ship-task</code> workers busy. Each worker takes one task into its own git worktree, writes a failing test first, implements, passes a verify gate and an independent feature test, and opens a PR. New reports keep arriving. You only get pulled in when a run has a question it can't answer from the code — and you are the only one who merges.</p>
+    <button class="big" id="runBig">▶ Run demo</button>
+    <p class="fine">Everything here is simulated in your browser. The triage rules for risky work (auth, billing, migrations, deletions) are the real ones.</p>
+  </div>
 
-  <main id="stage">
-    <div class="intake" id="intake">
-      <h1>👋 What should the manager work on?</h1>
-      <p>The real panel takes a Notion URL, a PDF of QA findings with screenshots, a markdown file, a folder, or a typed list. Here, pick the sample doc from the repo or paste your own list — the risk-floor rules that triage it are the real ones.</p>
-      <div class="srcpick">
-        <button class="tbtn" data-src="sample" aria-pressed="true">examples/demo-qa-findings.md</button>
-        <button class="tbtn" data-src="custom" aria-pressed="false">paste my own list</button>
-      </div>
-      <textarea id="customSrc" aria-label="Your task list, one per line" placeholder="One task per line, e.g.
-fix the typo in the README install section
-guest users can open /settings/billing by direct URL
-add a CSV export button to the items table
-delete old invoices older than 7 years with a nightly job"></textarea>
-      <div class="row">
-        <button class="tbtn primary" id="run">Run /manager ▶</button>
-        <span class="fine" id="status">Ingest → ground → dedup → consolidate → triage → dispatch. You only hear from it when a run has a question.</span>
-      </div>
-      <div class="beacons" id="beacons">
-        <div class="beacon" data-k="ingest"><span class="k">[ingest]</span><span class="v"></span></div>
-        <div class="beacon" data-k="ground"><span class="k">[ground]</span><span class="v"></span></div>
-        <div class="beacon" data-k="dedup"><span class="k">[dedup]</span><span class="v"></span></div>
-        <div class="beacon" data-k="consolidate"><span class="k">[consolidate]</span><span class="v"></span></div>
-        <div class="beacon" data-k="triage"><span class="k">[triage]</span><span class="v"></span></div>
-        <div class="beacon" data-k="dispatch"><span class="k">[dispatch]</span><span class="v"></span></div>
-      </div>
-    </div>
+  <div class="scenario" id="scenario"><span class="k">source</span><span>QA pass · 18 findings</span><span class="k">skipped</span><span id="scSkipped">0 already shipped</span><span class="k">workers</span><span>3</span><span class="k">you</span><span>answer questions · merge PRs</span></div>
+  <p class="feed" id="feed"></p>
 
-    <div class="qhead" id="qhead">Needs your input · <span id="qcount">0</span></div>
-    <div class="qwrap" id="qwrap"></div>
+  <div class="qhead">Needs your input</div>
+  <div class="qwrap" id="qwrap"></div>
 
-    <section class="sec" data-sec="progress">
-      <button class="sech" aria-expanded="true"><h2>In progress<small id="c-progress">0</small></h2><span class="chev">▼</span></button>
-      <div class="cards" id="s-progress"></div><div class="emptyline">Nothing being worked on.</div>
-    </section>
-    <section class="sec" data-sec="done">
-      <button class="sech" aria-expanded="true"><h2>PR ready — merge when you're happy<small id="c-done">0</small></h2><span class="chev">▼</span></button>
-      <div class="cards" id="s-done"></div><div class="emptyline">Green PRs collect here with a manual test guide. You test, you merge.</div>
-    </section>
-    <section class="sec" data-sec="queued">
-      <button class="sech" aria-expanded="true"><h2>Queued<small id="c-queued">0</small></h2><span class="chev">▼</span></button>
-      <div class="cards" id="s-queued"></div><div class="emptyline">Empty until triage runs.</div>
-    </section>
-    <section class="sec collapsed" data-sec="blocked">
-      <button class="sech" aria-expanded="false"><h2>Blocked<small id="c-blocked">0</small></h2><span class="chev">▼</span></button>
-      <div class="cards" id="s-blocked"></div><div class="emptyline">Reported, not guessed — things the manager decided it must not or cannot do here.</div>
-    </section>
-
-    <div id="report"></div>
-  </main>
-</div>
+  <section class="sec" data-sec="progress">
+    <button class="sech" aria-expanded="true"><h2>In progress<small id="c-progress">0</small></h2><span class="chev">▼</span></button>
+    <div class="cards" id="s-progress"></div><div class="emptyline">Nothing being worked on yet.</div>
+  </section>
+  <section class="sec" data-sec="queued">
+    <button class="sech" aria-expanded="true"><h2>Queued<small id="c-queued">0</small></h2><span class="chev">▼</span></button>
+    <div class="cards" id="s-queued"></div><div class="emptyline">Empty until triage runs.</div>
+  </section>
+  <section class="sec" data-sec="done">
+    <button class="sech" aria-expanded="true"><h2>PR ready — merge when you're happy<small id="c-done">0</small></h2><span class="chev">▼</span></button>
+    <div class="cards" id="s-done"></div><div class="emptyline">Green PRs collect here with a test guide. In this demo "you" merge the oldest one every so often.</div>
+  </section>
+  <section class="sec collapsed" data-sec="blocked">
+    <button class="sech" aria-expanded="false"><h2>Blocked<small id="c-blocked">0</small></h2><span class="chev">▼</span></button>
+    <div class="cards" id="s-blocked"></div><div class="emptyline">Things the manager decided it must not or cannot do here — reported, not guessed.</div>
+  </section>
+</main>
 
 <footer>
-  Shipyard is three Claude Code skills — <code>/manager</code>, <code>/ship-task</code>, <code>/feature-tester</code> — by <a href="https://github.com/Henry-Shan">Henry Shan</a>. This page mirrors the real control panel's layout and simulates a batch; tiers and file paths are illustrative, the risk-floor rules and the never-merge boundary are not. <a href="https://github.com/Henry-Shan/shipyard">Source and install →</a>
+  Shipyard is three Claude Code skills — <code>/manager</code>, <code>/ship-task</code>, <code>/feature-tester</code> — by <a href="https://github.com/Henry-Shan">Henry Shan</a>. This page mirrors the real control panel and simulates a batch; file paths and timings are illustrative, the risk-floor rules and the never-merge boundary are not.
+  <div class="links"><a href="https://github.com/Henry-Shan/shipyard">Source and install →</a><a href="#" id="docsLink">Read the QA write-up it's working from</a><a href="#" id="routeLink">Route a task of your own</a></div>
 </footer>
 
-<!-- Docs drawer -->
 <div class="scrim" id="docsScrim" role="dialog" aria-modal="true" aria-label="Source document">
-  <div class="drawer">
-    <div class="dh">📄 <span id="docTitle">qa-findings.md</span><span class="sub" id="docSub" style="font-size:12px;color:var(--dim)"></span><span class="spacer"></span><button class="tbtn gh" id="docsCollapseAll">Collapse all</button><button class="tbtn" id="docsClose">Close</button></div>
-    <div class="ndoc" id="ndoc"></div>
-  </div>
+  <div class="drawer"><div class="dh">📄 qa-findings.md <span class="sub" id="docSub"></span><span class="spacer"></span><button class="tbtn" id="docsClose">Close</button></div><div class="ndoc" id="ndoc"></div></div>
 </div>
-
-<!-- Router modal -->
 <div class="scrim center" id="routeScrim" role="dialog" aria-modal="true" aria-label="Route a task">
   <div class="modal-box">
-    <div class="modal-head"><span>⚙ Where does one task go?</span><button class="tbtn gh" id="routeClose">Close</button></div>
+    <div class="modal-head"><span>Where would /ship-task send this?</span><button class="tbtn gh" id="routeClose">Close</button></div>
     <div class="modal-body">
-      <p>Type anything you'd hand to <code>/ship-task</code>. The tier is a heuristic for the demo; the <b>risk floor</b> is the real thing — the same regular expressions as <code>skills/ship-task/risk_floor.py</code>, run before the model's judgment, and they can only ever raise the tier.</p>
+      <p>The tier is a demo heuristic. The <b>risk floor</b> is the real thing — the same regular expressions as <code>skills/ship-task/risk_floor.py</code>; they run before the model's judgment and can only raise the tier.</p>
       <textarea id="taskInput" aria-label="Task description">add a CSV export button to the items table</textarea>
       <div class="exs">
         <button class="tbtn gh" data-ex="fix the typo in the README install section">README typo</button>
-        <button class="tbtn gh" data-ex="add a CSV export button to the items table">CSV export button</button>
+        <button class="tbtn gh" data-ex="add a CSV export button to the items table">CSV export</button>
         <button class="tbtn gh" data-ex="guest users can open /settings/billing by direct URL — block it">guest billing route</button>
-        <button class="tbtn gh" data-ex="delete old invoices older than 7 years with a nightly job">nightly invoice deletion</button>
-        <button class="tbtn gh" data-ex="rename the 'Apps' nav label to 'App'">nav copy change</button>
+        <button class="tbtn gh" data-ex="delete old invoices older than 7 years with a nightly job">nightly deletion</button>
         <button class="tbtn gh" data-ex="add a migration for a tenant_id column and backfill it">tenant migration</button>
       </div>
       <div class="route" id="route" aria-live="polite"></div>
@@ -327,38 +208,54 @@ delete old invoices older than 7 years with a nightly job"></textarea>
 </div>
 
 <script>
-/* ============ the sample doc (verbatim: examples/demo-qa-findings.md) ============ */
-const DOC = String.raw`## Test 1 — Episode upload & publishing
-🔴 Bug 1.1.1 — Uploading an episode over 200MB fails silently: the progress bar reaches 100%, then the episode never appears in the drafts list. No error toast, nothing in the activity feed. Repro 3/3 with a 212MB WAV.
-image 1.1.1
-🟡 Bug 1.1.2 — The upload dropzone says "Drop you're file here". Typo: should be "your". Cosmetic only.
-✅ Bug 1.1.3 — (Fixed) Chapters imported from the MP3 were off by one — this was fixed in PR #47 and verified working on staging today. Not reproducible anymore.
-🔴 Bug 1.2.1 — Scheduling an episode for 9:00 AM in the show's timezone (Berlin) publishes it at 9:00 AM UTC instead. The RSS feed timestamp confirms the wrong zone. This makes scheduled publishing unusable for non-UTC shows.
-image 1.2.1
-🟠 Feature 1.2.2 — There's no way to unschedule an episode without deleting it. Producers expect a "revert to draft" action on scheduled episodes.
-## Test 2 — Notifications
-🟠 Feature 2.1.1 — Producers get no notification when a scheduled episode actually goes live. They want a "published" confirmation email.
-🟠 Feature 2.1.2 — When a collaborator leaves a comment on a draft episode, nobody is notified. The comment just sits there until someone opens the draft.
-🟠 Feature 2.1.3 — Failed uploads (see 1.1.1) should notify the uploader by email, since big uploads are often left running unattended.
-## Test 3 — Team & permissions
-🔴 Bug 3.1.1 — A Guest editor can open the show's Billing page by navigating directly to /settings/billing. The nav item is hidden but the route is not protected — they can see the card's last four digits and the invoice history.
-image 3.1.1
-🟡 Bug 3.1.2 — The "Invite teammate" modal lets you submit an empty role dropdown; the invite email then says "joined as undefined".
-## Test 4 — Billing & plans
-🔴 Bug 4.1.1 — Downgrading from Studio to Indie while a bulk upload is running orphans the in-flight episodes: they finish uploading but are invisible on the Indie plan's episode list, and storage is still billed for them.
-🟠 Feature 4.1.2 — Deleting a show should warn that its RSS feed URL dies immediately and existing subscribers lose the feed. Right now it's a single confirm with no explanation of consequences.
-## Test 5 — Analytics
-🟢 Test 5.1.1 — (DONE) Per-episode listener graph — shipped in PR #52, verified on staging: numbers match the raw log export.
-⚪ Note 5.1.2 — Do NOT fix yet, investigate only: the "unique listeners" count for Static & Signal dropped ~40% on June 12th with no matching drop in downloads. Find out why before anyone touches the aggregation code — it may be a bot-filter change, not a bug.
-🔴 Bug 5.1.3 — Analytics page intermittently shows a blank chart on Safari. Could not find reliable repro steps (maybe 1 in 5 loads). The Apple embed partner said their widget review is still pending on their side, so the fallback chart may be the only path for now — blocked on their approval either way.`;
+/* ---------- the write-up (examples/demo-qa-findings.md) as structured findings ---------- */
+const DOC = [
+  ["Episode upload & publishing","🔴","1.1.1","Uploading an episode over 200MB fails silently: the progress bar reaches 100%, then the episode never appears in the drafts list. No error toast, nothing in the activity feed.",true],
+  ["Episode upload & publishing","🟡","1.1.2",'The upload dropzone says "Drop you\'re file here". Typo: should be "your". Cosmetic only.'],
+  ["Episode upload & publishing","✅","1.1.3","(Fixed) Chapters imported from the MP3 were off by one — this was fixed in PR #47 and verified working on staging today."],
+  ["Episode upload & publishing","🔴","1.2.1","Scheduling an episode for 9:00 AM in the show's timezone (Berlin) publishes it at 9:00 AM UTC instead. This makes scheduled publishing unusable for non-UTC shows.",true],
+  ["Episode upload & publishing","🟠","1.2.2",'There\'s no way to unschedule an episode without deleting it. Producers expect a "revert to draft" action.'],
+  ["Notifications","🟠","2.1.1",'Producers get no notification when a scheduled episode actually goes live. They want a "published" confirmation email.'],
+  ["Notifications","🟠","2.1.2","When a collaborator leaves a comment on a draft episode, nobody is notified."],
+  ["Notifications","🟠","2.1.3","Failed uploads should notify the uploader by email, since big uploads are often left running unattended."],
+  ["Team & permissions","🔴","3.1.1","A Guest editor can open the show's Billing page by navigating directly to /settings/billing. The nav item is hidden but the route is not protected — they can see the card's last four digits and the invoice history.",true],
+  ["Team & permissions","🟡","3.1.2",'The "Invite teammate" modal lets you submit an empty role dropdown; the invite email then says "joined as undefined".'],
+  ["Billing & plans","🔴","4.1.1","Downgrading from Studio to Indie while a bulk upload is running orphans the in-flight episodes: they finish uploading but are invisible on the Indie plan, and storage is still billed for them."],
+  ["Billing & plans","🟠","4.1.2","Deleting a show should warn that its RSS feed URL dies immediately and existing subscribers lose the feed."],
+  ["Analytics","🟢","5.1.1","(DONE) Per-episode listener graph — shipped in PR #52, verified on staging."],
+  ["Analytics","⚪","5.1.2",'Do NOT fix yet, investigate only: the "unique listeners" count dropped ~40% on June 12th with no matching drop in downloads. It may be a bot-filter change, not a bug.'],
+  ["Analytics","🔴","5.1.3","Analytics page intermittently shows a blank chart on Safari. The Apple embed partner's widget review is still pending — blocked on their approval either way."],
+].map(([section,mark,id,text,evidence])=>({section,mark,id,text,evidence:!!evidence}));
 
-/* ============ risk floor — ported verbatim from skills/ship-task/risk_floor.py ============ */
+/* Reports that keep arriving after the write-up — same app, same tester. */
+const INCOMING = [
+  ["🔴","6.1.1","Password-reset links expire the moment they're opened in Safari's link preview, so the real click lands on an 'expired' page."],
+  ["🟡","6.1.2","Episode duration shows 0:00 in the list for any file longer than 3 hours."],
+  ["🟠","6.2.1","Search ignores accented characters — 'Café' doesn't find 'Cafe' episodes or vice versa."],
+  ["🔴","6.2.2","Removing a teammate doesn't revoke their API token; their scripts keep publishing episodes."],
+  ["🟡","6.3.1","Dark-mode toggle resets to light on every reload."],
+  ["🟠","6.3.2","Analytics CSV export opens as one column in Excel — the file has no BOM and uses semicolons."],
+  ["🔴","6.4.1","Webhook delivery retries 50 times in one minute when the endpoint returns 500, which got one customer rate-limited by their own host."],
+  ["✅","6.4.2","(Fixed) Transcript .srt upload showed 'unsupported format' — landed as PR #58 yesterday, confirmed on staging."],
+  ["🟠","6.5.1","Importing a show from Anchor fails silently past 500 episodes; the import should page and show progress."],
+  ["🔴","6.5.2","Guests can read draft episode titles through the public search API even though drafts are hidden in the UI."],
+  ["🟡","6.6.1","Pricing page says 'Unlimted' storage on the Studio tier."],
+  ["⚪","6.6.2","Investigate only: download counts from one Spotify IP range doubled overnight — do not change the counting code until we know why."],
+  ["🟠","6.7.1","Deleting an episode leaves it in the scheduled queue; it then 'publishes' as a 404 at its old time."],
+  ["🔴","6.7.2","Changing a show's slug breaks every existing RSS subscriber — the old feed URL should 301 to the new one."],
+  ["🟠","6.8.1","Collaborators want to be @-mentioned in episode comments and get an email for it."],
+  ["🟡","6.8.2","The 'Copy embed code' button copies the code twice."],
+  ["🔴","6.9.1","Studio-plan invoices show the previous plan's price for the first month after an upgrade."],
+  ["🟠","6.9.2","Bulk 'mark as explicit' across selected episodes."],
+].map(([mark,id,text])=>({section:"Live reports",mark,id,text}));
+
+/* ---------- risk floor — ported from skills/ship-task/risk_floor.py ---------- */
 const RISK = [
-  ["auth/JWT", /\bauth\b|authenticat|authoriz|\bjwt\b|\boauth\b|\bsso\b|\bmiddleware\b|\blog ?in\b|\blogout\b|\bsign ?in\b/i],
+  ["auth/JWT", /\bauth\b|authenticat|authoriz|\bjwt\b|\boauth\b|\bsso\b|\bmiddleware\b|\blog ?in\b|\blogout\b|\bsign ?in\b|password[- ]reset/i],
   ["rbac/roles/permissions", /\brbac\b|\broles?\b|permission|access control|\bprivilege/i],
   ["db/migrations", /\bmigrations?\b|\bmigrate\b|\balter table\b|\bdrop table\b|\brls\b|row[- ]level security/i],
   ["multi-tenancy", /multi[- ]?tenan|\btenant\b|data isolation|cross[- ]tenant/i],
-  ["secrets/env", /\.env\b|\bsecret\b|\bcredential|\bapi[_ ]?key\b|\baccess[_ ]?key\b|\bbearer\b|private key|service[_ ]?key/i],
+  ["secrets/env", /\.env\b|\bsecret\b|\bcredential|\bapi[_ ]?key\b|\bapi token\b|\baccess[_ ]?key\b|\bbearer\b|private key|service[_ ]?key/i],
   ["CORS", /\bcors\b|cross[- ]origin/i],
   ["ci/deploy", /\.github\/workflows|github actions|\bci\/cd\b|\bdeploy(ment|s)?\b|\bdockerfile\b/i],
   ["payment/billing", /\bbilling\b|\binvoice|\bpayment|\bstripe\b|\bcharge\b.*\b(card|account)\b|usage charge/i],
@@ -366,306 +263,210 @@ const RISK = [
 ];
 const riskFloor = t => { const matched = RISK.filter(([,re]) => re.test(t)).map(([n]) => n); return { floor: matched.length ? 2 : 0, matched }; };
 
-/* ============ demo-only grounding ============ */
 const GROUND = [
-  [/billing page|\/settings\/billing/i, "middleware.ts → app/settings/billing/page.tsx"],
-  [/downgrad|studio to indie|\bplan\b/i, "lib/billing/plan-change.ts"],
-  [/invite|role dropdown/i, "lib/team/invite.ts"],
-  [/schedul|timezone|pubDate|unschedule|revert to draft/i, "lib/schedule.ts"],
-  [/deleting a show|rss feed url/i, "app/shows/[id]/delete-dialog.tsx"],
-  [/notif|email|comment on a draft/i, "lib/notify/mailer.ts"],
-  [/upload|dropzone|drafts? list/i, "apps/web/upload/dropzone.tsx"],
-  [/listener|analytics|chart/i, "app/analytics/listeners-chart.tsx"],
+  [/billing page|\/settings\/billing|invoice/i,"app/settings/billing"],[/downgrad|plan\b|upgrade/i,"lib/billing/plan-change.ts"],[/invite|role dropdown|teammate|api token/i,"lib/team"],
+  [/schedul|timezone|unschedule|revert to draft|scheduled queue/i,"lib/schedule.ts"],[/deleting a show|rss|slug|feed/i,"lib/feeds"],[/notif|email|comment|@-mention/i,"lib/notify/mailer.ts"],
+  [/upload|dropzone|drafts? list|import/i,"apps/web/upload"],[/listener|analytics|chart|csv|download counts/i,"app/analytics"],[/password|reset link/i,"lib/auth/reset.ts"],
+  [/search/i,"lib/search/index.ts"],[/dark-mode|toggle|theme/i,"apps/web/theme.ts"],[/webhook/i,"lib/webhooks/deliver.ts"],[/duration/i,"lib/media/probe.ts"],[/embed/i,"apps/web/embed.tsx"],[/pricing/i,"apps/web/marketing/pricing.tsx"],
 ];
-const groundFile = t => { for (const [re,f] of GROUND) if (re.test(t)) return f; return "(traced in your repo)"; };
+const groundFile = t => { for (const [re,f] of GROUND) if (re.test(t)) return f; return "apps/web"; };
 
-/* ============ parsing ============ */
-function parseSample(src){
-  const out=[]; let section=""; let cur=null;
-  for (const raw of src.split("\n")){
-    const line=raw.trim();
-    if (line.startsWith("## ")){ section=line.slice(3).replace(/^Test \d+ — /,""); continue; }
-    const m=line.match(/^(🔴|🟡|🟠|✅|🟢|⚪)\s+(Bug|Feature|Test|Note)\s+(\d+\.\d+\.\d+)\s+—\s+(.*)$/);
-    if (m){ cur={mark:m[1],kind:m[2],id:m[3],text:m[4],section,evidence:false}; out.push(cur); continue; }
-    if (/^image /.test(line) && cur) cur.evidence=true;
-  }
-  return out;
-}
-function parseCustom(src){
-  return src.split("\n").map(s=>s.trim()).filter(Boolean).map((text,i)=>{
-    const m=text.match(/^(🔴|🟡|🟠|✅|🟢|⚪)\s*/); const mark=m?m[1]:"🟠";
-    return {mark,kind:"Task",id:"L"+(i+1),text:text.replace(/^(🔴|🟡|🟠|✅|🟢|⚪)\s*/,""),section:"Your list",evidence:false,custom:true};
-  });
-}
+const FIX = {
+  "1.1.1":"Surface the failed upload and create the draft","1.1.2":"Fix the dropzone typo","1.2.1":"Publish at show-local time, not UTC","1.2.2":"Add 'revert to draft' for scheduled episodes",
+  "notif":"Published, comment and failed-upload emails from one mailer path","3.1.1":"Return 403 on /settings/billing for guests","3.1.2":"Require a role in the invite modal",
+  "4.1.1":"Keep in-flight uploads visible across a downgrade","4.1.2":"Explain feed loss before deleting a show",
+  "6.1.1":"Make reset links survive a link-preview fetch","6.1.2":"Probe duration correctly past 3 hours","6.2.1":"Fold accents in search indexing and queries","6.2.2":"Revoke API tokens when a member is removed",
+  "6.3.1":"Persist the theme choice","6.3.2":"Export CSV with BOM and commas","6.4.1":"Exponential backoff for webhook retries","6.5.1":"Page the Anchor import and show progress",
+  "6.5.2":"Hide drafts from the public search API","6.6.1":"Fix the pricing typo","6.7.1":"Remove deleted episodes from the schedule queue","6.7.2":"301 old feed URLs after a slug change",
+  "6.8.1":"@-mentions in episode comments with email","6.8.2":"Copy the embed code once","6.9.1":"Prorate the first invoice after an upgrade","6.9.2":"Bulk 'mark as explicit'",
+};
+const RAILS = {0:["worktree","edit","verify","commit","PR"],1:["worktree","focused test","fix","verify","commit","PR"],2:["worktree","blind test","confirm red","implement","verify","feature test","commit","PR"],3:["worktree","blind test","confirm red","implement","adversarial review","verify","feature test","commit","PR"]};
+const DOING = {
+  worktree:f=>`setting up an isolated worktree off origin/main`, edit:f=>`editing ${f} directly — nothing to test`, "focused test":f=>`writing one focused test in ${f}`, fix:f=>`making it green`,
+  "blind test":f=>`a spec-only agent is writing the failing test (it never sees the implementation)`, "confirm red":f=>`confirming the new test fails before any code changes`,
+  implement:f=>`a separate agent is implementing the fix in ${f}`, "adversarial review":f=>`a reviewer is trying to break the change`, verify:f=>`running the project's lint + test gate`,
+  "feature test":f=>`/feature-tester: a fresh agent proves the behavior with one integration test`, commit:f=>`committing with the feature-test verdict recorded`, PR:f=>`pushing the branch and opening the PR with a test guide`,
+};
+
+/* ---------- triage ---------- */
 function triage(f){
-  const text=f.text; const {floor,matched}=riskFloor(text);
-  if (f.mark==="✅"||f.mark==="🟢"||/\b(fixed|done|shipped) in pr #\d+/i.test(text)){ const pr=(text.match(/PR #(\d+)/i)||[])[1]; return {kind:"shipped",pr}; }
-  if (/do not fix|investigate only/i.test(text)) return {kind:"blocked",why:"reporter said investigate only"};
-  if (/blocked on|pending on their side|waiting on (the )?(vendor|partner)/i.test(text)) return {kind:"blocked",why:"waiting on an external approval"};
-  let base = f.mark==="🟡" ? (/typo|cosmetic|copy|label|wording/i.test(text)?0:1) : 2;
-  if (f.custom && /typo|readme|wording|copy|label|rename.*(label|text)|docs?\b/i.test(text)) base=0;
-  if (/downgrad|bulk|orphan|in-flight|aggregation|migration|backfill|across|nightly job/i.test(text)) base=Math.max(base,3);
+  const {floor,matched}=riskFloor(f.text);
+  if (f.mark==="✅"||f.mark==="🟢"){ return {kind:"shipped",pr:(f.text.match(/PR #(\d+)/)||[])[1]}; }
+  if (/do not fix|investigate only/i.test(f.text)) return {kind:"blocked",why:"reporter asked for investigation only"};
+  if (/blocked on|pending/i.test(f.text)) return {kind:"blocked",why:"waiting on an external approval"};
+  let base = f.mark==="🟡" ? (/typo|cosmetic|copies|resets|shows 0:00/i.test(f.text)?0:1) : 2;
+  if (/downgrad|orphan|in-flight|import|bulk|webhook|slug|prorat|across/i.test(f.text)) base=Math.max(base,3);
   return {kind:"task",tier:Math.max(base,floor),floor,matched};
 }
-const RAILS = {
-  0:["worktree","edit","verify","commit","PR"],
-  1:["worktree","focused test","fix","verify","commit","PR"],
-  2:["worktree","blind test","confirm red","implement","verify","feature test","commit","PR"],
-  3:["worktree","blind test","confirm red","implement","adversarial review","verify","feature test","commit","PR"],
-};
-const NOTE = {
-  "worktree":"git worktree off a freshly pulled base branch · env files symlinked · setup command run",
-  "edit":"Tier 0: make the edit directly — nothing to assert",
-  "focused test":"Tier 1: one hermetic test for the specified behavior, red first",
-  "fix":"make it green, max 3 attempts",
-  "blind test":"spec-only test agent — it never sees the implementation",
-  "confirm red":"the new test must fail before any implementation",
-  "implement":"separate implement agent, fresh context, reads BUILDER_PLAYBOOK.md first",
-  "adversarial review":"Tier 3: a reviewer tries to break it before verify",
-  "verify":"hard gate: the project's verify_command (lint + tests)",
-  "feature test":"/feature-tester: a fresh agent writes ONE integration test of the key behavior",
-  "commit":"commit only with a recorded, non-failing feature-test verdict",
-  "PR":"push the branch, open the PR with a manual test guide — then stop",
-};
-const PR_TITLES = {
-  "1.1.1":"(auto qa) fix(upload): surface failed 200MB+ uploads and create the draft",
-  "1.1.2":"(auto qa) copy(upload): dropzone typo you're → your",
-  "1.2.1":"(auto qa) fix(schedule): publish at show-local time, not UTC",
-  "1.2.2":"(auto qa) feat(schedule): revert a scheduled episode to draft",
-  "notif":"(auto qa) feat(notify): published, comment and failed-upload emails",
-  "3.1.1":"(auto qa) fix(auth): 403 on /settings/billing for guest editors",
-  "3.1.2":"(auto qa) fix(team): require a role in the invite modal",
-  "4.1.1":"(auto qa) fix(billing): keep in-flight uploads visible across a downgrade",
-  "4.1.2":"(auto qa) feat(shows): explain feed loss before deleting a show",
-};
-const GUIDES = {
-  "1.2.1":"1. Log in as demo.producer · set the show's timezone to Berlin\n2. Schedule an episode for 09:00\n3. Feed pubDate reads 07:00Z\n✅ Success = it publishes at local 09:00",
-  "3.1.1":"1. Log in as demo.guest\n2. Open /settings/billing directly\n✅ Success = 403 page, no card digits; /api/billing also 403",
-  "notif":"1. As demo.producer, schedule an episode 2 minutes out\n2. Wait for it to go live\n✅ Success = 'published' email arrives; a comment on a draft emails the collaborator",
-  "1.1.1":"1. Upload the 212MB WAV as demo.owner\n✅ Success = the draft appears, or an explicit error toast + activity entry",
-};
+const shortTitle=t=>{ const parts=t.split(/(?<=\S)[.:;]\s|\s—\s/); let s=(parts.find(p=>p.trim().length>=24)||parts[0]).trim(); return s.length>100 ? s.slice(0,100).replace(/\s+\S*$/,"")+"…" : s; };
 
-/* ============ state ============ */
-const S = { findings:[], tasks:[], blocked:[], runToken:0, speed:2, cap:2, paused:false, nextN:1, pr:60, running:false, source:"sample" };
+/* ---------- state + helpers ---------- */
+const S={tasks:[],blocked:[],shipped:0,skipped:0,nextN:1,pr:60,tok:0,running:false,paused:false,asked:false,incoming:[...INCOMING]};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const el=(t,c,h)=>{const e=document.createElement(t); if(c) e.className=c; if(h!=null) e.innerHTML=h; return e;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function wait(ms,tok){ await sleep(ms/S.speed); while(S.paused && tok===S.runToken) await sleep(120); if(tok!==S.runToken) throw new Error("reset"); }
-const shortTitle=f=>{ const parts=f.text.split(/(?<=\S)[.:;]\s|\s—\s/); let t=(parts.find(p=>p.trim().length>=24)||parts[0]).trim(); return t.length>96 ? t.slice(0,96).replace(/\s+\S*$/,"")+"…" : t; };
+async function wait(ms,tok){ await sleep(ms); while(S.paused&&tok===S.tok) await sleep(150); if(tok!==S.tok) throw new Error("reset"); }
+const rnd=(a,b)=>a+Math.random()*(b-a);
+let feedTimer; function feed(html){ const f=$("#feed"); f.innerHTML=html; clearTimeout(feedTimer); feedTimer=setTimeout(()=>{ if(f.innerHTML===html) f.innerHTML=""; },6000); }
 
-/* ============ header: pills, live, controls ============ */
-function counts(){ const c={done:0,progress:0,parked:0,blocked:S.blocked.length,queued:0}; for(const t of S.tasks){ if(t.status==="done") c.done++; else if(t.status==="parked") c.parked++; else if(t.status==="running"||t.status==="testing") c.progress++; else if(t.status==="queued") c.queued++; } return c; }
+function counts(){ const c={done:0,progress:0,parked:0,queued:0}; for(const t of S.tasks){ if(t.status==="done") c.done++; else if(t.status==="parked") c.parked++; else if(t.status==="queued") c.queued++; else c.progress++; } return c; }
 function renderPills(){
   const c=counts(); const cov=$("#cov"); cov.innerHTML="";
-  [["PR ready",c.done,"--ready","done"],["in progress",c.progress,"--prog","progress"],["needs you",c.parked,"--wait","q"],["blocked",c.blocked,"--block","blocked"],["queued",c.queued,"--queued","queued"]].forEach(([l,n,v,sec])=>{
-    const b=el("button","pillc",`${n} ${l}`); b.dataset.n=n; b.style.color=`var(${v})`; b.style.background=`color-mix(in srgb, var(${v}) 13%, white)`;
-    b.onclick=()=>{ const t= sec==="q" ? $("#qhead") : document.querySelector(`[data-sec="${sec}"]`); t?.scrollIntoView({behavior:"smooth",block:"start"}); }; cov.appendChild(b); });
-  for (const k of ["progress","done","queued","blocked"]) $("#c-"+k).textContent = k==="progress"? c.progress : k==="done"? c.done : k==="queued"? c.queued : c.blocked;
-  $("#qcount").textContent=c.parked; $("#taskCount").textContent=S.tasks.length+S.blocked.length;
+  [["in progress",c.progress,"--prog"],["needs you",c.parked,"--wait"],["queued",c.queued,"--queued"],["PR ready",c.done,"--ready"],["merged by you",S.shipped,"--ready"],["blocked",S.blocked.length,"--block"]].forEach(([l,n,v])=>{ const b=el("span","pillc",`${n} ${l}`); b.dataset.n=n; b.style.color=`var(${v})`; b.style.background=`color-mix(in srgb,var(${v}) 13%,white)`; cov.appendChild(b); });
+  $("#c-progress").textContent=c.progress+c.parked; $("#c-queued").textContent=c.queued; $("#c-done").textContent=c.done; $("#c-blocked").textContent=S.blocked.length;
 }
-function setLive(txt,on){ $("#liveTxt").textContent=txt; $("#live").classList.toggle("idle",!on); }
+const setLive=(t,on)=>{ $("#liveTxt").textContent=t; $("#live").classList.toggle("idle",!on); };
 
-/* ============ sidebar ============ */
-function renderIndex(){
-  const w=$("#irows"); w.innerHTML="";
-  const all=[...S.tasks,...S.blocked.map(b=>({...b,status:"blocked"}))];
-  if(!all.length){ w.innerHTML='<div class="none">No batch yet.</div>'; return; }
-  for(const t of all){ const r=el("button","irow"); r.innerHTML=`<span class="sd" style="background:var(--${sdColor(t.status)})"></span><span class="it">${esc(t.title)}</span>`; r.onclick=()=>{ const c=document.getElementById("card-"+t.n); if(!c) return; const sec=c.closest("section.sec"); if(sec?.classList.contains("collapsed")) toggleSec(sec); c.classList.remove("collapsed"); c.scrollIntoView({behavior:"smooth",block:"center"}); c.classList.add("flash"); setTimeout(()=>c.classList.remove("flash"),1100); document.querySelectorAll(".irow").forEach(x=>x.classList.toggle("on",x===r)); }; w.appendChild(r); }
-}
-const sdColor=s=>({queued:"queued",running:"prog",testing:"test",parked:"wait",done:"ready",blocked:"block"})[s]||"none";
-
-/* ============ cards ============ */
+/* ---------- cards ---------- */
 function crumbs(t){
   const steps=[["queued","queued","--queued"],["in progress","running","--prog"],["testing","testing","--test"],["PR ready","done","--ready"]];
   if(t.status==="parked") steps.splice(2,0,["needs you","parked","--wait"]);
-  const order=steps.map(s=>s[1]); const idx=order.indexOf(t.status);
+  const idx=steps.findIndex(s=>s[1]===t.status);
   return `<div class="prow">${steps.map((s,i)=>`<span class="pstep ${i===idx?'cur':''}" style="color:var(${s[2]});border-color:var(${s[2]})">${s[0]}</span>${i<steps.length-1?'<span class="parr">→</span>':''}`).join("")}</div>`;
 }
-function cardFor(t){
-  let c=document.getElementById("card-"+t.n);
-  if(!c){ c=el("article","tcard"); c.id="card-"+t.n; }
-  c.className=`tcard s-${t.status}${c.classList.contains("collapsed")?" collapsed":""}`;
-  const p=t.phase??-1; const rail=t.rail||[];
-  const gates=rail.length?`<div class="gates">${rail.map((g,k)=>`<span class="gate ${k<p?'done':k===p?(t.status==='parked'?'parked':t.gateFail?'fail':'cur'):''}">${g}</span>`).join("")}</div>`:"";
-  const note=t.note?`<div class="nprog ${t.noteKind||''}">${t.note}</div>`:"";
-  let acts="";
-  if(t.status==="done"){
-    acts=`<div class="tact"><span class="applink" tabindex="0" aria-disabled="true">Open PR to merge ↗</span><button class="tbtn" onclick="this.textContent='preview on :33${10+t.n}'">Test this branch</button><button class="tbtn gh" disabled>Rerun</button><span class="tspacer"></span><span class="ftchip ft-pass">feature test · pass</span><button class="tbtn gh mono" title="claude --resume ${t.session}">sess</button></div>
-    <details class="testplan"><summary>Manual test guide</summary><pre>${esc(t.guide||"1. Open the preview on the worktree port\n✅ Success = the reported behavior is gone")}</pre></details>`;
-  } else if(t.status!=="queued"){
-    acts=`<div class="tact"><span class="tspacer"></span><button class="tbtn gh mono" title="claude --resume ${t.session}">sess</button></div>`;
-  }
-  c.innerHTML=`<div class="th" role="button" tabindex="0" aria-expanded="${!c.classList.contains("collapsed")}"><span class="bn">#${t.n}</span><span class="tt">${esc(t.title)}</span><span class="badge ${t.floor===2?'floor':''}" title="${t.floor===2?'risk floor raised this to at least Tier 2: '+t.matched.join(', '):'tier '+t.tier}">T${t.tier}${t.floor===2?' ↑':''}</span><span class="chev">▼</span></div>
-  <div class="tbody"><div class="src">${esc(t.src)}${t.branch?` · <span class="mono">${t.branch}</span>`:""}${t.prNum?` · PR <b>#${t.prNum}</b>`:""}</div>${crumbs(t)}${gates}${note}${acts}</div>`;
-  c.querySelector(".th").onclick=()=>{ c.classList.toggle("collapsed"); c.querySelector(".th").setAttribute("aria-expanded",!c.classList.contains("collapsed")); };
-  c.querySelector(".th").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); c.querySelector(".th").click(); } };
+function card(t,isNew){
+  let c=document.getElementById("card-"+t.n); const fresh=!c;
+  if(fresh){ c=el("article","tcard"); c.id="card-"+t.n; }
+  c.className=`tcard s-${t.status}${fresh&&isNew?" new":""}`;
+  const p=t.phase; const rail=t.rail;
+  const gates=t.status==="queued"?"":`<div class="gates">${rail.map((g,k)=>`<span class="gate ${k<p?'done':k===p?(t.status==='parked'?'parked':t.fail?'fail':'cur'):''}">${g}</span>`).join("")}</div>`;
+  const now = t.status==="done" ? `waiting for you — test the branch, then merge from GitHub` : t.status==="queued" ? `waiting for a worker · ${t.floor===2?`risk floor (${t.matched.join(", ")}) → at least Tier 2`:"Tier "+t.tier}` : t.note;
+  const acts = t.status==="done" ? `<div class="tact"><span class="applink" tabindex="0">Open PR to merge ↗</span><button class="tbtn" onclick="this.textContent='preview on :33${10+(t.n%80)}'">Test this branch</button><span class="spacer"></span><span class="ftchip">feature test · pass</span></div>` : "";
+  c.innerHTML=`<div class="th"><span class="bn">#${t.n}</span><span class="tt">${esc(t.title)}</span><span class="badge ${t.floor===2?'floor':''}" title="${t.floor===2?'risk floor: '+t.matched.join(', '):''}">T${t.tier}${t.floor===2?' ↑':''}</span></div>
+  <div class="kv"><span class="k">fix</span><span class="v">${esc(t.fix)} · <span class="mono">${esc(t.file)}</span></span><span class="k">now</span><span class="v">${now}</span></div>
+  ${crumbs(t)}${gates}${t.prNum?`<div class="nprog ok">PR #${t.prNum} open — stopped here. Worktree kept so you can test it.</div>`:""}${t.fail?`<div class="nprog err">${t.failNote}</div>`:""}${acts}`;
   const dest = t.status==="done"?"#s-done": t.status==="queued"?"#s-queued":"#s-progress";
-  if(c.parentElement!==$(dest)) $(dest).appendChild(c);
+  if(c.parentElement!==$(dest)) { if(t.status==="queued"||t.status==="done") $(dest).appendChild(c); else $(dest).prepend(c); }
   return c;
 }
-function blockedCard(b){
-  const c=el("article","tcard s-blocked"); c.id="card-"+b.n;
-  c.innerHTML=`<div class="th"><span class="bn">#${b.n}</span><span class="tt">${esc(b.title)}</span><span class="badge" style="color:var(--block)">blocked</span></div><div class="tbody"><div class="src">${esc(b.src)}</div><div class="nprog err">Not dispatched — ${esc(b.why)}. Reported to you instead of guessed at.</div></div>`;
-  $("#s-blocked").appendChild(c);
-}
-function toggleSec(sec){ sec.classList.toggle("collapsed"); sec.querySelector(".sech").setAttribute("aria-expanded",!sec.classList.contains("collapsed")); }
-document.querySelectorAll(".sech").forEach(b=>b.addEventListener("click",()=>toggleSec(b.closest("section"))));
+function blockedCard(b){ const c=el("article","tcard s-blocked new"); c.id="card-b"+b.n; c.innerHTML=`<div class="th"><span class="bn">!</span><span class="tt">${esc(b.title)}</span><span class="badge" style="color:var(--block)">blocked</span></div><div class="nprog err">Not dispatched — ${esc(b.why)}. Reported to you, not guessed at.</div>`; $("#s-blocked").prepend(c); }
+document.querySelectorAll(".sech").forEach(b=>b.addEventListener("click",()=>{ const s=b.closest("section"); s.classList.toggle("collapsed"); b.setAttribute("aria-expanded",!s.classList.contains("collapsed")); }));
 
-/* ============ inbox ============ */
+function mkTask(f,t){
+  const n=S.nextN++; const key=f.id; const file=groundFile(f.text);
+  return {n,key,title:shortTitle(f.text),src:f.id,tier:t.tier,floor:t.floor,matched:t.matched,rail:RAILS[t.tier],status:"queued",phase:-1,file,fix:FIX[key]||"Fix as described, with a test",
+    priority:(f.mark==="🔴"?3:0)+(t.floor===2?2:0),asks:key==="3.1.1"||key==="6.2.2"};
+}
+function intake(f,{live=false}={}){
+  const t=triage(f);
+  if(t.kind==="shipped"){ S.skipped++; $("#scSkipped").textContent=`${S.skipped} already shipped`; if(live) feed(`📥 <b>${f.id}</b> already landed as PR #${t.pr} — skipped, not re-dispatched`); docState(f,"shipped",`shipped${t.pr?" #"+t.pr:""}`,`already on main — skipped`); return; }
+  if(t.kind==="blocked"){ const b={n:S.nextN++,title:f.id+" · "+shortTitle(f.text),why:t.why}; S.blocked.push(b); blockedCard(b); if(live) feed(`📥 <b>${f.id}</b> → blocked: ${t.why}`); docState(f,"blocked","blocked",t.why); return; }
+  if(/^2\.1\./.test(f.id)){ docState(f,"merged","→ one task","merged with the other notification asks"); return; }
+  const task=mkTask(f,t); S.tasks.push(task); card(task,live); if(live) feed(`📥 new report <b>${f.id}</b> → queued as #${task.n} (T${task.tier}${task.floor===2?", risk floor":""})`); docState(f,"task",`tier ${t.tier}${t.floor===2?" ↑floor":""}`,`task #${task.n}`);
+}
+
+/* ---------- inbox ---------- */
 function ask(t,question,options,context){
   return new Promise(resolve=>{
-    const q=el("div","qcard");
-    q.innerHTML=`<div class="qh"><span class="pulse"></span> task #${t.n} · run ${t.session} · just now</div><div class="qq">${esc(question)}</div><div class="qctx">${esc(context)}</div><div class="qopts">${options.map((o,i)=>`<button class="tbtn ${i===0?'rec':''}">${esc(o)}</button>`).join("")}</div><textarea rows="2" placeholder="…or type a different answer"></textarea><div class="acts"><button class="tbtn primary send">Send reply</button><span class="src">Your reply is relayed into the still-running session.</span></div><div class="ans"></div>`;
-    const done=a=>{ q.classList.add("answered"); q.querySelector(".ans").textContent="You answered: "+a+" — delivered to the run."; renderPills(); resolve(a); };
-    q.querySelectorAll(".qopts .tbtn").forEach(b=>b.onclick=()=>done(b.textContent));
-    q.querySelector(".send").onclick=()=>{ const v=q.querySelector("textarea").value.trim(); done(v||options[0]); };
-    $("#qwrap").prepend(q); renderPills(); setLive("waiting on you",true); $("#qhead").scrollIntoView({behavior:"smooth",block:"start"});
+    const q=el("div","qcard"); q.innerHTML=`<div class="qh"><span class="pulse"></span> task #${t.n} · ${esc(t.title)}</div><div class="qq">${esc(question)}</div><div class="qctx">${esc(context)}</div><div class="qopts">${options.map((o,i)=>`<button class="tbtn ${i===0?'rec':''}">${esc(o)}</button>`).join("")}</div><div class="ans"></div>`;
+    q.querySelectorAll(".qopts .tbtn").forEach(b=>b.onclick=()=>{ q.classList.add("answered"); q.querySelector(".ans").textContent="You answered: "+b.textContent+" — delivered to the running session."; renderPills(); setTimeout(()=>q.remove(),9000); resolve(b.textContent); });
+    $("#qwrap").prepend(q); renderPills(); feed(`❓ worker on #${t.n} is parked on a question — it's the only thing waiting on you`);
   });
 }
 
-/* ============ docs drawer ============ */
-function renderDoc(){
-  const d=$("#ndoc"); d.innerHTML=""; let sec="";
-  $("#docTitle").textContent = S.source==="sample" ? "qa-findings.md" : "your list";
-  $("#docSub").textContent = `· ${S.findings.length} findings`;
-  for(const f of S.findings){
-    if(f.section!==sec){ sec=f.section; d.appendChild(el("div","ntest",esc(sec))); }
-    const n=el("div","nfind"); n.id="doc-"+f.id.replaceAll(".","-");
-    const sev = f.mark==="🔴"?["bug","--block"]: f.mark==="🟡"?["minor","--wait"]: f.mark==="🟠"?["feature","--prog"]: f.mark==="⚪"?["note","--none"]:["done","--ready"];
-    n.innerHTML=`<div class="nfh" role="button" tabindex="0"><span class="fid">${f.id}</span><span class="sevtag" style="color:var(${sev[1]});background:color-mix(in srgb,var(${sev[1]}) 12%,white)">${sev[0]}</span><span class="stamp" id="stamp-${f.id.replaceAll(".","-")}"></span><span class="chev">▼</span></div><div class="nbody"><div class="nft">${esc(f.text)}</div><div class="ntask" id="dtask-${f.id.replaceAll(".","-")}" hidden></div></div>`;
-    n.querySelector(".nfh").onclick=()=>n.classList.toggle("collapsed");
-    d.appendChild(n);
+/* ---------- workers (continuous) ---------- */
+async function worker(id,tok){
+  while(tok===S.tok){
+    const t=S.tasks.filter(x=>x.status==="queued").sort((a,b)=>b.priority-a.priority||a.n-b.n)[0];
+    if(!t){ await wait(500,tok); continue; }
+    t.status="running"; t.worker=id;
+    for(let p=0;p<t.rail.length;p++){
+      const g=t.rail[p]; t.phase=p; t.note=`worker ${id} · ${DOING[g](t.file)}`; t.fail=false;
+      t.status=(g==="feature test"||g==="verify"||g==="adversarial review")?"testing":"running";
+      card(t); renderPills();
+      await wait(g==="implement"?rnd(4200,6200):g==="blind test"?rnd(2800,4000):g==="feature test"?rnd(2400,3400):rnd(1500,2400),tok);
+      if(t.asks && g==="implement" && !S.asked){
+        S.asked=true; t.status="parked"; t.note="parked — one preference the repo can't settle. Waiting on you."; card(t); renderPills();
+        const billing=t.key==="3.1.1";
+        const a=await ask(t, billing?"A guest hitting /settings/billing — show a 403 page, or redirect them to /settings?":"Removing a member: revoke their API token immediately, or at the end of the billing day?",
+          billing?["403 page (recommended) — matches what /api/billing already does","Redirect to /settings"]:["Immediately (recommended) — a removed member shouldn't publish for another 23 hours","End of billing day — gentler for scheduled jobs"],
+          billing?"The route is unprotected; only the nav link is hidden. Consistency with the API argues for 403.":"The repo has no precedent. The risk floor flagged this task (secrets/env, rbac), so the run stopped to ask rather than guess.");
+        if(tok!==S.tok) throw new Error("reset");
+        t.status="running"; t.note=`worker ${id} · continuing with: ${a.split(" — ")[0]}`; card(t); renderPills(); await wait(900,tok);
+        setTimeout(()=>{S.asked=false;},45000);
+      }
+      if(t.key==="1.1.1" && g==="feature test"){ t.fail=true; t.failNote="feature test ✗ — the fresh agent's test 'a draft exists after a 212 MB upload' failed. The builder gets the failing test, not the tester's reasoning."; card(t); await wait(2200,tok); t.fail=false; t.note=`worker ${id} · builder fixed the draft-creation path, re-running the independent test`; card(t); await wait(1200,tok); }
+    }
+    t.status="done"; t.phase=t.rail.length; t.prNum=++S.pr; t.note=""; card(t); renderPills();
+    feed(`✓ <b>#${t.n}</b> ${esc(t.fix)} — PR #${t.prNum} open · worker ${id} picks up the next task`);
+    docState({id:t.key},"task",null,`task #${t.n} · PR ready · PR #${t.prNum}`);
+    await wait(400,tok);
   }
 }
-function docStamp(id,cls,text){ const s=document.getElementById("stamp-"+id.replaceAll(".","-")); if(!s) return; s.className="stamp "+cls; s.textContent=text; void s.offsetWidth; s.classList.add("on"); const n=s.closest(".nfind"); n.classList.add("st-"+cls.split(" ")[0]); }
-function docTask(id,html){ const t=document.getElementById("dtask-"+id.replaceAll(".","-")); if(!t) return; t.hidden=false; t.innerHTML=html; }
-function docReading(id,on){ const n=document.getElementById("doc-"+id.replaceAll(".","-")); if(n){ n.classList.toggle("reading",on); if(on && $("#docsScrim").classList.contains("on")) n.scrollIntoView({block:"nearest"}); } }
+/* "you" merge the oldest PR-ready card now and then — the pipeline never does. */
+async function human(tok){
+  while(tok===S.tok){
+    const shelf=S.tasks.filter(t=>t.status==="done").length;
+    await wait(shelf>5?rnd(2500,4000):rnd(8000,12000),tok);
+    const done=S.tasks.filter(t=>t.status==="done"); if(done.length<2) continue;
+    const t=done[0]; const c=document.getElementById("card-"+t.n); if(!c) continue;
+    c.insertAdjacentHTML("afterbegin",`<div class="mergedtag">✓ merged by you · PR #${t.prNum}</div>`); await wait(1400,tok);
+    c.classList.add("merged"); await wait(500,tok); c.remove(); S.tasks=S.tasks.filter(x=>x!==t); S.shipped++; renderPills();
+    feed(`🧑 you merged PR #${t.prNum} from GitHub — worktree torn down`);
+  }
+}
+/* new reports keep arriving */
+async function reporter(tok){
+  await wait(7000,tok); let pass=2;
+  while(tok===S.tok){
+    const q=counts().queued; await wait(q>=4?rnd(7000,10000):rnd(3500,6000),tok);
+    if(counts().queued>=6) continue;
+    if(!S.incoming.length){ S.incoming=INCOMING.map(f=>({...f,id:f.id.replace(/^6\./,pass+"."),text:(pass%2?"Regression: ":"Still happening after the fix: ")+f.text,section:"QA pass "+pass})); pass++; feed(`📥 the tester started another pass — reports keep coming`); }
+    const f=S.incoming.shift(); intake(f,{live:true}); renderPills();
+  }
+}
 
-/* ============ beacons ============ */
-function beacon(k,v,done){ const b=document.querySelector(`.beacon[data-k="${k}"]`); b.classList.add("on"); b.classList.toggle("done",!!done); b.querySelector(".v").textContent=v; }
-
-/* ============ the batch ============ */
-async function runBatch(){
-  resetBoard(false); const tok=S.runToken; S.running=true;
-  S.findings = S.source==="sample" ? parseSample(DOC) : parseCustom($("#customSrc").value);
-  if(!S.findings.length){ $("#status").textContent="Paste at least one line first."; return; }
-  $("#run").disabled=true; $("#pauseBtn").disabled=false; $("#beacons").classList.add("on"); renderDoc(); setLive("ingesting",true);
+/* ---------- run / reset ---------- */
+async function run(){
+  if(S.running) return; const tok=++S.tok; S.running=true;
+  $("#intro").hidden=true; $("#scenario").classList.add("on"); $("#runBtn").textContent="⏸ Pause"; $("#resetBtn").hidden=false; setLive("ingesting",true);
   try{
-    beacon("ingest",`${S.findings.length} findings · ${new Set(S.findings.map(f=>f.section)).size} section${S.findings.length>1?"s":""} · ${S.findings.filter(f=>f.evidence).length} screenshots read as images`);
-    await wait(900,tok); beacon("ingest",document.querySelector('.beacon[data-k="ingest"] .v').textContent,true);
-    beacon("ground","tracing each finding to the repo and the live base branch…");
-    for(const f of S.findings){ docReading(f.id,true); await wait(220,tok); f.file=groundFile(f.text); docTask(f.id,`→ <span class="mono">${esc(f.file)}</span>`); docReading(f.id,false); }
-    beacon("ground","every finding points at a file, not a guess",true);
-    beacon("dedup","checking what already landed on main…"); setLive("triaging",true);
-    const consolidated=[]; const tasks=[]; let skipped=0;
-    for(const f of S.findings){
-      docReading(f.id,true); await wait(330,tok);
-      const t=triage(f);
-      if(t.kind==="shipped"){ skipped++; docStamp(f.id,"shipped","shipped"+(t.pr?" #"+t.pr:"")); docTask(f.id,`already on main${t.pr?` (PR #${t.pr})`:""} — <b>skipped</b>`); }
-      else if(t.kind==="blocked"){ const b={n:S.nextN++,title:f.id+" "+shortTitle(f),src:srcOf(f),why:t.why}; S.blocked.push(b); docStamp(f.id,"blocked","blocked"); docTask(f.id,`<b>blocked</b> — ${esc(t.why)}`); blockedCard(b); }
-      else if(S.source==="sample" && /^2\.1\./.test(f.id)){ consolidated.push(f); docStamp(f.id,"merged","→ one task"); }
-      else { const task=mkTask(f.id,shortTitle(f),srcOf(f),t,f); tasks.push(task); docStamp(f.id,"tier"+(t.floor===2?" floor":""),"tier "+t.tier+(t.floor===2?" ↑floor":"")); docTask(f.id,`task <b>#${task.n}</b> · T${t.tier}${t.floor===2?` <span style="color:var(--wait)">risk floor: ${esc(t.matched.join(", "))}</span>`:""}`); }
-      docReading(f.id,false); renderPills(); renderIndex();
-    }
-    beacon("dedup",`${skipped} already shipped — skipped, not re-dispatched`,true);
-    if(consolidated.length){ const task=mkTask("notif","Notifications: published · comment on draft · failed upload", "qa-findings.md · "+consolidated.map(f=>f.id).join(" + "), {kind:"task",tier:3,floor:0,matched:[]}); tasks.push(task); consolidated.forEach(f=>docTask(f.id,`merged into task <b>#${task.n}</b> (one mailer path)`)); beacon("consolidate",`${consolidated.map(f=>f.id).join(" + ")} → one task #${task.n}`,true); }
-    else beacon("consolidate","no duplicates to merge",true);
-    tasks.sort((a,b)=>(b.priority-a.priority)||(b.tier-a.tier));
-    S.tasks=tasks; tasks.forEach(cardFor); renderPills(); renderIndex();
-    beacon("triage",`${tasks.length} task${tasks.length!==1?"s":""} queued by priority · ${S.blocked.length} blocked · ${tasks.filter(t=>t.floor===2).length} raised by the risk floor`,true);
-    await wait(600,tok);
-    beacon("dispatch",`${S.cap} worker${S.cap>1?"s":""} · each run in its own worktree off origin/main`,true);
-    $("#intake").classList.add("compact"); setLive("running",true);
-    await Promise.all(Array.from({length:S.cap},(_,i)=>worker(i+1,tok)));
-    const r=$("#report"); r.className="on";
-    r.innerHTML=`<b>Batch done.</b> ${S.tasks.filter(t=>t.status==="done").length} PR-ready · ${S.blocked.length} blocked (reported, not guessed) · ${skipped} already shipped · ${consolidated.length?`${consolidated.length} findings merged into 1 task`:"nothing to merge"}<br>Nothing was merged. Test the branches, then merge from GitHub — that step stays human.`;
-    setLive("done · nothing merged",false); $("#pauseBtn").disabled=true; S.running=false;
+    feed(`reading qa-findings.md — ${DOC.length} findings · tracing each to a file · checking what already shipped`);
+    for(const f of DOC){ intake(f); renderPills(); await wait(140,tok); }
+    const notif={section:"Notifications",mark:"🟠",id:"notif",text:"Producers get no notification when an episode goes live, when a collaborator comments on a draft, or when an upload fails — one mailer path, three triggers."};
+    const nt=mkTask(notif,{kind:"task",tier:3,floor:0,matched:[]}); nt.title="No notifications when an episode goes live, a draft gets a comment, or an upload fails"; nt.src="2.1.1 + 2.1.2 + 2.1.3"; S.tasks.push(nt); card(nt,true); renderPills();
+    feed(`triaged: ${S.tasks.length} tasks queued · ${S.skipped} already shipped · ${S.blocked.length} blocked · 2.1.1 + 2.1.2 + 2.1.3 merged into one task · dispatching 3 workers`);
+    await wait(900,tok); setLive("3 workers running",true);
+    await Promise.all([worker(1,tok),worker(2,tok),worker(3,tok),human(tok),reporter(tok)]);
   }catch(e){ if(e.message!=="reset") console.error(e); }
 }
-const srcOf=f=> (S.source==="sample"?"qa-findings.md · ":"your list · ")+f.kind+" "+f.id;
-function mkTask(key,title,src,t,f){
-  const n=S.nextN++; const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,30);
-  return {key,n,title,src,tier:t.tier,floor:t.floor,matched:t.matched,rail:RAILS[t.tier],branch:"auto-qa/"+slug,status:"queued",phase:-1,
-    session:"sess-"+Math.random().toString(16).slice(2,6),
-    priority:(t.floor===2?2:0)+(/^(1\.1\.1|1\.2\.1|3\.1\.1|4\.1\.1)$/.test(key)?3:0)+(f&&f.mark==="🔴"?1:0),
-    prTitle:PR_TITLES[key]||("(auto qa) "+title.toLowerCase()),guide:GUIDES[key],asks: key==="3.1.1" || (f&&f.custom&&t.floor===2&&!S.tasks.some(x=>x.asks))};
+function reset(){
+  S.tok++; Object.assign(S,{tasks:[],blocked:[],shipped:0,skipped:0,nextN:1,pr:60,running:false,paused:false,asked:false,incoming:[...INCOMING]});
+  [...DOC,...INCOMING].forEach(f=>{ delete f._st; delete f._stamp; delete f._task; delete f._floor; });
+  ["#s-progress","#s-queued","#s-done","#s-blocked","#qwrap","#feed"].forEach(s=>$(s).innerHTML=""); $("#ndoc").innerHTML="";
+  $("#intro").hidden=false; $("#scenario").classList.remove("on"); $("#runBtn").textContent="▶ Run demo"; $("#resetBtn").hidden=true; setLive("idle",false); renderPills(); window.scrollTo({top:0,behavior:"smooth"});
 }
-async function worker(lane,tok){
-  while(true){
-    const t=S.tasks.find(x=>x.status==="queued"); if(!t) break;
-    t.status="running"; t.lane=lane;
-    for(let p=0;p<t.rail.length;p++){
-      const g=t.rail[p]; t.phase=p; t.note=`worker ${lane} · ${g}: ${NOTE[g]}`; t.noteKind=""; t.gateFail=false;
-      if(g==="feature test"||g==="verify") t.status="testing"; else if(t.status==="testing") t.status="running";
-      cardFor(t); renderPills(); renderIndex();
-      await wait(g==="implement"?1400:g==="blind test"?1100:800,tok);
-      if(t.asks && g==="implement"){
-        t.status="parked"; t.note="Parked — one preference the repo can't settle. Waiting on your answer in the inbox."; cardFor(t); renderPills(); renderIndex();
-        const custom = t.key.startsWith("L");
-        const ans = await ask(t,
-          custom ? `This touches ${t.matched.join(" and ")}. Take the conservative path or the minimal one?` : "A guest hitting /settings/billing — show a 403 page, or redirect to /settings?",
-          custom ? ["Conservative (recommended): deny by default, log, add a test for the negative path","Minimal: smallest change that resolves the report"] : ["403 page (recommended)","Redirect to /settings"],
-          custom ? "The run grounded the task and found no precedent in the repo for this case. It recommends the conservative path because the risk floor flagged it." : "The route is unprotected; only the nav link is hidden. The API already answers 403 on /api/billing for guests, so a 403 page keeps web and API consistent.");
-        if(tok!==S.runToken) throw new Error("reset");
-        if(!custom && !ans.startsWith("403")) t.prTitle="(auto qa) fix(auth): redirect guests away from /settings/billing";
-        t.status="running"; t.note=`answer received — "${esc(ans)}". Continuing in the same session.`; t.noteKind="ok"; cardFor(t); renderPills(); renderIndex(); await wait(700,tok);
-      }
-      if(t.key==="1.1.1" && g==="feature test"){
-        t.gateFail=true; t.noteKind="err"; t.note="feature test ✗ — the fresh agent's test 'a draft exists after a 212 MB upload' failed. The builder gets the failing test, not the tester's reasoning."; cardFor(t);
-        await wait(1300,tok);
-        t.gateFail=false; t.noteKind=""; t.note="builder fixed the draft-creation path → re-running the independent test…"; cardFor(t); await wait(900,tok);
-      }
-    }
-    t.status="done"; t.phase=t.rail.length; t.prNum=++S.pr; t.note=`PR #${t.prNum} open — stopped here. Worktree kept for "Test this branch".`; t.noteKind="ok";
-    cardFor(t); renderPills(); renderIndex(); docTask(t.key.includes("+")?"":t.key,`task <b>#${t.n}</b> · <span style="color:var(--ready)">PR ready</span> · PR #${t.prNum}`);
-    await wait(500,tok);
-  }
-}
+$("#runBig").onclick=run;
+$("#runBtn").onclick=()=>{ if(!S.running) return run(); S.paused=!S.paused; $("#runBtn").textContent=S.paused?"▶ Resume":"⏸ Pause"; setLive(S.paused?"paused":"3 workers running",!S.paused); };
+$("#resetBtn").onclick=reset;
 
-/* ============ reset ============ */
-function resetBoard(full=true){
-  S.runToken++; S.tasks=[]; S.blocked=[]; S.nextN=1; S.pr=60; S.running=false; S.paused=false;
-  ["#s-progress","#s-done","#s-queued","#s-blocked","#qwrap"].forEach(s=>$(s).innerHTML="");
-  $("#report").className=""; $("#intake").classList.remove("compact"); $("#beacons").classList.remove("on");
-  document.querySelectorAll(".beacon").forEach(b=>{b.className="beacon"; b.querySelector(".v").textContent="";});
-  $("#run").disabled=false; $("#pauseBtn").disabled=true; $("#pauseBtn").textContent="⏸ Pause"; $("#pausebanner").classList.remove("on");
-  if(full){ S.findings=[]; $("#ndoc").innerHTML=""; }
-  renderPills(); renderIndex(); setLive("idle",false);
+/* ---------- source doc drawer ---------- */
+function renderDoc(){ const d=$("#ndoc"); d.innerHTML=""; let sec=""; const all=[...DOC,...INCOMING.filter(f=>!S.incoming.includes(f))];
+  for(const f of all){ if(f.section!==sec){ sec=f.section; d.appendChild(el("div","ntest",esc(sec))); } const n=el("div","nfind"+(f._st?" st-"+f._st:""));
+    const sev=f.mark==="🔴"?["bug","--block"]:f.mark==="🟡"?["minor","--wait"]:f.mark==="🟠"?["feature","--prog"]:f.mark==="⚪"?["note","--none"]:["done","--ready"];
+    n.innerHTML=`<div class="nfh"><span class="fid">${f.id}</span><span class="badge" style="color:var(${sev[1]});background:color-mix(in srgb,var(${sev[1]}) 12%,white)">${sev[0]}</span>${f._stamp?`<span class="stamp ${f._st}${f._floor?' floor':''}">${esc(f._stamp)}</span>`:""}</div><div class="nft">${esc(f.text)}</div>${f._task?`<div class="ntask">${f._task}</div>`:""}`; d.appendChild(n); }
+  $("#docSub").textContent=`· ${all.length} findings`;
 }
-
-/* ============ router ============ */
-function route(text){
-  const {floor,matched}=riskFloor(text);
-  let base=2, why="a real behavior change — the full pipeline: blind spec test, separate implementer, verify gate, independent feature test.";
-  if(/typo|readme|wording|copy|label|rename.*(label|text)|comment|docs?\b/i.test(text)){ base=0; why="docs or copy with no behavior change — edited directly, nothing to assert."; }
-  else if(/^(fix|patch)\b/i.test(text) && text.length<70){ base=1; why="one obvious fix — a single focused test first, then the fix, no subagents."; }
-  if(/migration|backfill|across|refactor|redesign|nightly job|multiple|all the/i.test(text)){ base=Math.max(base,3); why="multi-file or ambiguous — Tier 2 plus an adversarial reviewer; it stops and asks if the acceptance criteria can't be tested."; }
-  const tier=Math.max(base,floor); const raised=floor>base;
-  $("#route").innerHTML=`<div class="big"><span class="tierbig">T${tier}</span><span class="lbl">${["trivial","small","standard","large / ambiguous"][tier]}</span>${raised?`<span class="lbl raised">raised from T${base} by the risk floor</span>`:""}</div>
-  <div class="cats">${matched.length?matched.map(m=>`<span class="badge floor">${m}</span>`).join(""):`<span class="badge" style="color:var(--dim)">no risk category matched</span>`}</div>
-  <p class="why">${raised?`It reads like a T${base}, but it touches <b>${matched.join(", ")}</b>. The floor is a regex, not a judgment, so it can't be forgotten: minimum Tier 2 — ${tier>=3?"blind spec test, separate implementer, adversarial reviewer, verify gate, independent feature test.":"blind spec test, separate implementer, verify gate, independent feature test."}`:why}</p>
-  <div class="gates">${RAILS[tier].map(g=>`<span class="gate cur" style="box-shadow:none;background:var(--paper)">${g}</span>`).join("")}</div>
-  <p class="fine">Every tier lands the same way: verify gate → branch → push → PR → <b>stop</b>. ${tier>=2?"The spec test and the feature test are written by agents that never see the implementation.":"If the work turns out to change behavior, the run re-routes itself upward — doubt tiers up, never down."}</p>`;
-}
-
-/* ============ wiring ============ */
-$("#run").onclick=runBatch;
-$("#clearBtn").onclick=()=>resetBoard(true);
-$("#pauseBtn").onclick=()=>{ S.paused=!S.paused; $("#pauseBtn").textContent=S.paused?"▶ Resume":"⏸ Pause"; $("#pausebanner").classList.toggle("on",S.paused); setLive(S.paused?"paused":"running",!S.paused); };
-const capv=()=>{$("#capv").textContent=S.cap;}; $("#capm").onclick=()=>{S.cap=Math.max(1,S.cap-1);capv();}; $("#capp").onclick=()=>{S.cap=Math.min(4,S.cap+1);capv();};
-const spds=[1,2,4]; const spdv=()=>{$("#spdv").textContent=S.speed+"×";}; $("#spdm").onclick=()=>{S.speed=spds[Math.max(0,spds.indexOf(S.speed)-1)];spdv();}; $("#spdp").onclick=()=>{S.speed=spds[Math.min(2,spds.indexOf(S.speed)+1)];spdv();};
-document.querySelectorAll(".srcpick .tbtn").forEach(b=>b.onclick=()=>{ S.source=b.dataset.src; document.querySelectorAll(".srcpick .tbtn").forEach(x=>x.setAttribute("aria-pressed",x===b)); $("#customSrc").classList.toggle("on",S.source==="custom"); if(S.source==="custom") $("#customSrc").focus(); });
-$("#docsBtn").onclick=()=>{ if(!S.findings.length){ S.findings=parseSample(DOC); renderDoc(); } $("#docsScrim").classList.add("on"); };
+function docState(f,st,stamp,task){ const src=[...DOC,...INCOMING].find(x=>x.id===f.id); if(!src) return; src._st=st; if(stamp) src._stamp=stamp; if(task) src._task=task; if(st==="task"&&/floor/.test(stamp||"")) src._floor=true; }
+$("#docsLink").onclick=e=>{ e.preventDefault(); renderDoc(); $("#docsScrim").classList.add("on"); };
 $("#docsClose").onclick=()=>$("#docsScrim").classList.remove("on");
-$("#docsCollapseAll").onclick=()=>{ const all=[...document.querySelectorAll(".nfind")]; const anyOpen=all.some(n=>!n.classList.contains("collapsed")); all.forEach(n=>n.classList.toggle("collapsed",anyOpen)); $("#docsCollapseAll").textContent=anyOpen?"Expand all":"Collapse all"; };
-$("#routeBtn").onclick=()=>{ $("#routeScrim").classList.add("on"); $("#taskInput").focus(); };
+
+/* ---------- router modal ---------- */
+function route(text){
+  const {floor,matched}=riskFloor(text); let base=2, why="a real behavior change — the full pipeline: blind spec test, separate implementer, verify gate, independent feature test.";
+  if(/typo|readme|wording|copy|label|rename.*(label|text)|docs?\b/i.test(text)){ base=0; why="docs or copy with no behavior change — edited directly, nothing to assert."; }
+  else if(/^(fix|patch)\b/i.test(text)&&text.length<70){ base=1; why="one obvious fix — a single focused test first, then the fix, no subagents."; }
+  if(/migration|backfill|across|refactor|redesign|nightly job|multiple|all the/i.test(text)){ base=Math.max(base,3); why="multi-file or ambiguous — Tier 2 plus an adversarial reviewer; it stops and asks if the acceptance criteria can't be tested."; }
+  const tier=Math.max(base,floor), raised=floor>base;
+  $("#route").innerHTML=`<div class="big"><span class="tierbig">T${tier}</span><span class="lbl">${["trivial","small","standard","large / ambiguous"][tier]}</span>${raised?`<span class="lbl raised">raised from T${base} by the risk floor</span>`:""}</div><div class="cats">${matched.length?matched.map(m=>`<span class="badge floor">${m}</span>`).join(""):`<span class="badge" style="color:var(--dim)">no risk category matched</span>`}</div><p class="why">${raised?`It reads like a T${base}, but it touches <b>${matched.join(", ")}</b>. The floor is a regex, not a judgment, so it can't be forgotten: minimum Tier 2.`:why}</p><div class="gates">${RAILS[tier].map(g=>`<span class="gate cur" style="box-shadow:none;background:var(--paper)">${g}</span>`).join("")}</div><p class="fine">Every tier lands the same way: verify gate → branch → push → PR → <b>stop</b>.</p>`;
+}
+$("#routeLink").onclick=e=>{ e.preventDefault(); $("#routeScrim").classList.add("on"); $("#taskInput").focus(); };
 $("#routeClose").onclick=()=>$("#routeScrim").classList.remove("on");
 document.querySelectorAll(".scrim").forEach(s=>s.addEventListener("click",e=>{ if(e.target===s) s.classList.remove("on"); }));
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".scrim.on").forEach(s=>s.classList.remove("on")); });
 const ta=$("#taskInput"); ta.addEventListener("input",()=>route(ta.value)); route(ta.value);
 document.querySelectorAll(".exs .tbtn").forEach(b=>b.onclick=()=>{ ta.value=b.dataset.ex; route(ta.value); });
-if(location.hash==="#router") $("#routeBtn").click();
 renderPills();
 </script>
 </body>
