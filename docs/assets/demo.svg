@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">
+  <defs>
+    <style>
+      .l{opacity:0;animation:show .01s linear forwards}
+      @keyframes show{to{opacity:1}}
+      .cur{animation:blink 1s steps(1) infinite 21s;opacity:0}
+      @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+      .fg{fill:#E7E3D6}.dim{fill:#8B877C}.y{fill:#F5D33B}.g{fill:#7FD6A1}.r{fill:#F08C7A}.b{fill:#8DB4FF}
+      .bar{fill:#20242b}
+      @media (prefers-reduced-motion: reduce){.l{animation:none;opacity:1}.cur{animation:none;opacity:1}}
+    </style>
+  </defs>
+  <rect width="920" height="560" rx="10" fill="#0F1115"/>
+  <rect width="920" height="34" rx="10" class="bar"/>
+  <rect y="20" width="920" height="14" class="bar"/>
+  <circle cx="20" cy="17" r="6" fill="#FF5F57"/><circle cx="40" cy="17" r="6" fill="#FEBC2E"/><circle cx="60" cy="17" r="6" fill="#28C840"/>
+  <text x="460" y="22" text-anchor="middle" class="dim" font-size="12">claude — ~/castaway-studio</text>
+
+  <g transform="translate(24 60)">
+    <text class="l fg" y="0" style="animation-delay:.3s"><tspan class="y">❯</tspan> /manager ~/Desktop/qa-findings.pdf</text>
+
+    <text class="l dim" y="30" style="animation-delay:1.2s">[panel]        http://127.0.0.1:4317  — board is live, project: castaway-studio (main)</text>
+    <text class="l fg" y="54" style="animation-delay:2.0s"><tspan class="b">[ingest]</tspan>       18 findings · 5 sections · 3 screenshots read as images</text>
+    <text class="l fg" y="78" style="animation-delay:3.0s"><tspan class="b">[ground]</tspan>       1.1.1 → apps/web/upload/dropzone.tsx   1.2.1 → lib/schedule.ts   3.1.1 → middleware.ts</text>
+    <text class="l fg" y="102" style="animation-delay:4.0s"><tspan class="b">[dedup]</tspan>        1.1.3 already on main (#47) <tspan class="g">✓ skipped</tspan>   5.1.1 already on main (#52) <tspan class="g">✓ skipped</tspan></text>
+    <text class="l fg" y="126" style="animation-delay:4.9s"><tspan class="b">[consolidate]</tspan>  2.1.1 + 2.1.2 + 2.1.3 → one task: producer notifications (one mailer path)</text>
+    <text class="l fg" y="150" style="animation-delay:5.8s"><tspan class="b">[triage]</tspan>       1.1.2 <tspan class="dim">T0</tspan>  1.1.1 <tspan class="y">T2</tspan>  1.2.1 <tspan class="y">T2</tspan>  3.1.1 <tspan class="y">T2</tspan> <tspan class="dim">(risk floor: auth, rbac, billing)</tspan>  4.1.1 <tspan class="r">T3</tspan></text>
+    <text class="l fg" y="174" style="animation-delay:6.6s">               5.1.2 <tspan class="r">blocked</tspan> <tspan class="dim">(reporter: investigate only)</tspan>   5.1.3 <tspan class="r">blocked</tspan> <tspan class="dim">(external approval)</tspan></text>
+    <text class="l fg" y="198" style="animation-delay:7.4s"><tspan class="b">[dispatch]</tspan>     2 workers · 7 queued · each in its own worktree off origin/main</text>
+
+    <text class="l dim" y="236" style="animation-delay:8.4s">  #3  1.2.1  publish in show tz   T2</text>
+    <text class="l fg"  y="236" x="300" style="animation-delay:8.4s"><tspan class="g">grounding</tspan></text>
+    <text class="l fg"  y="236" x="372" style="animation-delay:9.3s">→ <tspan class="g">blind test</tspan></text>
+    <text class="l fg"  y="236" x="474" style="animation-delay:10.2s">→ <tspan class="g">implement</tspan></text>
+    <text class="l fg"  y="236" x="568" style="animation-delay:11.1s">→ <tspan class="g">verify</tspan></text>
+    <text class="l fg"  y="236" x="638" style="animation-delay:12.0s">→ <tspan class="g">feature test</tspan></text>
+    <text class="l fg"  y="236" x="756" style="animation-delay:13.0s">→ <tspan class="g">PR</tspan></text>
+
+    <text class="l dim" y="260" style="animation-delay:8.9s">  #5  3.1.1  guard /settings/billing T2</text>
+    <text class="l fg"  y="260" x="300" style="animation-delay:8.9s"><tspan class="g">grounding</tspan></text>
+    <text class="l fg"  y="260" x="372" style="animation-delay:9.8s">→ <tspan class="g">blind test</tspan></text>
+    <text class="l fg"  y="260" x="474" style="animation-delay:10.7s">→ <tspan class="y">parked</tspan></text>
+
+    <text class="l y" y="292" style="animation-delay:11.4s">  ? #5 asks: guest hits /settings/billing — 403 page, or redirect to /settings?   (recommends 403: matches the API)</text>
+    <text class="l fg" y="316" style="animation-delay:13.6s">  <tspan class="dim">you (from the panel):</tspan> 403</text>
+
+    <text class="l fg"  y="260" x="546" style="animation-delay:14.2s">→ <tspan class="g">implement</tspan></text>
+    <text class="l fg"  y="260" x="640" style="animation-delay:15.1s">→ <tspan class="g">verify</tspan></text>
+    <text class="l fg"  y="260" x="710" style="animation-delay:16.0s">→ <tspan class="g">feature test</tspan></text>
+    <text class="l fg"  y="260" x="828" style="animation-delay:17.0s">→ <tspan class="g">PR</tspan></text>
+
+    <text class="l fg" y="352" style="animation-delay:13.4s"><tspan class="g">✓</tspan> #3  <tspan class="b">(auto qa) fix(schedule): publish at show-local time</tspan>  — PR #61 · worktree kept for "Test this branch"</text>
+    <text class="l fg" y="376" style="animation-delay:17.4s"><tspan class="g">✓</tspan> #5  <tspan class="b">(auto qa) fix(auth): 403 on /settings/billing for guests</tspan>  — PR #62 · test guide: 4 steps, log in as demo.guest</text>
+    <text class="l dim" y="400" style="animation-delay:18.0s">  #1 1.1.1 upload &gt;200MB  → feature test <tspan class="r">✗</tspan> (draft never created)  → builder fixes  → <tspan class="g">✓</tspan>  → PR #64</text>
+    <text class="l dim" y="424" style="animation-delay:18.9s">  #2 notifications T3  → adversarial review → PR #63     #4 1.1.2 typo T0 → PR #60     #6 4.1.1 downgrade T3 → PR #65</text>
+
+    <text class="l fg" y="462" style="animation-delay:20.0s"><tspan class="y">Batch done.</tspan>  6 PR-ready · 2 blocked (reported, not guessed) · 2 skipped (already shipped) · 1 merged into another</text>
+    <text class="l fg" y="486" style="animation-delay:20.6s">Nothing was merged. Test the branches from the panel, then merge from GitHub.</text>
+    <text class="cur y" y="486" x="586">▍</text>
+  </g>
+</svg>

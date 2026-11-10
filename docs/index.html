@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shipyard playground</title>
+<meta name="description" content="Run /manager on a sample QA doc in your browser and watch it become PR-ready branches. A simulation of the Shipyard skills for Claude Code — nothing is installed, no agent runs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3EFE4;--card:#FFFDF7;--ink:#141414;--mute:#6B675E;--line:#141414;
+  --yellow:#F5D33B;--blue:#1F4FD1;--green:#1D4D36;--green-soft:#DCEFE2;
+  --red:#C8321E;--red-soft:#F7D9D3;--amber:#E0A128;--amber-soft:#FBEFD2;
+  --shadow:4px 4px 0 var(--ink);
+  --display:"Barlow Condensed",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;color:var(--ink);background:var(--paper) radial-gradient(#d9d3c3 1px,transparent 1px) 0 0/18px 18px;font:15px/1.45 var(--body)}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);letter-spacing:.2px;margin:0}
+code,.mono{font-family:var(--mono)}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:18px;padding:14px 22px;border-bottom:2px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+.sticker{font-family:var(--display);font-weight:800;font-size:22px;background:var(--yellow);border:2px solid var(--line);box-shadow:var(--shadow);padding:2px 12px;text-decoration:none;transform:rotate(-2deg);display:inline-block}
+.tabs{display:flex;gap:6px}
+.tabs button{border:2px solid var(--line);background:var(--card);padding:6px 12px;font-family:var(--mono);font-size:13px}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.top .meta{margin-left:auto;font-size:12.5px;color:var(--mute)}
+.top .meta a{color:var(--ink)}
+
+main{padding:20px 22px 60px;max-width:1500px;margin:0 auto}
+main[hidden]{display:none}
+
+/* controls */
+.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.btn{border:2px solid var(--line);background:var(--card);padding:8px 14px;box-shadow:var(--shadow);font-weight:600;transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+.btn.primary{background:var(--blue);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+.controls label{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:center}
+.controls select{font:inherit;border:2px solid var(--line);background:var(--card);padding:4px 6px}
+.status{font-family:var(--mono);font-size:12.5px;color:var(--mute);margin-left:auto}
+
+/* grid */
+.grid{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:18px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+
+.panel{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow)}
+.panel h2{font-size:17px;font-weight:800;padding:9px 12px;border-bottom:2px solid var(--line);display:flex;align-items:center;gap:8px}
+.panel h2 span{font:12px var(--mono);color:var(--mute);font-weight:400}
+.empty{color:var(--mute);font-size:13px;margin:0;padding:12px}
+
+/* doc */
+.doc{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto}
+@media (max-width:980px){.doc{position:static;max-height:52vh}}
+.doc ol{list-style:none;margin:0;padding:6px 0}
+.finding{position:relative;padding:8px 112px 8px 14px;border-bottom:1px dashed #d8d2c2;font-size:13.5px;line-height:1.4;transition:background .2s}
+.finding .id{font-family:var(--mono);font-size:12px;color:var(--mute);margin-right:6px}
+.finding .sec{font-family:var(--mono);font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px}
+.finding.reading{background:#FFF7CC}
+.finding.skipped .title{color:var(--mute);text-decoration:line-through}
+.finding .file{display:block;font:12px var(--mono);color:var(--blue);margin-top:4px;opacity:0;transform:translateY(-3px);transition:opacity .25s,transform .25s}
+.finding .file.on{opacity:1;transform:none}
+.stamp{position:absolute;right:10px;top:8px;font:800 10.5px/1 var(--display);letter-spacing:.9px;padding:4px 7px;border:2px solid;background:var(--paper);transform:rotate(-6deg) scale(1.4);opacity:0;pointer-events:none}
+.stamp.on{animation:slam .22s cubic-bezier(.2,.9,.3,1.4) forwards}
+@keyframes slam{to{transform:rotate(-6deg) scale(1);opacity:1}}
+.stamp.green{color:var(--green);border-color:var(--green)}
+.stamp.red{color:var(--red);border-color:var(--red)}
+.stamp.ink{color:var(--ink);border-color:var(--ink)}
+.stamp.yellow{color:var(--ink);border-color:var(--ink);background:var(--yellow)}
+
+/* board */
+.board{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:1250px){.board{grid-template-columns:1fr}}
+.board .log{grid-column:1/-1}
+.log pre{margin:0;padding:10px 12px;font:12.5px/1.6 var(--mono);max-height:190px;overflow:auto;white-space:pre-wrap}
+.log .ph{color:var(--blue);font-weight:600}
+.log .ok{color:var(--green)}.log .warn{color:var(--red)}.log .dim{color:var(--mute)}
+
+.lanes{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.lane{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow);min-height:120px;position:relative}
+.lane .lh{font:800 13px var(--display);letter-spacing:.6px;text-transform:uppercase;padding:6px 10px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between;color:var(--mute)}
+.lane .lh b{color:var(--ink)}
+.lane .idle{padding:14px 10px;color:var(--mute);font-size:13px}
+.task{padding:10px}
+.task .t{font-weight:600;font-size:14px;line-height:1.3}
+.task .t .tier{font:600 11px var(--mono);padding:1px 6px;border:1.5px solid var(--ink);margin-right:6px;vertical-align:middle;background:var(--card)}
+.task .t .tier.floor{background:var(--yellow)}
+.task .src{font:12px var(--mono);color:var(--mute);margin:3px 0 8px}
+.rail{display:flex;flex-wrap:wrap;gap:4px}
+.gate{font:11px var(--mono);padding:3px 7px;border:1.5px solid #c9c3b4;color:var(--mute);background:var(--card)}
+.gate.now{border-color:var(--ink);color:var(--ink);background:#FFF7CC}
+.gate.done{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+.gate.fail{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+.gate.parked{border-color:var(--ink);background:var(--yellow);color:var(--ink)}
+.task .note{font-size:12.5px;color:var(--mute);margin-top:8px;min-height:1.2em}
+
+.inbox .q{padding:12px;border-bottom:2px solid var(--line)}
+.inbox .q .from{font:12px var(--mono);color:var(--mute);margin-bottom:4px}
+.inbox .q .qt{font-weight:600;margin-bottom:6px}
+.inbox .q .ctx{font-size:13px;color:var(--mute);margin-bottom:10px}
+.inbox .opts{display:flex;gap:8px;flex-wrap:wrap}
+.inbox .opts button{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:13px;box-shadow:3px 3px 0 var(--ink)}
+.inbox .opts button.rec{background:var(--yellow)}
+.inbox .q.answered .opts{display:none}
+.inbox .q .ans{font-size:13px;color:var(--green);font-weight:600;display:none}
+.inbox .q.answered .ans{display:block}
+.inbox h2 .badge{display:none;background:var(--red);color:#fff;font:600 11px var(--mono);padding:1px 7px;border-radius:999px;animation:pulse 1.2s ease-in-out infinite}
+.inbox h2 .badge.on{display:inline-block}
+@keyframes pulse{50%{transform:scale(1.15)}}
+
+.shelf .pr{padding:12px;border-bottom:1px dashed #d8d2c2;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
+.shelf .pr .title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--blue)}
+.shelf .pr .guide{font-size:12.5px;color:var(--mute);margin-top:6px;white-space:pre-line}
+.shelf .pr .merge{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:12.5px;opacity:.45;cursor:not-allowed;position:relative;align-self:center}
+.shelf .pr .merge:hover::after,.shelf .pr .merge:focus-visible::after{content:"Humans merge. Always. The pipeline stops at PR-ready.";position:absolute;right:0;top:calc(100% + 6px);width:220px;background:var(--ink);color:var(--paper);font-size:12px;padding:8px 10px;z-index:3;text-align:left}
+.shelf .pr .test{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:12.5px;margin-right:6px;box-shadow:3px 3px 0 var(--ink)}
+
+.queue ol{margin:0;padding:6px 0;list-style:none}
+.queue li{padding:7px 12px;border-bottom:1px dashed #d8d2c2;font-size:13px;display:flex;gap:8px;align-items:baseline}
+.queue li .tier{font:600 11px var(--mono);padding:1px 6px;border:1.5px solid var(--ink)}
+.queue li .tier.floor{background:var(--yellow)}
+.queue li.blocked{color:var(--mute)}
+.queue li.blocked .why{font-size:12px;color:var(--red)}
+
+.report{grid-column:1/-1;background:var(--ink);color:var(--paper);padding:14px 16px;font-family:var(--mono);font-size:13px;display:none}
+.report.on{display:block}
+.report b{color:var(--yellow)}
+
+/* router tab */
+.router{max-width:900px}
+.router textarea{width:100%;min-height:84px;font:15px var(--body);padding:12px;border:2px solid var(--line);background:var(--card);box-shadow:var(--shadow);resize:vertical}
+.router .examples{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
+.router .examples button{border:1.5px solid var(--ink);background:var(--card);padding:4px 9px;font-size:12.5px}
+.route{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow);padding:16px 18px}
+.route .big{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.route .tierbig{font:800 54px/1 var(--display)}
+.route .lbl{font:600 13px var(--mono);color:var(--mute)}
+.route .cats{margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap}
+.route .cats span{font:12px var(--mono);background:var(--yellow);border:1.5px solid var(--ink);padding:2px 7px}
+.route .why{margin:12px 0 0;font-size:14px}
+.route .rail{margin-top:14px}
+.route .rail .gate{border-color:var(--ink);color:var(--ink)}
+.route .fine{font-size:12.5px;color:var(--mute);margin-top:14px}
+
+footer{padding:18px 22px 40px;font-size:12.5px;color:var(--mute);border-top:2px solid var(--line);background:var(--card)}
+footer a{color:var(--ink)}
+
+@media (prefers-reduced-motion: reduce){
+  .stamp.on{animation:none;transform:rotate(-6deg) scale(1);opacity:1}
+  .inbox h2 .badge{animation:none}
+  .finding .file{transition:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="sticker" href="https://github.com/Henry-Shan/shipyard">Shipyard</a>
+  <nav class="tabs" role="tablist" aria-label="Playground mode">
+    <button role="tab" aria-selected="true" data-tab="batch">/manager — run a batch</button>
+    <button role="tab" aria-selected="false" data-tab="router">/ship-task — route one task</button>
+  </nav>
+  <div class="meta">A simulation. Nothing is installed and no agent runs — the real thing is <a href="https://github.com/Henry-Shan/shipyard#installation">one line away</a>.</div>
+</header>
+
+<main id="batch" role="tabpanel">
+  <section class="controls" aria-label="Run controls">
+    <button id="run" class="btn primary">Run /manager on this doc ▶</button>
+    <label>workers <select id="cap"><option>1</option><option selected>2</option><option>3</option></select></label>
+    <label>speed <select id="speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
+    <button id="reset" class="btn">Reset</button>
+    <span id="status" class="status">Idle — the doc on the left is the repo's <code>examples/demo-qa-findings.md</code>, unedited.</span>
+  </section>
+
+  <div class="grid">
+    <aside class="panel doc" aria-label="QA document">
+      <h2>QA doc <span>qa-findings.md · Castaway Studio · staging pass</span></h2>
+      <ol id="findings"></ol>
+    </aside>
+
+    <section class="board" aria-label="Manager board">
+      <div class="panel log"><h2>manager <span>ingest → ground → dedup → consolidate → triage → dispatch</span></h2><pre id="logbody">Press Run. The manager reads the doc top to bottom; watch the stamps land on the left.</pre></div>
+      <div class="lanes" id="lanes" aria-label="Worker lanes"></div>
+      <div class="panel inbox"><h2>Inbox <span class="badge" id="inboxBadge">1</span><span>the only thing that needs you</span></h2><div id="inboxBody"><p class="empty">A running agent lands here only with a genuine preference it couldn't settle from the repo — one question, with a recommendation. Everything else proceeds.</p></div></div>
+      <div class="panel shelf"><h2>PR-ready <span>green, tested, worktree kept</span></h2><div id="shelfBody"><p class="empty">Finished work collects here as open PRs with a manual test guide. You test, you merge.</p></div></div>
+      <div class="panel queue"><h2>Queue <span>priority order · blocked items reported, not guessed</span></h2><ol id="queueBody"><li class="empty" style="padding:12px;color:var(--mute);border:0">Empty until triage runs.</li></ol></div>
+      <div class="report" id="report"></div>
+    </section>
+  </div>
+</main>
+
+<main id="router" role="tabpanel" hidden>
+  <div class="router">
+    <h1 style="font-size:34px;font-weight:800;margin-bottom:6px">Where does one task go?</h1>
+    <p style="margin:0 0 14px;color:var(--mute)">Type anything you'd hand to <code>/ship-task</code>. The tier below is a heuristic for the demo, but the <b>risk floor</b> is the real thing — the same regular expressions as <code>skills/ship-task/risk_floor.py</code>, which run before the model's own judgment and can only ever raise the tier.</p>
+    <textarea id="taskInput" aria-label="Task description">add a CSV export button to the items table</textarea>
+    <div class="examples" aria-label="Examples">
+      <button data-ex="fix the typo in the README install section">README typo</button>
+      <button data-ex="add a CSV export button to the items table">CSV export button</button>
+      <button data-ex="guest users can open /settings/billing by direct URL — block it">guest billing route</button>
+      <button data-ex="delete old invoices older than 7 years with a nightly job">nightly invoice deletion</button>
+      <button data-ex="rename the 'Apps' nav label to 'App'">nav copy change</button>
+      <button data-ex="add a migration for a tenant_id column and backfill it">tenant migration</button>
+    </div>
+    <div class="route" id="route" aria-live="polite"></div>
+  </div>
+</main>
+
+<footer>
+  Shipyard is three Claude Code skills — <code>/manager</code>, <code>/ship-task</code>, <code>/feature-tester</code> — by <a href="https://github.com/Henry-Shan">Henry Shan</a>. This page simulates a batch on the sample doc so you can see the shape of it; tiers and file paths here are illustrative, the risk-floor categories and the never-merge boundary are not. <a href="https://github.com/Henry-Shan/shipyard">Source and install →</a>
+</footer>
+
+<script>
+/* ---------- the sample doc (verbatim: examples/demo-qa-findings.md) ---------- */
+const DOC = String.raw`## Test 1 — Episode upload & publishing
+### Feature: Audio upload
+🔴 Bug 1.1.1 — Uploading an episode over 200MB fails silently: the progress bar reaches 100%, then the episode never appears in the drafts list. No error toast, nothing in the activity feed. Repro 3/3 with a 212MB WAV.
+image 1.1.1 — the upload modal after completion
+🟡 Bug 1.1.2 — The upload dropzone says "Drop you're file here". Typo: should be "your". Cosmetic only.
+✅ Bug 1.1.3 — (Fixed) Chapters imported from the MP3 were off by one — this was fixed in PR #47 and verified working on staging today. Not reproducible anymore.
+### Feature: Scheduling
+🔴 Bug 1.2.1 — Scheduling an episode for 9:00 AM in the show's timezone (Berlin) publishes it at 9:00 AM UTC instead. The RSS feed timestamp confirms the wrong zone. This makes scheduled publishing unusable for non-UTC shows.
+image 1.2.1 — episode set for 09:00 CET showing pubDate 09:00Z
+🟠 Feature 1.2.2 — There's no way to unschedule an episode without deleting it. Producers expect a "revert to draft" action on scheduled episodes.
+## Test 2 — Notifications
+### Feature: Email notifications
+🟠 Feature 2.1.1 — Producers get no notification when a scheduled episode actually goes live. They want a "published" confirmation email.
+🟠 Feature 2.1.2 — When a collaborator leaves a comment on a draft episode, nobody is notified. The comment just sits there until someone opens the draft.
+🟠 Feature 2.1.3 — Failed uploads (see 1.1.1) should notify the uploader by email, since big uploads are often left running unattended.
+## Test 3 — Team & permissions
+### Feature: Roles
+🔴 Bug 3.1.1 — A Guest editor can open the show's Billing page by navigating directly to /settings/billing. The nav item is hidden but the route is not protected — they can see the card's last four digits and the invoice history.
+image 3.1.1 — billing page rendered while logged in as demo.guest
+🟡 Bug 3.1.2 — The "Invite teammate" modal lets you submit an empty role dropdown; the invite email then says "joined as undefined".
+## Test 4 — Billing & plans
+### Feature: Plan changes
+🔴 Bug 4.1.1 — Downgrading from Studio to Indie while a bulk upload is running orphans the in-flight episodes: they finish uploading but are invisible on the Indie plan's episode list, and storage is still billed for them.
+🟠 Feature 4.1.2 — Deleting a show should warn that its RSS feed URL dies immediately and existing subscribers lose the feed. Right now it's a single confirm with no explanation of consequences.
+## Test 5 — Analytics
+### Feature: Listener stats
+🟢 Test 5.1.1 — (DONE) Per-episode listener graph — shipped in PR #52, verified on staging: numbers match the raw log export.
+⚪ Note 5.1.2 — Do NOT fix yet, investigate only: the "unique listeners" count for Static & Signal dropped ~40% on June 12th with no matching drop in downloads. Find out why before anyone touches the aggregation code — it may be a bot-filter change, not a bug.
+🔴 Bug 5.1.3 — Analytics page intermittently shows a blank chart on Safari. Could not find reliable repro steps (maybe 1 in 5 loads). The Apple embed partner said their widget review is still pending on their side, so the fallback chart may be the only path for now — blocked on their approval either way.`;
+
+/* ---------- risk floor: ported verbatim from skills/ship-task/risk_floor.py ---------- */
+const RISK = [
+  ["auth/JWT", /\bauth\b|authenticat|authoriz|\bjwt\b|\boauth\b|\bsso\b|\bmiddleware\b|\blog ?in\b|\blogout\b|\bsign ?in\b/i],
+  ["rbac/roles/permissions", /\brbac\b|\broles?\b|permission|access control|\bprivilege/i],
+  ["db/migrations", /\bmigrations?\b|\bmigrate\b|\balter table\b|\bdrop table\b|\brls\b|row[- ]level security/i],
+  ["multi-tenancy", /multi[- ]?tenan|\btenant\b|data isolation|cross[- ]tenant/i],
+  ["secrets/env", /\.env\b|\bsecret\b|\bcredential|\bapi[_ ]?key\b|\baccess[_ ]?key\b|\bbearer\b|private key|service[_ ]?key/i],
+  ["CORS", /\bcors\b|cross[- ]origin/i],
+  ["ci/deploy", /\.github\/workflows|github actions|\bci\/cd\b|\bdeploy(ment|s)?\b|\bdockerfile\b/i],
+  ["payment/billing", /\bbilling\b|\binvoice|\bpayment|\bstripe\b|\bcharge\b.*\b(card|account)\b|usage charge/i],
+  ["destructive/deletion", /\bdelet|\bdestroy\b|\bpurge\b|\bwipe\b|\bhard[- ]delete|\bbulk[- ]delete|\birreversible\b|\btruncate\b/i],
+];
+function riskFloor(text){ const matched = RISK.filter(([,re]) => re.test(text)).map(([n]) => n); return { floor: matched.length ? 2 : 0, matched }; }
+
+/* ---------- demo-only grounding (which file a finding points at) ---------- */
+const GROUND = [
+  [/billing page|\/settings\/billing/i, "middleware.ts → app/settings/billing/page.tsx"],
+  [/downgrad|studio to indie|plan\b/i, "lib/billing/plan-change.ts"],
+  [/invite|role dropdown/i, "lib/team/invite.ts"],
+  [/schedul|timezone|pubDate|unschedule|revert to draft/i, "lib/schedule.ts"],
+  [/deleting a show|rss feed url/i, "app/shows/[id]/delete-dialog.tsx"],
+  [/notif|email|comment on a draft/i, "lib/notify/mailer.ts"],
+  [/upload|dropzone|drafts? list/i, "apps/web/upload/dropzone.tsx"],
+  [/listener|analytics|chart/i, "app/analytics/listeners-chart.tsx"],
+];
+function groundFile(t){ for (const [re,f] of GROUND) if (re.test(t)) return f; return "apps/web/…"; }
+
+/* ---------- parse the doc ---------- */
+function parseDoc(src){
+  const out=[]; let section=""; let cur=null;
+  for (const raw of src.split("\n")){
+    const line=raw.trim();
+    if (line.startsWith("## ")){ section=line.slice(3).replace(/^Test \d+ — /,""); continue; }
+    if (line.startsWith("### ")){ continue; }
+    const m=line.match(/^(🔴|🟡|🟠|✅|🟢|⚪)\s+(Bug|Feature|Test|Note)\s+(\d+\.\d+\.\d+)\s+—\s+(.*)$/);
+    if (m){ cur={mark:m[1],kind:m[2],id:m[3],text:m[4],section,evidence:false}; out.push(cur); continue; }
+    if (/^image \d+\.\d+\.\d+/.test(line) && cur){ cur.evidence=true; }
+  }
+  return out;
+}
+const FINDINGS = parseDoc(DOC);
+
+/* ---------- triage (demo heuristics + the real floor) ---------- */
+function triage(f){
+  const text=f.text; const {floor,matched}=riskFloor(text);
+  if (f.mark==="✅"||f.mark==="🟢"){ const pr=(text.match(/PR #(\d+)/)||[])[1]; return {kind:"shipped",pr}; }
+  if (/do not fix|investigate only/i.test(text)) return {kind:"blocked",why:"reporter: investigate only"};
+  if (/blocked on|pending on their side/i.test(text)) return {kind:"blocked",why:"external approval"};
+  let base = f.mark==="🟡" ? (/typo|cosmetic|copy|label/i.test(text)?0:1) : 2;
+  if (/downgrad|bulk|two|orphan|in-flight|aggregation/i.test(text)) base=Math.max(base,3);
+  const tier=Math.max(base,floor);
+  return {kind:"task",tier,floor,matched};
+}
+
+/* ---------- pipeline shapes per tier (from ship-task SKILL.md) ---------- */
+const RAILS = {
+  0:["worktree","edit","verify","commit","PR"],
+  1:["worktree","focused test","fix","verify","commit","PR"],
+  2:["worktree","blind test","confirm red","implement","verify","feature test","commit","PR"],
+  3:["worktree","blind test","confirm red","implement","adversarial review","verify","feature test","commit","PR"],
+};
+const PR_TITLES = {
+  "1.1.1":"(auto qa) fix(upload): surface failed 200MB+ uploads and create the draft",
+  "1.1.2":"(auto qa) copy(upload): dropzone typo you're → your",
+  "1.2.1":"(auto qa) fix(schedule): publish at show-local time, not UTC",
+  "1.2.2":"(auto qa) feat(schedule): revert a scheduled episode to draft",
+  "notif":"(auto qa) feat(notify): published, comment and failed-upload emails",
+  "3.1.1":"(auto qa) fix(auth): 403 on /settings/billing for guest editors",
+  "3.1.2":"(auto qa) fix(team): require a role in the invite modal",
+  "4.1.1":"(auto qa) fix(billing): keep in-flight uploads visible across a downgrade",
+  "4.1.2":"(auto qa) feat(shows): explain feed loss before deleting a show",
+};
+const GUIDES = {
+  "1.2.1":"1. Log in as demo.producer · set show tz Berlin\n2. Schedule an episode for 09:00\n3. Feed pubDate reads 07:00Z — ✅ Success = local 09:00",
+  "3.1.1":"1. Log in as demo.guest\n2. Open /settings/billing directly\n3. ✅ Success = 403 page, no card digits, API /api/billing also 403",
+  "notif":"1. As demo.producer, schedule an episode 2 min out\n2. ✅ Success = 'published' email arrives; comment on a draft → collaborator email",
+  "1.1.1":"1. Upload the 212MB WAV as demo.owner\n2. ✅ Success = draft appears, or an explicit error toast + activity entry",
+};
+
+/* ---------- DOM helpers ---------- */
+const $=s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t); if(c) e.className=c; if(h!=null) e.innerHTML=h; return e;};
+const sleepBase=ms=>new Promise(r=>setTimeout(r,ms));
+let speed=2, runToken=0;
+const wait=async(ms,tok)=>{ await sleepBase(ms/speed); if(tok!==runToken) throw new Error("reset"); };
+
+function renderDoc(){
+  const ol=$("#findings"); ol.innerHTML="";
+  for (const f of FINDINGS){
+    const li=el("li","finding"); li.id="f-"+f.id.replaceAll(".","-");
+    li.innerHTML=`<span class="sec">${f.section}</span><span class="id">${f.mark} ${f.id}</span><span class="title">${esc(f.text)}</span><span class="file"></span><span class="stamp"></span>`;
+    ol.appendChild(li);
+  }
+}
+function esc(s){ return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function stamp(id,cls,text){ const li=$("#f-"+id.replaceAll(".","-")); const s=li.querySelector(".stamp"); s.className="stamp "+cls; s.textContent=text; void s.offsetWidth; s.classList.add("on"); }
+function reading(id,on){ const li=$("#f-"+id.replaceAll(".","-")); li.classList.toggle("reading",on); if(on) li.scrollIntoView({block:"nearest"}); }
+function log(html){ const p=$("#logbody"); if(p.dataset.fresh!=="1"){p.textContent="";p.dataset.fresh="1";} p.innerHTML+=html+"\n"; p.scrollTop=p.scrollHeight; }
+function setStatus(t){ $("#status").textContent=t; }
+
+/* ---------- lanes ---------- */
+function buildLanes(n){ const w=$("#lanes"); w.innerHTML=""; for(let i=1;i<=n;i++){ const l=el("div","lane"); l.id="lane-"+i; l.innerHTML=`<div class="lh"><span>worker <b>${i}</b></span><span class="st">idle</span></div><div class="idle">Waiting for the queue.</div>`; w.appendChild(l);} }
+function laneRender(i,task,phaseIdx,state,note){
+  const l=$("#lane-"+i); l.querySelector(".st").textContent=state;
+  const body = el("div","task");
+  const floorCls = task.floor===2 ? " floor" : "";
+  body.innerHTML=`<div class="t"><span class="tier${floorCls}" title="${task.floor===2?'risk floor raised this to at least Tier 2':''}">T${task.tier}${task.floor===2?" ↑":""}</span>${esc(task.title)}</div><div class="src">${task.src} · branch <b>${task.branch}</b></div><div class="rail">${task.rail.map((g,k)=>`<span class="gate ${k<phaseIdx?'done':k===phaseIdx?(state==='parked'?'parked':state==='fail'?'fail':'now'):''}">${g}</span>`).join("")}</div><div class="note">${note||""}</div>`;
+  const old=l.querySelector(".task,.idle"); if(old) old.replaceWith(body); else l.appendChild(body);
+}
+function laneIdle(i){ const l=$("#lane-"+i); l.querySelector(".st").textContent="idle"; const old=l.querySelector(".task,.idle"); const idle=el("div","idle","Waiting for the queue."); if(old) old.replaceWith(idle); else l.appendChild(idle); }
+
+/* ---------- inbox ---------- */
+function ask(task,question,options,context){
+  return new Promise(resolve=>{
+    const box=$("#inboxBody"); const emp=box.querySelector(".empty"); if(emp) emp.remove();
+    const q=el("div","q");
+    q.innerHTML=`<div class="from">from worker ${task.lane} · task #${task.n} · ${task.src}</div><div class="qt">${esc(question)}</div><div class="ctx">${esc(context)}</div><div class="opts"></div><div class="ans"></div>`;
+    const opts=q.querySelector(".opts");
+    options.forEach((o,i)=>{ const b=el("button",i===0?"rec":"",esc(o)); b.onclick=()=>{ q.classList.add("answered"); q.querySelector(".ans").textContent="You answered: "+o+" — relayed into the running session."; $("#inboxBadge").classList.remove("on"); resolve(o); }; opts.appendChild(b); });
+    box.prepend(q); $("#inboxBadge").classList.add("on"); setStatus("Worker "+task.lane+" is parked on a question — answer it in the inbox to continue.");
+  });
+}
+
+/* ---------- shelf + queue ---------- */
+function shelve(task){
+  const box=$("#shelfBody"); const emp=box.querySelector(".empty"); if(emp) emp.remove();
+  const pr=el("div","pr");
+  pr.innerHTML=`<div><div class="title">${esc(task.prTitle)} <span style="color:var(--mute);font-weight:400">· #${task.prNum}</span></div><div class="guide">${esc(task.guide||"1. Open the preview on the worktree port\n2. ✅ Success = the reported behavior is gone")}</div></div><div><button class="test" onclick="this.textContent='preview on :33${10+task.n}'">Test this branch</button><button class="merge" aria-describedby="mergeNote" tabindex="0">Merge</button></div>`;
+  box.appendChild(pr);
+}
+function queueRender(items){
+  const ol=$("#queueBody"); ol.innerHTML="";
+  if(!items.length){ ol.innerHTML='<li class="empty" style="padding:12px;color:var(--mute);border:0">Nothing queued.</li>'; return; }
+  for (const t of items){ const li=el("li",t.kind==="blocked"?"blocked":""); li.innerHTML = t.kind==="blocked" ? `<span>⛔</span><span>${esc(t.title)} <span class="why">— ${t.why}</span></span>` : `<span class="tier${t.floor===2?' floor':''}">T${t.tier}</span><span>${esc(t.title)}</span>`; ol.appendChild(li); }
+}
+
+/* ---------- the batch ---------- */
+let queue=[], blocked=[], done=[], nextN=1, prCounter=60;
+async function runBatch(){
+  const tok=++runToken; resetBoard(); $("#run").disabled=true; $("#cap").disabled=true;
+  const cap=+$("#cap").value; buildLanes(cap);
+  try{
+    log(`<span class="ph">[ingest]</span> reading qa-findings.md — ${FINDINGS.length} findings in ${new Set(FINDINGS.map(f=>f.section)).size} sections · ${FINDINGS.filter(f=>f.evidence).length} screenshots read as images`);
+    setStatus("Ingesting…");
+    await wait(900,tok);
+    /* ground */
+    log(`<span class="ph">[ground]</span> tracing each finding to the repo and the live base branch — never guessing about schema or routes`);
+    for (const f of FINDINGS){ reading(f.id,true); await wait(260,tok); const li=$("#f-"+f.id.replaceAll(".","-")); const fe=li.querySelector(".file"); fe.textContent="→ "+groundFile(f.text); fe.classList.add("on"); reading(f.id,false); }
+    /* dedup + consolidate + triage */
+    log(`<span class="ph">[dedup]</span> checking what already landed on main`);
+    const consolidated=[]; const tasks=[];
+    for (const f of FINDINGS){
+      reading(f.id,true); await wait(380,tok);
+      const t=triage(f);
+      if(t.kind==="shipped"){ stamp(f.id,"green","SHIPPED #"+(t.pr||"")); $("#f-"+f.id.replaceAll(".","-")).classList.add("skipped"); log(`  ${f.id} already on main (PR #${t.pr}) <span class="ok">✓ skipped</span>`); }
+      else if(t.kind==="blocked"){ stamp(f.id,"red","BLOCKED"); blocked.push({kind:"blocked",title:f.id+" "+shortTitle(f),why:t.why}); log(`  ${f.id} <span class="warn">blocked</span> — ${t.why}`); }
+      else if(/^2\.1\./.test(f.id)){ consolidated.push(f); stamp(f.id,"ink","→ ONE TASK"); }
+      else { stamp(f.id, t.floor===2?"yellow":"ink", "TIER "+t.tier+(t.floor===2?" ↑floor":"")); tasks.push(mkTask(f.id,shortTitle(f),f.id,t)); if(t.floor===2) log(`  ${f.id} risk floor → min T2 <span class="dim">(${t.matched.join(", ")})</span>`); }
+      reading(f.id,false);
+    }
+    if(consolidated.length){ log(`<span class="ph">[consolidate]</span> ${consolidated.map(f=>f.id).join(" + ")} → one task: producer notifications (one mailer path)`); const t={kind:"task",tier:3,floor:0,matched:[]}; tasks.push(mkTask("notif","Notifications: published · comment on draft · failed upload", consolidated.map(f=>f.id).join("+"), t)); }
+    log(`<span class="ph">[triage]</span> ${tasks.length} tasks · ${blocked.length} blocked · priority: 🔴 bugs first, then risk-floor items, then features`);
+    tasks.sort((a,b)=>(b.priority-a.priority)||(b.tier-a.tier));
+    queue=tasks; queueRender([...queue,...blocked]);
+    await wait(700,tok);
+    log(`<span class="ph">[dispatch]</span> ${cap} worker${cap>1?"s":""} · ${queue.length} queued · each in its own worktree off origin/main`);
+    setStatus("Dispatching — up to "+cap+" at once.");
+    const lanes=Array.from({length:cap},(_,i)=>i+1);
+    await Promise.all(lanes.map(i=>worker(i,tok)));
+    const rep=$("#report"); rep.className="report on";
+    rep.innerHTML=`<b>Batch done.</b> ${done.length} PR-ready · ${blocked.length} blocked (reported, not guessed) · ${FINDINGS.filter(f=>f.mark==="✅"||f.mark==="🟢").length} skipped (already shipped) · ${consolidated.length} findings merged into 1 task<br>Nothing was merged. Test the branches from the panel, then merge from GitHub — that step stays human.`;
+    setStatus("Done. Hover Merge on the shelf.");
+  }catch(e){ if(e.message!=="reset") console.error(e); }
+  finally{ if(tok===runToken){ $("#run").disabled=false; $("#cap").disabled=false; } }
+}
+function shortTitle(f){ return f.text.split(/[.:—]/)[0].replace(/^(Uploading|Scheduling|A Guest editor|Downgrading|Deleting a show|Producers get|When a collaborator|Failed uploads|There's no way)/,m=>m).slice(0,80); }
+function mkTask(key,title,src,t){
+  const n=nextN++; const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,32);
+  return {key,n,title,src:"qa-findings.md · "+src,tier:t.tier,floor:t.floor,matched:t.matched,rail:RAILS[t.tier],branch:"auto-qa/"+slug,priority:(t.floor===2?2:0)+(/^(1\.1\.1|1\.2\.1|3\.1\.1|4\.1\.1)$/.test(key)?3:0),prTitle:PR_TITLES[key]||("(auto qa) "+title),guide:GUIDES[key]};
+}
+async function worker(lane,tok){
+  while(queue.length){
+    const task=queue.shift(); task.lane=lane; queueRender([...queue,...blocked]);
+    for(let p=0;p<task.rail.length;p++){
+      const g=task.rail[p];
+      laneRender(lane,task,p,"running",noteFor(g,task));
+      await wait(g==="implement"?1400:g==="blind test"?1100:800,tok);
+      if(task.key==="3.1.1" && g==="implement"){
+        laneRender(lane,task,p,"parked","Parked: one preference the repo can't settle. Waiting on the inbox.");
+        const ans=await ask(task,"A guest hitting /settings/billing — show a 403 page, or redirect to /settings?",["403 page (recommended)","Redirect to /settings"],"The route is unprotected; only the nav link is hidden. The API already answers 403 on /api/billing for guests, so a 403 page keeps web and API consistent.");
+        if(tok!==runToken) throw new Error("reset");
+        task.prTitle = ans.startsWith("403") ? task.prTitle : "(auto qa) fix(auth): redirect guests away from /settings/billing";
+        laneRender(lane,task,p,"running","Answer received: "+ans+". Continuing in the same session.");
+        await wait(700,tok);
+      }
+      if(task.key==="1.1.1" && g==="feature test"){
+        laneRender(lane,task,p,"fail","feature test ✗ — fresh agent's test: 'draft exists after a 212MB upload' failed. Builder gets the failing test, not the diff.");
+        await wait(1300,tok);
+        laneRender(lane,task,p,"running","builder fixed the draft-creation path → re-running the independent test…");
+        await wait(900,tok);
+      }
+    }
+    task.prNum=++prCounter; done.push(task);
+    laneRender(lane,task,task.rail.length,"done",`<span style="color:var(--green);font-weight:600">PR #${task.prNum} open</span> — stopped here. Worktree kept for "Test this branch".`);
+    shelve(task); log(`<span class="ok">✓</span> #${task.n} ${esc(task.prTitle)} — PR #${task.prNum}`);
+    await wait(600,tok);
+  }
+  laneIdle(lane);
+}
+function noteFor(g,task){
+  return ({
+    "worktree":"git worktree off a freshly pulled base branch · env files symlinked · setup command run",
+    "edit":"Tier 0: make the edit directly — nothing to assert",
+    "focused test":"Tier 1: one hermetic test for the specified behavior, red first",
+    "fix":"make it green, max 3 attempts",
+    "blind test":"spec-only test agent — it never sees the implementation",
+    "confirm red":"the new test must fail before any implementation",
+    "implement":"separate implement agent, fresh context, reads BUILDER_PLAYBOOK.md first",
+    "adversarial review":"Tier 3: a reviewer tries to break it before verify",
+    "verify":"hard gate: the project's verify_command (lint + tests)",
+    "feature test":"/feature-tester: a fresh agent writes ONE integration test of the key behavior",
+    "commit":"commit only with a recorded, non-failing feature-test verdict",
+    "PR":"push the branch, open the PR with a manual test guide, stop",
+  })[g]||"";
+}
+function resetBoard(){
+  queue=[];blocked=[];done=[];nextN=1;prCounter=60;
+  renderDoc(); $("#logbody").textContent="Press Run. The manager reads the doc top to bottom; watch the stamps land on the left."; $("#logbody").dataset.fresh="0";
+  $("#inboxBody").innerHTML='<p class="empty">A running agent lands here only with a genuine preference it couldn\'t settle from the repo — one question, with a recommendation. Everything else proceeds.</p>'; $("#inboxBadge").classList.remove("on");
+  $("#shelfBody").innerHTML='<p class="empty">Finished work collects here as open PRs with a manual test guide. You test, you merge.</p>';
+  queueRender([]); $("#report").className="report"; $("#lanes").innerHTML="";
+}
+
+/* ---------- router tab ---------- */
+function route(text){
+  const {floor,matched}=riskFloor(text);
+  let base=2, why="a real behavior change — gets the full pipeline: blind spec test, separate implementer, verify gate, independent feature test.";
+  if(/typo|readme|wording|copy|label|rename.*(label|text)|comment|docs?\b/i.test(text)){ base=0; why="docs or copy with no behavior change — edited directly, nothing to assert."; }
+  else if(/^(fix|patch)\b/i.test(text) && text.length<70){ base=1; why="one obvious fix — a single focused test first, then the fix, no subagents."; }
+  if(/migration|backfill|across|refactor|redesign|nightly job|two|multiple|all the/i.test(text)){ base=Math.max(base,3); why="multi-file or ambiguous — Tier 2 plus an adversarial reviewer; it stops and asks if the acceptance criteria can't be tested."; }
+  const tier=Math.max(base,floor);
+  const raised=floor>base;
+  const box=$("#route");
+  box.innerHTML=`<div class="big"><span class="tierbig">T${tier}</span><span class="lbl">${["trivial","small","standard","large / ambiguous"][tier]}</span>${raised?`<span class="lbl" style="color:var(--red)">raised from T${base} by the risk floor</span>`:""}</div>
+  ${matched.length?`<div class="cats">${matched.map(m=>`<span>${m}</span>`).join("")}</div>`:`<div class="cats"><span style="background:var(--card)">no risk category matched</span></div>`}
+  <p class="why">${raised?`It reads like a T${base}, but it touches <b>${matched.join(", ")}</b>. The floor is a regex, not a judgment, so it can't be forgotten: minimum Tier 2 — ${["","","blind spec test, separate implementer, verify gate, independent feature test.","plus an adversarial reviewer."][tier]}`:why}</p>
+  <div class="rail">${RAILS[tier].map(g=>`<span class="gate">${g}</span>`).join("")}</div>
+  <p class="fine">Every tier lands the same way: verify gate → branch → push → PR → <b>stop</b>. ${tier>=2?"The spec test and the feature test are written by agents that never see the implementation.":"If the work turns out to change behavior, the run re-routes itself upward — doubt tiers up, never down."}</p>`;
+}
+
+/* ---------- wiring ---------- */
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  document.querySelectorAll("main").forEach(m=>m.hidden=m.id!==b.dataset.tab);
+  history.replaceState(null,"","#"+b.dataset.tab);
+}));
+if(location.hash==="#router") document.querySelector('[data-tab="router"]').click();
+$("#run").addEventListener("click",runBatch);
+$("#reset").addEventListener("click",()=>{ runToken++; resetBoard(); $("#run").disabled=false; $("#cap").disabled=false; setStatus("Reset. Idle."); });
+$("#speed").addEventListener("change",e=>speed=+e.target.value);
+const ta=$("#taskInput"); ta.addEventListener("input",()=>route(ta.value)); route(ta.value);
+document.querySelectorAll(".examples button").forEach(b=>b.addEventListener("click",()=>{ ta.value=b.dataset.ex; route(ta.value); ta.focus(); }));
+renderDoc();
+</script>
+</body>
+</html>

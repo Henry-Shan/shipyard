@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12">
+  <defs>
+    <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d9d3c3"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#141414"/></marker>
+    <style>
+      .h{font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;font-weight:800;letter-spacing:-.2px}
+      .ink{fill:#141414}.mute{fill:#6B675E}.card{fill:#FFFDF7;stroke:#141414;stroke-width:2}
+      .shadow{fill:#141414}.rule{stroke:#141414;stroke-width:2;fill:none}
+      .stamp{font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.6px}
+      .gate{fill:#FFFDF7;stroke:#141414;stroke-width:2}.on{fill:#DCEFE2}
+      .s{font-size:11px}.g{font-size:10.5px}
+    </style>
+  </defs>
+
+  <rect width="1200" height="440" fill="#F3EFE4"/>
+  <rect width="1200" height="440" fill="url(#dots)"/>
+  <text x="40" y="34" class="s mute">HOW A QA DOC BECOMES PULL REQUESTS · nothing merges without a human</text>
+
+  <!-- STATION 1: the doc -->
+  <rect x="46" y="66" width="232" height="304" class="shadow"/>
+  <rect x="40" y="60" width="232" height="304" class="card"/>
+  <text x="56" y="88" class="h ink" font-size="18">qa-findings.md</text>
+  <line x1="56" y1="98" x2="256" y2="98" class="rule"/>
+  <g class="ink">
+    <text x="56" y="124">🔴 1.1.1 upload &gt;200MB</text>
+    <text x="56" y="150">🟡 1.1.2 dropzone typo</text>
+    <text x="56" y="176" class="mute" text-decoration="line-through">✅ 1.1.3 chapters ±1</text>
+    <text x="56" y="202">🔴 1.2.1 publishes in UTC</text>
+    <text x="56" y="228">🟠 2.1.1 published email</text>
+    <text x="56" y="250">🟠 2.1.2 comment email</text>
+    <text x="56" y="272">🟠 2.1.3 failed-upload email</text>
+    <text x="56" y="298">🔴 3.1.1 guest /billing</text>
+    <text x="56" y="324">⚪ 5.1.2 listeners −40%</text>
+  </g>
+  <g transform="rotate(-6 222 171)"><rect x="180" y="162" width="84" height="19" fill="#F3EFE4" stroke="#1D4D36" stroke-width="2"/><text x="222" y="175" text-anchor="middle" class="stamp" fill="#1D4D36">SHIPPED #47</text></g>
+  <path d="M240 220 L250 220 L250 278 L240 278" class="rule"/>
+  <text x="252" y="253" class="g ink" font-weight="700">×3→1</text>
+  <g transform="rotate(-6 222 321)"><rect x="186" y="312" width="72" height="19" fill="#F3EFE4" stroke="#C8321E" stroke-width="2"/><text x="222" y="325" text-anchor="middle" class="stamp" fill="#C8321E">BLOCKED</text></g>
+
+  <line x1="278" y1="212" x2="322" y2="212" class="rule" marker-end="url(#arr)"/>
+
+  <!-- STATION 2: manager -->
+  <rect x="336" y="66" width="252" height="304" class="shadow"/>
+  <rect x="330" y="60" width="252" height="304" class="card"/>
+  <text x="346" y="88" class="h ink" font-size="18">/manager</text>
+  <text x="430" y="88" class="s mute">the brain</text>
+  <line x1="346" y1="98" x2="566" y2="98" class="rule"/>
+  <g class="ink">
+    <text x="346" y="126"><tspan font-weight="700">ingest</tspan>      18 findings · 3 images</text>
+    <text x="346" y="152"><tspan font-weight="700">ground</tspan>      each → a file in the repo</text>
+    <text x="346" y="178"><tspan font-weight="700">dedup</tspan>       vs. the live base branch</text>
+    <text x="346" y="204"><tspan font-weight="700">consolidate</tspan> 2.1.x → one task</text>
+    <text x="346" y="230"><tspan font-weight="700">triage</tspan>      tier 0–3 per task</text>
+    <text x="346" y="256"><tspan font-weight="700">dispatch</tspan>    N workers in parallel</text>
+  </g>
+  <g transform="rotate(-2 456 324)">
+    <rect x="346" y="292" width="220" height="62" fill="#F5D33B" stroke="#141414" stroke-width="2"/>
+    <text x="358" y="311" class="stamp ink">RISK FLOOR · MIN TIER 2</text>
+    <text x="358" y="328" class="s ink">auth · roles · migrations</text>
+    <text x="358" y="344" class="s ink">tenancy · secrets · billing</text>
+  </g>
+
+  <line x1="588" y1="150" x2="632" y2="150" class="rule" marker-end="url(#arr)"/>
+  <line x1="588" y1="270" x2="632" y2="270" class="rule" marker-end="url(#arr)"/>
+
+  <!-- STATION 3: ship-task lanes -->
+  <text x="644" y="88" class="h ink" font-size="18">/ship-task</text>
+  <text x="746" y="88" class="s mute">the hands · one worktree each</text>
+
+  <rect x="650" y="114" width="380" height="84" class="shadow"/>
+  <rect x="644" y="108" width="380" height="84" class="card"/>
+  <text x="658" y="130" class="ink"><tspan font-weight="700">#3</tspan> 1.2.1 publish in show tz <tspan class="mute">· T2</tspan></text>
+  <g transform="translate(658 142)" class="g">
+    <rect x="0" y="0" width="42" height="20" class="gate on"/><text x="21" y="14" text-anchor="middle">tree</text>
+    <rect x="46" y="0" width="72" height="20" class="gate on"/><text x="82" y="14" text-anchor="middle">blind test</text>
+    <rect x="122" y="0" width="74" height="20" class="gate on"/><text x="159" y="14" text-anchor="middle">implement</text>
+    <rect x="200" y="0" width="50" height="20" class="gate on"/><text x="225" y="14" text-anchor="middle">verify</text>
+    <rect x="254" y="0" width="68" height="20" class="gate on"/><text x="288" y="14" text-anchor="middle">feat test</text>
+    <rect x="326" y="0" width="30" height="20" class="gate on"/><text x="341" y="14" text-anchor="middle">PR</text>
+  </g>
+  <text x="658" y="182" class="s mute">(auto qa) fix(schedule): publish at show-local time</text>
+
+  <rect x="650" y="234" width="380" height="84" class="shadow"/>
+  <rect x="644" y="228" width="380" height="84" class="card"/>
+  <text x="658" y="250" class="ink"><tspan font-weight="700">#5</tspan> 3.1.1 guard /settings/billing <tspan class="mute">· T2 (floor)</tspan></text>
+  <g transform="translate(658 262)" class="g">
+    <rect x="0" y="0" width="42" height="20" class="gate on"/><text x="21" y="14" text-anchor="middle">tree</text>
+    <rect x="46" y="0" width="72" height="20" class="gate on"/><text x="82" y="14" text-anchor="middle">blind test</text>
+    <rect x="122" y="0" width="74" height="20" class="gate" fill="#F5D33B"/><text x="159" y="14" text-anchor="middle">parked ?</text>
+    <rect x="200" y="0" width="50" height="20" class="gate"/><text x="225" y="14" text-anchor="middle" class="mute">verify</text>
+    <rect x="254" y="0" width="68" height="20" class="gate"/><text x="288" y="14" text-anchor="middle" class="mute">feat test</text>
+    <rect x="326" y="0" width="30" height="20" class="gate"/><text x="341" y="14" text-anchor="middle" class="mute">PR</text>
+  </g>
+  <text x="658" y="302" class="s mute">asked you: "403 page or redirect?" → you: 403 · resumed</text>
+
+  <path d="M946 318 L946 338" class="rule"/>
+  <rect x="862" y="338" width="168" height="26" fill="#DCEFE2" stroke="#1D4D36" stroke-width="2"/>
+  <text x="946" y="355" text-anchor="middle" class="stamp" fill="#1D4D36">/feature-tester · blind</text>
+
+  <line x1="1030" y1="150" x2="1062" y2="150" class="rule" marker-end="url(#arr)"/>
+
+  <!-- STATION 4 -->
+  <rect x="1074" y="114" width="100" height="72" class="shadow"/>
+  <rect x="1068" y="108" width="100" height="72" class="card"/>
+  <g transform="rotate(-8 1118 144)"><rect x="1077" y="132" width="82" height="24" fill="#F3EFE4" stroke="#1D4D36" stroke-width="2.5"/><text x="1118" y="149" text-anchor="middle" class="stamp" fill="#1D4D36" font-size="12">PR-READY</text></g>
+
+  <line x1="1118" y1="186" x2="1118" y2="236" class="rule" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+  <rect x="1068" y="240" width="100" height="54" fill="#141414"/>
+  <text x="1118" y="262" text-anchor="middle" class="h" fill="#F5D33B" font-size="15">YOU MERGE</text>
+  <text x="1118" y="282" text-anchor="middle" class="s" fill="#F3EFE4">always a human</text>
+
+  <line x1="40" y1="398" x2="1168" y2="398" class="rule" stroke-width="1"/>
+  <text x="40" y="420" class="s mute">tier 0 edit directly · tier 1 one focused test · tier 2 blind spec test → separate implementer → verify → feature test · tier 3 + adversarial review</text>
+</svg>

@@ -8,6 +8,10 @@ Shipyard is a set of three Claude Code skills that take work from "someone notic
 
 Extracted from a pipeline that has been turning QA reports into merged PRs on a production codebase since July 2026.
 
+<img src="docs/assets/hero.svg" alt="How a QA doc becomes pull requests: the doc is stamped shipped / merged / blocked, /manager grounds, dedupes and triages with a risk floor, /ship-task lanes run worktree → blind test → implement → verify → feature test → PR, and a human merges." width="100%">
+
+**▶ [Try it in your browser](https://henry-shan.github.io/shipyard/)** — run `/manager` on the sample QA doc and watch it become PR-ready branches: findings get stamped, workers pick up tasks, one of them parks and asks *you* a question. Nothing is installed; no agent runs. The second tab routes any task you type through the real risk-floor rules.
+
 ## Table of Contents
 
 - [How it works](#how-it-works)
@@ -21,23 +25,9 @@ Extracted from a pipeline that has been turning QA reports into merged PRs on a 
 
 ## How it works
 
-```
-you: /manager ~/Desktop/qa-findings.pdf
-        │
-        ▼
-┌─────────────────────  manager (the brain)  ─────────────────────┐
-│ ingest → ground in the repo → dedup vs shipped work → triage    │
-│ → queue → dispatch N parallel workers → relay their questions   │
-│ localhost control panel: live board · inbox · test buttons      │
-└──────────────┬───────────────────────────────────────────────────┘
-               ▼  (up to dispatch_cap at once, each in its own git worktree)
-     ship-task (the hands)             feature-tester (the verifier)
-     branch → tests → build →   ←──    a FRESH agent proves the key
-     verify gate → PR-ready            behavior with one blind test
-               │
-               ▼
-     green PR on your base branch  →  YOU test + merge (always a human)
-```
+What a batch looks like from the terminal — this is the sample doc in `examples/`, a fictional podcast-hosting app:
+
+<img src="docs/assets/demo.svg" alt="Animated terminal: /manager ingests 18 findings, grounds each to a file, skips two already shipped, merges three notification asks into one task, triages with a risk floor, dispatches two workers; one parks with a question, you answer 403 from the panel, both land as PRs; batch ends with 6 PR-ready, 2 blocked, nothing merged." width="100%">
 
 A `/ship-task` run starts by classifying the task and picking a lane:
 
@@ -92,6 +82,10 @@ The first run in a project asks the few questions that matter — repo path, bas
 ```
 
 Watch the batch run. Answer the occasional preference question from the inbox. Click **Test this branch** to boot any run's worktree on its own port. Merge finished PRs from GitHub.
+
+<img src="docs/assets/panel.png" alt="The manager's control panel mid-batch: queued, running, parked and PR-ready tasks with tiers and triage notes, and a question in the inbox waiting for an answer." width="100%">
+
+*The control panel at `127.0.0.1:4317` — a stdlib Python daemon, no build step. Shown here with the sample doc's batch in flight.*
 
 One task, no orchestration:
 
