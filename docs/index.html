@@ -452,7 +452,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 const el=(t,c,h)=>{const e=document.createElement(t); if(c) e.className=c; if(h!=null) e.innerHTML=h; return e;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function wait(ms,tok){ await sleep(ms/S.speed); while(S.paused && tok===S.runToken) await sleep(120); if(tok!==S.runToken) throw new Error("reset"); }
-const shortTitle=f=>{ const t=f.text.split(/(?<=\S)[.:;]\s|\s—\s|\s\(see /)[0].trim(); return t.length>96 ? t.slice(0,96).replace(/\s+\S*$/,"")+"…" : t; };
+const shortTitle=f=>{ const parts=f.text.split(/(?<=\S)[.:;]\s|\s—\s/); let t=(parts.find(p=>p.trim().length>=24)||parts[0]).trim(); return t.length>96 ? t.slice(0,96).replace(/\s+\S*$/,"")+"…" : t; };
 
 /* ============ header: pills, live, controls ============ */
 function counts(){ const c={done:0,progress:0,parked:0,blocked:S.blocked.length,queued:0}; for(const t of S.tasks){ if(t.status==="done") c.done++; else if(t.status==="parked") c.parked++; else if(t.status==="running"||t.status==="testing") c.progress++; else if(t.status==="queued") c.queued++; } return c; }
