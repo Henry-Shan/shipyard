@@ -5,255 +5,354 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shipyard playground</title>
 <meta name="description" content="Run /manager on a sample QA doc in your browser and watch it become PR-ready branches. A simulation of the Shipyard skills for Claude Code — nothing is installed, no agent runs.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F5D33B'/%3E%3Crect x='3' y='3' width='26' height='26' fill='none' stroke='%23141414' stroke-width='3'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial Black,Arial' font-weight='900' font-size='18' fill='%23141414'%3ES%3C/text%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FFE14D'/%3E%3Crect x='3' y='3' width='26' height='26' fill='none' stroke='%23141414' stroke-width='3'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial Black,Arial' font-weight='900' font-size='18' fill='%23141414'%3ES%3C/text%3E%3C/svg%3E">
 <style>
-:root{
-  --paper:#F3EFE4;--card:#FFFDF7;--ink:#141414;--mute:#6B675E;--line:#141414;
-  --yellow:#F5D33B;--blue:#1F4FD1;--green:#1D4D36;--green-soft:#DCEFE2;
-  --red:#C8321E;--red-soft:#F7D9D3;--amber:#E0A128;--amber-soft:#FBEFD2;
-  --shadow:4px 4px 0 var(--ink);
-  --display:"Barlow Condensed",system-ui,sans-serif;
-  --body:"IBM Plex Sans",system-ui,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;color:var(--ink);background:var(--paper) radial-gradient(#d9d3c3 1px,transparent 1px) 0 0/18px 18px;font:15px/1.45 var(--body)}
-a{color:inherit}
-button{font:inherit;color:inherit;cursor:pointer}
-:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
-h1,h2,h3{font-family:var(--display);letter-spacing:.2px;margin:0}
-code,.mono{font-family:var(--mono)}
+  /* Same tokens as the real control panel (skills/manager/ui/review.html). */
+  :root{
+    --canvas:#F3EFE4; --paper:#ffffff; --ink:#141414; --dim:#54524A; --line:#141414;
+    --queued:#5B6472; --prog:#1E48E0; --test:#6B2FE0; --ready:#178A46;
+    --wait:#B27B00; --block:#C1440E; --fail:#C4183C; --none:#6B7280;
+    --yellow:#FFE14D; --r:8px; --rl:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;color:var(--ink);
+    background:radial-gradient(circle at 1px 1px, rgba(20,20,20,.07) 1px, transparent 0) 0 0/18px 18px, var(--canvas);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--prog);font-weight:700;text-decoration:none} a:hover{text-decoration:underline;text-decoration-thickness:2px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:3px solid var(--prog);outline-offset:2px}
 
-/* top bar */
-.top{display:flex;align-items:center;gap:18px;padding:14px 22px;border-bottom:2px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5;flex-wrap:wrap}
-.sticker{font-family:var(--display);font-weight:800;font-size:22px;background:var(--yellow);border:2px solid var(--line);box-shadow:var(--shadow);padding:2px 12px;text-decoration:none;transform:rotate(-2deg);display:inline-block}
-.tabs{display:flex;gap:6px}
-.tabs button{border:2px solid var(--line);background:var(--card);padding:6px 12px;font-family:var(--mono);font-size:13px}
-.tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
-.top .meta{margin-left:auto;font-size:12.5px;color:var(--mute)}
-.top .meta a{color:var(--ink)}
+  /* ---- header ---- */
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:10px 18px;background:var(--paper);border-bottom:3px solid var(--ink)}
+  header .title{font-size:15px;font-weight:900;letter-spacing:-.01em;display:inline-block;background:var(--yellow);
+    border:2.5px solid var(--ink);border-radius:6px;padding:2px 10px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-1.5deg);color:inherit;cursor:pointer}
+  header .sub{color:var(--dim);font-size:12px;font-weight:700}
+  header .spacer{flex:1}
+  .cov{display:flex;gap:6px;flex-wrap:wrap}
+  .pillc{font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;cursor:pointer;background:var(--paper);
+    border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em;transition:transform .08s,box-shadow .08s}
+  .pillc:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .pillc:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+  .pillc[data-n="0"]{opacity:.45}
+  .live{display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;font-weight:700}
+  .live i{width:8px;height:8px;border-radius:50%;background:var(--ready);border:1.5px solid var(--ink);animation:pulse 1.4s infinite}
+  .live.idle i{background:var(--none);animation:none}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .hbtn{font-size:12.5px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:var(--r);
+    padding:6px 13px;box-shadow:3px 3px 0 var(--ink);white-space:nowrap;transition:transform .08s,box-shadow .08s}
+  .hbtn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+  .hbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .hbtn.primary{background:var(--ready);color:#fff}
+  .hbtn.danger{background:var(--fail);color:#fff}
+  .hbtn:disabled{opacity:.5;cursor:default;transform:none;box-shadow:1px 1px 0 var(--ink)}
+  .capctl{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+  .caplbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:900}
+  .capb{cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);border-radius:7px;width:24px;height:24px;line-height:1;font-weight:900;
+    box-shadow:2px 2px 0 var(--ink);transition:transform .08s,box-shadow .08s;padding:0}
+  .capb:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)} .capb:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+  .capctl b{min-width:22px;text-align:center;font-size:13px;font-weight:900}
+  #pausebanner{display:none;background:var(--wait);border-bottom:3px solid var(--ink);color:#fff;font-size:12.5px;font-weight:800;padding:8px 22px}
+  #pausebanner.on{display:block}
 
-main{padding:20px 22px 60px;max-width:1500px;margin:0 auto}
-main[hidden]{display:none}
+  /* ---- shell ---- */
+  #shell{display:grid;grid-template-columns:212px 1fr;min-height:calc(100vh - 52px)}
+  #index{background:var(--paper);border-right:3px solid var(--ink);padding:10px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+  #index .ihead{font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:900;padding:8px 14px 6px}
+  .irow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;border-left:4px solid transparent;font-weight:600;background:none;border-top:0;border-right:0;border-bottom:0;width:100%;text-align:left}
+  .irow:hover{background:#FFF3B0} .irow.on{background:#E3EBFF;border-left-color:var(--ink);font-weight:800}
+  .irow .sd{width:9px;height:9px;border-radius:50%;flex:none;border:1.5px solid var(--ink)}
+  .irow .it{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #index .none{padding:6px 14px;color:var(--dim);font-size:12px;font-weight:600}
+  #stage{padding:18px 22px 120px;max-width:980px;width:100%}
+  @media (max-width:860px){#shell{grid-template-columns:1fr}#index{position:static;height:auto;border-right:0;border-bottom:3px solid var(--ink);max-height:180px}#stage{padding:14px 12px 100px}}
 
-/* controls */
-.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.btn{border:2px solid var(--line);background:var(--card);padding:8px 14px;box-shadow:var(--shadow);font-weight:600;transition:transform .08s,box-shadow .08s}
-.btn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
-.btn.primary{background:var(--blue);color:#fff}
-.btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-.controls label{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:center}
-.controls select{font:inherit;border:2px solid var(--line);background:var(--card);padding:4px 6px}
-.status{font-family:var(--mono);font-size:12.5px;color:var(--mute);margin-left:auto}
+  /* ---- intake ---- */
+  .intake{background:#FFF3B0;border:3px solid var(--ink);border-radius:var(--rl);padding:16px 18px;box-shadow:5px 5px 0 var(--ink);margin-bottom:18px}
+  .intake h1{margin:0 0 6px;font-size:16px;font-weight:900}
+  .intake p{margin:0 0 10px;font-size:13px;color:#3A3934;line-height:1.55}
+  .srcpick{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 8px}
+  .srcpick .tbtn[aria-pressed="true"]{background:var(--ink);color:var(--yellow)}
+  .intake textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:13px;min-height:86px;resize:vertical;background:var(--paper);display:none}
+  .intake textarea.on{display:block}
+  .intake textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
+  .intake .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .intake .fine{font-size:11.5px;color:var(--dim);font-weight:600}
+  .beacons{margin-top:12px;display:none;flex-direction:column;gap:5px}
+  .beacons.on{display:flex}
+  .beacon{display:flex;align-items:baseline;gap:9px;font-size:12.5px;font-weight:700;opacity:.35}
+  .beacon.on{opacity:1} .beacon.done .k::before{content:"✓ ";color:var(--ready)}
+  .beacon .k{font-family:ui-monospace,Menlo,monospace;font-weight:800;min-width:118px}
+  .beacon .v{color:#3A3934;font-weight:600}
+  .intake.compact{padding:10px 16px}
+  .intake.compact h1,.intake.compact p,.intake.compact .srcpick,.intake.compact textarea,.intake.compact .row{display:none}
+  .intake.compact .beacons{margin-top:0}
 
-/* grid */
-.grid{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:18px;align-items:start}
-@media (max-width:980px){.grid{grid-template-columns:1fr}}
+  /* ---- buttons ---- */
+  .tbtn{font-size:12px;font-weight:800;cursor:pointer;border:2.5px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:var(--r);
+    padding:5px 12px;line-height:1.4;white-space:nowrap;box-shadow:3px 3px 0 var(--ink);transition:transform .08s,box-shadow .08s,background .12s}
+  .tbtn:hover{background:#FFF6C7} .tbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .tbtn:disabled,.tbtn[aria-disabled="true"]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:1px 1px 0 var(--ink)}
+  .tbtn.primary{background:var(--prog);color:#fff} .tbtn.primary:hover{background:#1B3EC4}
+  .tbtn.gh{background:transparent;box-shadow:none;font-weight:700} .tbtn.gh:hover{background:rgba(20,20,20,.06)} .tbtn.gh:active{transform:none}
+  .tbtn.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px}
+  .applink{position:relative;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;background:var(--ready);color:#fff;border:2.5px solid var(--ink);
+    border-radius:var(--r);padding:5px 12px;box-shadow:3px 3px 0 var(--ink);opacity:.55;cursor:not-allowed}
+  .applink::after{content:"Humans merge. Always. The pipeline stops at PR-ready — this button opens GitHub, it never merges for you.";
+    position:absolute;left:0;top:calc(100% + 8px);width:260px;background:var(--ink);color:var(--yellow);font-size:11.5px;font-weight:700;line-height:1.4;
+    padding:8px 10px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5;text-align:left}
+  .applink:hover::after,.applink:focus-visible::after{opacity:1}
 
-.panel{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow)}
-.panel h2{font-size:17px;font-weight:800;padding:9px 12px;border-bottom:2px solid var(--line);display:flex;align-items:center;gap:8px}
-.panel h2 span{font:12px var(--mono);color:var(--mute);font-weight:400}
-.empty{color:var(--mute);font-size:13px;margin:0;padding:12px}
+  /* ---- sections ---- */
+  .qhead{font-size:11px;font-weight:900;color:var(--wait);text-transform:uppercase;letter-spacing:.5px;margin:4px 0 8px}
+  .qwrap{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
+  .qwrap:empty,.qwrap:empty+.qhead{display:none}
+  .qcard{background:#FFF8DC;border:3px solid var(--ink);border-left-width:9px;border-left-color:var(--wait);border-radius:var(--rl);padding:15px 17px;box-shadow:5px 5px 0 var(--ink)}
+  .qh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-weight:800}
+  .qq{margin:7px 0 4px;font-weight:900;font-size:14.5px}
+  .qctx{font-size:12.5px;color:var(--dim);line-height:1.5;margin-bottom:6px}
+  .qopts{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:6px 0}
+  .qopts .tbtn{white-space:normal;text-align:left;line-height:1.5;padding:8px 12px}
+  .qopts .tbtn.rec{background:var(--yellow)}
+  .qcard textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:8px 10px;font:inherit;font-size:13px;resize:vertical;margin-top:8px;background:var(--paper)}
+  .qcard .acts{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .qcard.answered .qopts,.qcard.answered textarea,.qcard.answered .acts{display:none}
+  .qcard .ans{display:none;font-size:12.5px;font-weight:800;color:var(--ready);margin-top:4px}
+  .qcard.answered .ans{display:block}
 
-/* doc */
-.doc{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto}
-@media (max-width:980px){.doc{position:static;max-height:52vh}}
-.doc ol{list-style:none;margin:0;padding:6px 0}
-.finding{position:relative;padding:8px 112px 8px 14px;border-bottom:1px dashed #d8d2c2;font-size:13.5px;line-height:1.4;transition:background .2s}
-.finding .id{font-family:var(--mono);font-size:12px;color:var(--mute);margin-right:6px}
-.finding .sec{font-family:var(--mono);font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px}
-.finding.reading{background:#FFF7CC}
-.finding.skipped .title{color:var(--mute);text-decoration:line-through}
-.finding .file{display:block;font:12px var(--mono);color:var(--blue);margin-top:4px;opacity:0;transform:translateY(-3px);transition:opacity .25s,transform .25s}
-.finding .file.on{opacity:1;transform:none}
-.stamp{position:absolute;right:10px;top:8px;font:800 10.5px/1 var(--display);letter-spacing:.9px;padding:4px 7px;border:2px solid;background:var(--paper);transform:rotate(-6deg) scale(1.4);opacity:0;pointer-events:none}
-.stamp.on{animation:slam .22s cubic-bezier(.2,.9,.3,1.4) forwards}
-@keyframes slam{to{transform:rotate(-6deg) scale(1);opacity:1}}
-.stamp.green{color:var(--green);border-color:var(--green)}
-.stamp.red{color:var(--red);border-color:var(--red)}
-.stamp.ink{color:var(--ink);border-color:var(--ink)}
-.stamp.yellow{color:var(--ink);border-color:var(--ink);background:var(--yellow)}
+  section.sec{margin:0 0 22px}
+  .sech{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;border-bottom:3px solid var(--ink);padding-bottom:7px;margin-bottom:12px;background:none;border-top:0;border-left:0;border-right:0;width:100%;text-align:left}
+  .sech h2{font-size:20px;font-weight:900;letter-spacing:-.01em;margin:0;flex:1}
+  .sech h2 small{font-size:12px;color:var(--dim);font-weight:700;margin-left:8px}
+  .sech .chev{font-size:12px;color:var(--dim);transition:transform .15s}
+  section.sec.collapsed .chev{transform:rotate(-90deg)}
+  section.sec.collapsed .cards{display:none}
+  section.sec .emptyline{color:var(--dim);font-size:12.5px;font-weight:600;padding:2px 0 4px}
+  section.sec:not(.collapsed) .cards:not(:empty)+.emptyline{display:none}
 
-/* board */
-.board{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
-@media (max-width:1250px){.board{grid-template-columns:1fr}}
-.board .log{grid-column:1/-1}
-.log pre{margin:0;padding:10px 12px;font:12.5px/1.6 var(--mono);max-height:190px;overflow:auto;white-space:pre-wrap}
-.log .ph{color:var(--blue);font-weight:600}
-.log .ok{color:var(--green)}.log .warn{color:var(--red)}.log .dim{color:var(--mute)}
+  /* ---- task cards ---- */
+  .tcard{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--queued);border-radius:10px;padding:12px 14px;margin:0 0 12px;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink);scroll-margin-top:70px}
+  .tcard.s-running,.tcard.s-testing{border-left-color:var(--prog)} .tcard.s-testing{border-left-color:var(--test)}
+  .tcard.s-parked{border-left-color:var(--wait);background:#FFF8DC} .tcard.s-done{border-left-color:var(--ready)} .tcard.s-blocked{border-left-color:var(--block)}
+  .tcard.flash{outline:3px solid var(--prog);outline-offset:2px}
+  .th{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none}
+  .th .bn{font-size:10px;font-weight:900;color:#fff;border-radius:6px;min-width:22px;text-align:center;padding:2px 5px;border:1.5px solid var(--ink);background:var(--queued)}
+  .tcard.s-running .bn,.tcard.s-testing .bn{background:var(--prog)} .tcard.s-parked .bn{background:var(--wait)} .tcard.s-done .bn{background:var(--ready)} .tcard.s-blocked .bn{background:var(--block)}
+  .th .tt{font-weight:800;font-size:13.5px;flex:1;min-width:200px}
+  .badge{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 8px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;background:var(--paper)}
+  .badge.floor{background:var(--yellow)}
+  .th .chev{font-size:11px;color:var(--dim);transition:transform .15s}
+  .tcard.collapsed .chev{transform:rotate(-90deg)} .tcard.collapsed .tbody{display:none}
+  .src{font-size:11.5px;color:var(--dim);font-weight:600;margin-top:3px}
+  .prow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:8px}
+  .pstep{font-size:10.5px;font-weight:700;border:1.5px solid;border-radius:999px;padding:1px 8px;opacity:.5}
+  .pstep.cur{opacity:1;font-weight:900;border-width:2.5px;box-shadow:2px 2px 0 var(--ink)}
+  .parr{color:var(--none);font-size:10px;opacity:.7}
+  .gates{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+  .gate{font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 7px;border:1.5px solid #c9c3b4;color:var(--dim);border-radius:5px;background:var(--paper)}
+  .gate.done{border-color:var(--ready);color:var(--ready);background:#E3F5EA}
+  .gate.cur{border-color:var(--ink);color:var(--ink);background:#FFF3B0;box-shadow:2px 2px 0 var(--ink)}
+  .gate.fail{border-color:var(--fail);color:var(--fail);background:#FFE3E9}
+  .gate.parked{border-color:var(--ink);background:var(--yellow);color:var(--ink)}
+  .nprog{margin-top:8px;color:#222;background:#F6F4EE;border:2px solid var(--ink);border-radius:7px;padding:5px 8px;font-size:11.5px;line-height:1.45}
+  .nprog.err{background:#FFE3E9;color:#7A0E28}
+  .nprog.ok{background:#E3F5EA;color:#0B4D28}
+  .tact{margin-top:9px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .tspacer{flex:1 1 auto}
+  .testplan{margin-top:9px;font-size:12px}
+  .testplan>summary{cursor:pointer;font-weight:800;list-style:none;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
+  .testplan>summary::before{content:"▸ ";color:var(--dim)} .testplan[open]>summary::before{content:"▾ "}
+  .testplan pre{white-space:pre-wrap;background:var(--ink);color:var(--yellow);border:2.5px solid var(--ink);border-radius:9px;padding:11px 13px;margin:7px 0 0;font-size:11.5px;line-height:1.5}
+  .ftchip{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
+  .ft-pass{color:#0B6B3A;background:#B9F6CA} .ft-fail{color:#7A1330;background:#FFD0DA}
 
-.lanes{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-.lane{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow);min-height:120px;position:relative}
-.lane .lh{font:800 13px var(--display);letter-spacing:.6px;text-transform:uppercase;padding:6px 10px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between;color:var(--mute)}
-.lane .lh b{color:var(--ink)}
-.lane .idle{padding:14px 10px;color:var(--mute);font-size:13px}
-.task{padding:10px}
-.task .t{font-weight:600;font-size:14px;line-height:1.3}
-.task .t .tier{font:600 11px var(--mono);padding:1px 6px;border:1.5px solid var(--ink);margin-right:6px;vertical-align:middle;background:var(--card)}
-.task .t .tier.floor{background:var(--yellow)}
-.task .src{font:12px var(--mono);color:var(--mute);margin:3px 0 8px}
-.rail{display:flex;flex-wrap:wrap;gap:4px}
-.gate{font:11px var(--mono);padding:3px 7px;border:1.5px solid #c9c3b4;color:var(--mute);background:var(--card)}
-.gate.now{border-color:var(--ink);color:var(--ink);background:#FFF7CC}
-.gate.done{border-color:var(--green);color:var(--green);background:var(--green-soft)}
-.gate.fail{border-color:var(--red);color:var(--red);background:var(--red-soft)}
-.gate.parked{border-color:var(--ink);background:var(--yellow);color:var(--ink)}
-.task .note{font-size:12.5px;color:var(--mute);margin-top:8px;min-height:1.2em}
+  #report{display:none;background:var(--ink);color:#E8F0EA;border-radius:var(--rl);padding:14px 18px;font-size:13px;line-height:1.6;box-shadow:5px 5px 0 rgba(20,20,20,.35);margin-top:6px}
+  #report.on{display:block} #report b{color:var(--yellow)}
 
-.inbox .q{padding:12px;border-bottom:2px solid var(--line)}
-.inbox .q .from{font:12px var(--mono);color:var(--mute);margin-bottom:4px}
-.inbox .q .qt{font-weight:600;margin-bottom:6px}
-.inbox .q .ctx{font-size:13px;color:var(--mute);margin-bottom:10px}
-.inbox .opts{display:flex;gap:8px;flex-wrap:wrap}
-.inbox .opts button{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:13px;box-shadow:3px 3px 0 var(--ink)}
-.inbox .opts button.rec{background:var(--yellow)}
-.inbox .q.answered .opts{display:none}
-.inbox .q .ans{font-size:13px;color:var(--green);font-weight:600;display:none}
-.inbox .q.answered .ans{display:block}
-.inbox h2 .badge{display:none;background:var(--red);color:#fff;font:600 11px var(--mono);padding:1px 7px;border-radius:999px;animation:pulse 1.2s ease-in-out infinite}
-.inbox h2 .badge.on{display:inline-block}
-@keyframes pulse{50%{transform:scale(1.15)}}
+  /* ---- docs drawer + modal ---- */
+  .scrim{display:none;position:fixed;inset:0;background:rgba(20,20,20,.55);z-index:100}
+  .scrim.on{display:flex;align-items:stretch;justify-content:flex-end}
+  .drawer{width:min(820px,100%);background:var(--canvas);border-left:3px solid var(--ink);height:100%;overflow:auto;padding:0 0 60px}
+  .drawer .dh{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--paper);border-bottom:3px solid var(--ink);font-weight:900}
+  .drawer .dh .spacer{flex:1}
+  .ndoc{margin:18px auto;max-width:760px;background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);box-shadow:7px 7px 0 var(--ink);padding:26px 30px}
+  .ntest{font-size:18px;font-weight:900;margin:22px 0 6px;border-bottom:3px solid var(--ink);padding-bottom:6px} .ntest:first-child{margin-top:0}
+  .nfind{border:2.5px solid var(--ink);border-left-width:7px;border-left-color:var(--none);border-radius:10px;padding:11px 13px;margin:12px 0;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink)}
+  .nfind.reading{background:#FFF3B0}
+  .nfind.st-shipped{border-left-color:var(--ready);opacity:.75} .nfind.st-blocked{border-left-color:var(--block)} .nfind.st-task{border-left-color:var(--prog)} .nfind.st-merged{border-left-color:var(--test)}
+  .nfh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none}
+  .nfh .fid{font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px}
+  .nfh .chev{font-size:11px;color:var(--dim);transition:transform .15s;margin-left:auto}
+  .nfind.collapsed .chev{transform:rotate(-90deg)} .nfind.collapsed .nbody{display:none}
+  .sevtag{font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 7px;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);text-transform:uppercase}
+  .nft{margin-top:7px;font-size:13.5px;font-weight:600;line-height:1.55}
+  .nfind.st-shipped .nft{text-decoration:line-through;color:var(--dim)}
+  .ntask{margin-top:8px;padding-top:8px;border-top:2px solid var(--ink);font-size:12px;font-weight:700}
+  .ntask .mono{font-weight:700;color:var(--prog)}
+  .stamp{display:inline-block;font-size:10.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border:2.5px solid;border-radius:5px;transform:rotate(-4deg);margin-left:auto;opacity:0}
+  .stamp.on{animation:slam .22s cubic-bezier(.2,.9,.3,1.4) forwards}
+  @keyframes slam{from{transform:rotate(-4deg) scale(1.5)}to{transform:rotate(-4deg) scale(1);opacity:1}}
+  .stamp.shipped{color:var(--ready);border-color:var(--ready)} .stamp.blocked{color:var(--block);border-color:var(--block)}
+  .stamp.tier{color:var(--ink);border-color:var(--ink)} .stamp.tier.floor{background:var(--yellow)} .stamp.merged{color:var(--test);border-color:var(--test)}
 
-.shelf .pr{padding:12px;border-bottom:1px dashed #d8d2c2;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
-.shelf .pr .title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--blue)}
-.shelf .pr .guide{font-size:12.5px;color:var(--mute);margin-top:6px;white-space:pre-line}
-.shelf .pr .merge{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:12.5px;opacity:.45;cursor:not-allowed;position:relative;align-self:center}
-.shelf .pr .merge:hover::after,.shelf .pr .merge:focus-visible::after{content:"Humans merge. Always. The pipeline stops at PR-ready.";position:absolute;right:0;top:calc(100% + 6px);width:220px;background:var(--ink);color:var(--paper);font-size:12px;padding:8px 10px;z-index:3;text-align:left}
-.shelf .pr .test{border:2px solid var(--line);background:var(--card);padding:6px 10px;font-size:12.5px;margin-right:6px;box-shadow:3px 3px 0 var(--ink)}
+  .modal-box{background:var(--paper);border:3px solid var(--ink);border-radius:var(--rl);max-width:720px;width:100%;max-height:86vh;overflow:auto;box-shadow:8px 8px 0 var(--ink);margin:auto}
+  .scrim.center{align-items:center;justify-content:center;padding:20px}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-bottom:2.5px solid var(--ink);font-weight:800}
+  .modal-body{padding:16px 17px}
+  .modal-body p{margin:0 0 10px;font-size:13px;color:#3A3934;line-height:1.55}
+  .modal-body textarea{width:100%;border:2.5px solid var(--ink);border-radius:var(--r);padding:9px 11px;font:inherit;font-size:14px;min-height:76px;resize:vertical;background:var(--paper)}
+  .modal-body textarea:focus{outline:none;box-shadow:3px 3px 0 var(--ink)}
+  .exs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+  .route{border:2.5px solid var(--ink);border-radius:10px;padding:14px 16px;background:#FCFBF6;box-shadow:4px 4px 0 var(--ink)}
+  .route .big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .route .tierbig{font-size:44px;font-weight:900;line-height:1;letter-spacing:-.02em}
+  .route .lbl{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+  .route .lbl.raised{color:var(--block)}
+  .route .cats{margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap}
+  .route .why{margin:12px 0 0;font-size:13.5px;line-height:1.55}
+  .route .fine{font-size:12px;color:var(--dim);margin-top:12px;line-height:1.5}
 
-.queue ol{margin:0;padding:6px 0;list-style:none}
-.queue li{padding:7px 12px;border-bottom:1px dashed #d8d2c2;font-size:13px;display:flex;gap:8px;align-items:baseline}
-.queue li .tier{font:600 11px var(--mono);padding:1px 6px;border:1.5px solid var(--ink)}
-.queue li .tier.floor{background:var(--yellow)}
-.queue li.blocked{color:var(--mute)}
-.queue li.blocked .why{font-size:12px;color:var(--red)}
-
-.report{grid-column:1/-1;background:var(--ink);color:var(--paper);padding:14px 16px;font-family:var(--mono);font-size:13px;display:none}
-.report.on{display:block}
-.report b{color:var(--yellow)}
-
-/* router tab */
-.router{max-width:900px}
-.router textarea{width:100%;min-height:84px;font:15px var(--body);padding:12px;border:2px solid var(--line);background:var(--card);box-shadow:var(--shadow);resize:vertical}
-.router .examples{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
-.router .examples button{border:1.5px solid var(--ink);background:var(--card);padding:4px 9px;font-size:12.5px}
-.route{background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow);padding:16px 18px}
-.route .big{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-.route .tierbig{font:800 54px/1 var(--display)}
-.route .lbl{font:600 13px var(--mono);color:var(--mute)}
-.route .cats{margin:10px 0 0;display:flex;gap:6px;flex-wrap:wrap}
-.route .cats span{font:12px var(--mono);background:var(--yellow);border:1.5px solid var(--ink);padding:2px 7px}
-.route .why{margin:12px 0 0;font-size:14px}
-.route .rail{margin-top:14px}
-.route .rail .gate{border-color:var(--ink);color:var(--ink)}
-.route .fine{font-size:12.5px;color:var(--mute);margin-top:14px}
-
-footer{padding:18px 22px 40px;font-size:12.5px;color:var(--mute);border-top:2px solid var(--line);background:var(--card)}
-footer a{color:var(--ink)}
-
-@media (prefers-reduced-motion: reduce){
-  .stamp.on{animation:none;transform:rotate(-6deg) scale(1);opacity:1}
-  .inbox h2 .badge{animation:none}
-  .finding .file{transition:none}
-  html{scroll-behavior:auto}
-}
+  footer{padding:16px 22px 40px;font-size:12px;color:var(--dim);font-weight:600;border-top:3px solid var(--ink);background:var(--paper)}
+  @media (prefers-reduced-motion: reduce){
+    .stamp.on{animation:none;opacity:1;transform:rotate(-4deg)} .live i{animation:none} .pillc,.hbtn,.tbtn,.capb,.chev{transition:none}
+  }
 </style>
 </head>
 <body>
 
-<header class="top">
-  <a class="sticker" href="https://github.com/Henry-Shan/shipyard">Shipyard</a>
-  <nav class="tabs" role="tablist" aria-label="Playground mode">
-    <button role="tab" aria-selected="true" data-tab="batch">/manager — run a batch</button>
-    <button role="tab" aria-selected="false" data-tab="router">/ship-task — route one task</button>
-  </nav>
-  <div class="meta">A simulation. Nothing is installed and no agent runs — the real thing is <a href="https://github.com/Henry-Shan/shipyard#installation">one line away</a>.</div>
+<header>
+  <a class="title" href="https://github.com/Henry-Shan/shipyard" title="Shipyard on GitHub">Review</a>
+  <span class="sub" id="sub">playground · simulation · nothing runs on your machine</span>
+  <div class="cov" id="cov"></div>
+  <span class="spacer"></span>
+  <div class="capctl" title="dispatch_cap — how many /ship-task runs at once"><span class="caplbl">concurrency</span><button class="capb" id="capm" aria-label="fewer workers">−</button><b id="capv">2</b><button class="capb" id="capp" aria-label="more workers">+</button></div>
+  <div class="capctl" title="simulation speed"><span class="caplbl">speed</span><button class="capb" id="spdm" aria-label="slower">−</button><b id="spdv">2×</b><button class="capb" id="spdp" aria-label="faster">+</button></div>
+  <button class="hbtn" id="docsBtn">📄 Docs</button>
+  <button class="hbtn" id="routeBtn">⚙ Route a task</button>
+  <button class="hbtn" id="pauseBtn" disabled>⏸ Pause</button>
+  <button class="hbtn danger" id="clearBtn">🗑 Clear all</button>
+  <span class="live idle" id="live"><i></i><span id="liveTxt">idle</span></span>
 </header>
+<div id="pausebanner">Paused — running tasks finish their current step; nothing new is claimed until you resume.</div>
 
-<main id="batch" role="tabpanel">
-  <section class="controls" aria-label="Run controls">
-    <button id="run" class="btn primary">Run /manager on this doc ▶</button>
-    <label>workers <select id="cap"><option>1</option><option selected>2</option><option>3</option></select></label>
-    <label>speed <select id="speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
-    <button id="reset" class="btn">Reset</button>
-    <span id="status" class="status">Idle — the doc on the left is the repo's <code>examples/demo-qa-findings.md</code>, unedited.</span>
-  </section>
+<div id="shell">
+  <aside id="index" aria-label="Task index">
+    <div class="ihead">Tasks · <span id="taskCount">0</span></div>
+    <div id="irows"><div class="none">No batch yet.</div></div>
+  </aside>
 
-  <div class="grid">
-    <aside class="panel doc" aria-label="QA document">
-      <h2>QA doc <span>qa-findings.md · Castaway Studio · staging pass</span></h2>
-      <ol id="findings"></ol>
-    </aside>
-
-    <section class="board" aria-label="Manager board">
-      <div class="panel log"><h2>manager <span>ingest → ground → dedup → consolidate → triage → dispatch</span></h2><pre id="logbody">Press Run. The manager reads the doc top to bottom; watch the stamps land on the left.</pre></div>
-      <div class="lanes" id="lanes" aria-label="Worker lanes"></div>
-      <div class="panel inbox"><h2>Inbox <span class="badge" id="inboxBadge">1</span><span>the only thing that needs you</span></h2><div id="inboxBody"><p class="empty">A running agent lands here only with a genuine preference it couldn't settle from the repo — one question, with a recommendation. Everything else proceeds.</p></div></div>
-      <div class="panel shelf"><h2>PR-ready <span>green, tested, worktree kept</span></h2><div id="shelfBody"><p class="empty">Finished work collects here as open PRs with a manual test guide. You test, you merge.</p></div></div>
-      <div class="panel queue"><h2>Queue <span>priority order · blocked items reported, not guessed</span></h2><ol id="queueBody"><li class="empty" style="padding:12px;color:var(--mute);border:0">Empty until triage runs.</li></ol></div>
-      <div class="report" id="report"></div>
-    </section>
-  </div>
-</main>
-
-<main id="router" role="tabpanel" hidden>
-  <div class="router">
-    <h1 style="font-size:34px;font-weight:800;margin-bottom:6px">Where does one task go?</h1>
-    <p style="margin:0 0 14px;color:var(--mute)">Type anything you'd hand to <code>/ship-task</code>. The tier below is a heuristic for the demo, but the <b>risk floor</b> is the real thing — the same regular expressions as <code>skills/ship-task/risk_floor.py</code>, which run before the model's own judgment and can only ever raise the tier.</p>
-    <textarea id="taskInput" aria-label="Task description">add a CSV export button to the items table</textarea>
-    <div class="examples" aria-label="Examples">
-      <button data-ex="fix the typo in the README install section">README typo</button>
-      <button data-ex="add a CSV export button to the items table">CSV export button</button>
-      <button data-ex="guest users can open /settings/billing by direct URL — block it">guest billing route</button>
-      <button data-ex="delete old invoices older than 7 years with a nightly job">nightly invoice deletion</button>
-      <button data-ex="rename the 'Apps' nav label to 'App'">nav copy change</button>
-      <button data-ex="add a migration for a tenant_id column and backfill it">tenant migration</button>
+  <main id="stage">
+    <div class="intake" id="intake">
+      <h1>👋 What should the manager work on?</h1>
+      <p>The real panel takes a Notion URL, a PDF of QA findings with screenshots, a markdown file, a folder, or a typed list. Here, pick the sample doc from the repo or paste your own list — the risk-floor rules that triage it are the real ones.</p>
+      <div class="srcpick">
+        <button class="tbtn" data-src="sample" aria-pressed="true">examples/demo-qa-findings.md</button>
+        <button class="tbtn" data-src="custom" aria-pressed="false">paste my own list</button>
+      </div>
+      <textarea id="customSrc" aria-label="Your task list, one per line" placeholder="One task per line, e.g.
+fix the typo in the README install section
+guest users can open /settings/billing by direct URL
+add a CSV export button to the items table
+delete old invoices older than 7 years with a nightly job"></textarea>
+      <div class="row">
+        <button class="tbtn primary" id="run">Run /manager ▶</button>
+        <span class="fine" id="status">Ingest → ground → dedup → consolidate → triage → dispatch. You only hear from it when a run has a question.</span>
+      </div>
+      <div class="beacons" id="beacons">
+        <div class="beacon" data-k="ingest"><span class="k">[ingest]</span><span class="v"></span></div>
+        <div class="beacon" data-k="ground"><span class="k">[ground]</span><span class="v"></span></div>
+        <div class="beacon" data-k="dedup"><span class="k">[dedup]</span><span class="v"></span></div>
+        <div class="beacon" data-k="consolidate"><span class="k">[consolidate]</span><span class="v"></span></div>
+        <div class="beacon" data-k="triage"><span class="k">[triage]</span><span class="v"></span></div>
+        <div class="beacon" data-k="dispatch"><span class="k">[dispatch]</span><span class="v"></span></div>
+      </div>
     </div>
-    <div class="route" id="route" aria-live="polite"></div>
-  </div>
-</main>
+
+    <div class="qhead" id="qhead">Needs your input · <span id="qcount">0</span></div>
+    <div class="qwrap" id="qwrap"></div>
+
+    <section class="sec" data-sec="progress">
+      <button class="sech" aria-expanded="true"><h2>In progress<small id="c-progress">0</small></h2><span class="chev">▼</span></button>
+      <div class="cards" id="s-progress"></div><div class="emptyline">Nothing being worked on.</div>
+    </section>
+    <section class="sec" data-sec="done">
+      <button class="sech" aria-expanded="true"><h2>PR ready — merge when you're happy<small id="c-done">0</small></h2><span class="chev">▼</span></button>
+      <div class="cards" id="s-done"></div><div class="emptyline">Green PRs collect here with a manual test guide. You test, you merge.</div>
+    </section>
+    <section class="sec" data-sec="queued">
+      <button class="sech" aria-expanded="true"><h2>Queued<small id="c-queued">0</small></h2><span class="chev">▼</span></button>
+      <div class="cards" id="s-queued"></div><div class="emptyline">Empty until triage runs.</div>
+    </section>
+    <section class="sec collapsed" data-sec="blocked">
+      <button class="sech" aria-expanded="false"><h2>Blocked<small id="c-blocked">0</small></h2><span class="chev">▼</span></button>
+      <div class="cards" id="s-blocked"></div><div class="emptyline">Reported, not guessed — things the manager decided it must not or cannot do here.</div>
+    </section>
+
+    <div id="report"></div>
+  </main>
+</div>
 
 <footer>
-  Shipyard is three Claude Code skills — <code>/manager</code>, <code>/ship-task</code>, <code>/feature-tester</code> — by <a href="https://github.com/Henry-Shan">Henry Shan</a>. This page simulates a batch on the sample doc so you can see the shape of it; tiers and file paths here are illustrative, the risk-floor categories and the never-merge boundary are not. <a href="https://github.com/Henry-Shan/shipyard">Source and install →</a>
+  Shipyard is three Claude Code skills — <code>/manager</code>, <code>/ship-task</code>, <code>/feature-tester</code> — by <a href="https://github.com/Henry-Shan">Henry Shan</a>. This page mirrors the real control panel's layout and simulates a batch; tiers and file paths are illustrative, the risk-floor rules and the never-merge boundary are not. <a href="https://github.com/Henry-Shan/shipyard">Source and install →</a>
 </footer>
 
+<!-- Docs drawer -->
+<div class="scrim" id="docsScrim" role="dialog" aria-modal="true" aria-label="Source document">
+  <div class="drawer">
+    <div class="dh">📄 <span id="docTitle">qa-findings.md</span><span class="sub" id="docSub" style="font-size:12px;color:var(--dim)"></span><span class="spacer"></span><button class="tbtn gh" id="docsCollapseAll">Collapse all</button><button class="tbtn" id="docsClose">Close</button></div>
+    <div class="ndoc" id="ndoc"></div>
+  </div>
+</div>
+
+<!-- Router modal -->
+<div class="scrim center" id="routeScrim" role="dialog" aria-modal="true" aria-label="Route a task">
+  <div class="modal-box">
+    <div class="modal-head"><span>⚙ Where does one task go?</span><button class="tbtn gh" id="routeClose">Close</button></div>
+    <div class="modal-body">
+      <p>Type anything you'd hand to <code>/ship-task</code>. The tier is a heuristic for the demo; the <b>risk floor</b> is the real thing — the same regular expressions as <code>skills/ship-task/risk_floor.py</code>, run before the model's judgment, and they can only ever raise the tier.</p>
+      <textarea id="taskInput" aria-label="Task description">add a CSV export button to the items table</textarea>
+      <div class="exs">
+        <button class="tbtn gh" data-ex="fix the typo in the README install section">README typo</button>
+        <button class="tbtn gh" data-ex="add a CSV export button to the items table">CSV export button</button>
+        <button class="tbtn gh" data-ex="guest users can open /settings/billing by direct URL — block it">guest billing route</button>
+        <button class="tbtn gh" data-ex="delete old invoices older than 7 years with a nightly job">nightly invoice deletion</button>
+        <button class="tbtn gh" data-ex="rename the 'Apps' nav label to 'App'">nav copy change</button>
+        <button class="tbtn gh" data-ex="add a migration for a tenant_id column and backfill it">tenant migration</button>
+      </div>
+      <div class="route" id="route" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+
 <script>
-/* ---------- the sample doc (verbatim: examples/demo-qa-findings.md) ---------- */
+/* ============ the sample doc (verbatim: examples/demo-qa-findings.md) ============ */
 const DOC = String.raw`## Test 1 — Episode upload & publishing
-### Feature: Audio upload
 🔴 Bug 1.1.1 — Uploading an episode over 200MB fails silently: the progress bar reaches 100%, then the episode never appears in the drafts list. No error toast, nothing in the activity feed. Repro 3/3 with a 212MB WAV.
-image 1.1.1 — the upload modal after completion
+image 1.1.1
 🟡 Bug 1.1.2 — The upload dropzone says "Drop you're file here". Typo: should be "your". Cosmetic only.
 ✅ Bug 1.1.3 — (Fixed) Chapters imported from the MP3 were off by one — this was fixed in PR #47 and verified working on staging today. Not reproducible anymore.
-### Feature: Scheduling
 🔴 Bug 1.2.1 — Scheduling an episode for 9:00 AM in the show's timezone (Berlin) publishes it at 9:00 AM UTC instead. The RSS feed timestamp confirms the wrong zone. This makes scheduled publishing unusable for non-UTC shows.
-image 1.2.1 — episode set for 09:00 CET showing pubDate 09:00Z
+image 1.2.1
 🟠 Feature 1.2.2 — There's no way to unschedule an episode without deleting it. Producers expect a "revert to draft" action on scheduled episodes.
 ## Test 2 — Notifications
-### Feature: Email notifications
 🟠 Feature 2.1.1 — Producers get no notification when a scheduled episode actually goes live. They want a "published" confirmation email.
 🟠 Feature 2.1.2 — When a collaborator leaves a comment on a draft episode, nobody is notified. The comment just sits there until someone opens the draft.
 🟠 Feature 2.1.3 — Failed uploads (see 1.1.1) should notify the uploader by email, since big uploads are often left running unattended.
 ## Test 3 — Team & permissions
-### Feature: Roles
 🔴 Bug 3.1.1 — A Guest editor can open the show's Billing page by navigating directly to /settings/billing. The nav item is hidden but the route is not protected — they can see the card's last four digits and the invoice history.
-image 3.1.1 — billing page rendered while logged in as demo.guest
+image 3.1.1
 🟡 Bug 3.1.2 — The "Invite teammate" modal lets you submit an empty role dropdown; the invite email then says "joined as undefined".
 ## Test 4 — Billing & plans
-### Feature: Plan changes
 🔴 Bug 4.1.1 — Downgrading from Studio to Indie while a bulk upload is running orphans the in-flight episodes: they finish uploading but are invisible on the Indie plan's episode list, and storage is still billed for them.
 🟠 Feature 4.1.2 — Deleting a show should warn that its RSS feed URL dies immediately and existing subscribers lose the feed. Right now it's a single confirm with no explanation of consequences.
 ## Test 5 — Analytics
-### Feature: Listener stats
 🟢 Test 5.1.1 — (DONE) Per-episode listener graph — shipped in PR #52, verified on staging: numbers match the raw log export.
 ⚪ Note 5.1.2 — Do NOT fix yet, investigate only: the "unique listeners" count for Static & Signal dropped ~40% on June 12th with no matching drop in downloads. Find out why before anyone touches the aggregation code — it may be a bot-filter change, not a bug.
 🔴 Bug 5.1.3 — Analytics page intermittently shows a blank chart on Safari. Could not find reliable repro steps (maybe 1 in 5 loads). The Apple embed partner said their widget review is still pending on their side, so the fallback chart may be the only path for now — blocked on their approval either way.`;
 
-/* ---------- risk floor: ported verbatim from skills/ship-task/risk_floor.py ---------- */
+/* ============ risk floor — ported verbatim from skills/ship-task/risk_floor.py ============ */
 const RISK = [
   ["auth/JWT", /\bauth\b|authenticat|authoriz|\bjwt\b|\boauth\b|\bsso\b|\bmiddleware\b|\blog ?in\b|\blogout\b|\bsign ?in\b/i],
   ["rbac/roles/permissions", /\brbac\b|\broles?\b|permission|access control|\bprivilege/i],
@@ -265,12 +364,12 @@ const RISK = [
   ["payment/billing", /\bbilling\b|\binvoice|\bpayment|\bstripe\b|\bcharge\b.*\b(card|account)\b|usage charge/i],
   ["destructive/deletion", /\bdelet|\bdestroy\b|\bpurge\b|\bwipe\b|\bhard[- ]delete|\bbulk[- ]delete|\birreversible\b|\btruncate\b/i],
 ];
-function riskFloor(text){ const matched = RISK.filter(([,re]) => re.test(text)).map(([n]) => n); return { floor: matched.length ? 2 : 0, matched }; }
+const riskFloor = t => { const matched = RISK.filter(([,re]) => re.test(t)).map(([n]) => n); return { floor: matched.length ? 2 : 0, matched }; };
 
-/* ---------- demo-only grounding (which file a finding points at) ---------- */
+/* ============ demo-only grounding ============ */
 const GROUND = [
   [/billing page|\/settings\/billing/i, "middleware.ts → app/settings/billing/page.tsx"],
-  [/downgrad|studio to indie|plan\b/i, "lib/billing/plan-change.ts"],
+  [/downgrad|studio to indie|\bplan\b/i, "lib/billing/plan-change.ts"],
   [/invite|role dropdown/i, "lib/team/invite.ts"],
   [/schedul|timezone|pubDate|unschedule|revert to draft/i, "lib/schedule.ts"],
   [/deleting a show|rss feed url/i, "app/shows/[id]/delete-dialog.tsx"],
@@ -278,41 +377,55 @@ const GROUND = [
   [/upload|dropzone|drafts? list/i, "apps/web/upload/dropzone.tsx"],
   [/listener|analytics|chart/i, "app/analytics/listeners-chart.tsx"],
 ];
-function groundFile(t){ for (const [re,f] of GROUND) if (re.test(t)) return f; return "apps/web/…"; }
+const groundFile = t => { for (const [re,f] of GROUND) if (re.test(t)) return f; return "(traced in your repo)"; };
 
-/* ---------- parse the doc ---------- */
-function parseDoc(src){
+/* ============ parsing ============ */
+function parseSample(src){
   const out=[]; let section=""; let cur=null;
   for (const raw of src.split("\n")){
     const line=raw.trim();
     if (line.startsWith("## ")){ section=line.slice(3).replace(/^Test \d+ — /,""); continue; }
-    if (line.startsWith("### ")){ continue; }
     const m=line.match(/^(🔴|🟡|🟠|✅|🟢|⚪)\s+(Bug|Feature|Test|Note)\s+(\d+\.\d+\.\d+)\s+—\s+(.*)$/);
     if (m){ cur={mark:m[1],kind:m[2],id:m[3],text:m[4],section,evidence:false}; out.push(cur); continue; }
-    if (/^image \d+\.\d+\.\d+/.test(line) && cur){ cur.evidence=true; }
+    if (/^image /.test(line) && cur) cur.evidence=true;
   }
   return out;
 }
-const FINDINGS = parseDoc(DOC);
-
-/* ---------- triage (demo heuristics + the real floor) ---------- */
+function parseCustom(src){
+  return src.split("\n").map(s=>s.trim()).filter(Boolean).map((text,i)=>{
+    const m=text.match(/^(🔴|🟡|🟠|✅|🟢|⚪)\s*/); const mark=m?m[1]:"🟠";
+    return {mark,kind:"Task",id:"L"+(i+1),text:text.replace(/^(🔴|🟡|🟠|✅|🟢|⚪)\s*/,""),section:"Your list",evidence:false,custom:true};
+  });
+}
 function triage(f){
   const text=f.text; const {floor,matched}=riskFloor(text);
-  if (f.mark==="✅"||f.mark==="🟢"){ const pr=(text.match(/PR #(\d+)/)||[])[1]; return {kind:"shipped",pr}; }
-  if (/do not fix|investigate only/i.test(text)) return {kind:"blocked",why:"reporter: investigate only"};
-  if (/blocked on|pending on their side/i.test(text)) return {kind:"blocked",why:"external approval"};
-  let base = f.mark==="🟡" ? (/typo|cosmetic|copy|label/i.test(text)?0:1) : 2;
-  if (/downgrad|bulk|two|orphan|in-flight|aggregation/i.test(text)) base=Math.max(base,3);
-  const tier=Math.max(base,floor);
-  return {kind:"task",tier,floor,matched};
+  if (f.mark==="✅"||f.mark==="🟢"||/\b(fixed|done|shipped) in pr #\d+/i.test(text)){ const pr=(text.match(/PR #(\d+)/i)||[])[1]; return {kind:"shipped",pr}; }
+  if (/do not fix|investigate only/i.test(text)) return {kind:"blocked",why:"reporter said investigate only"};
+  if (/blocked on|pending on their side|waiting on (the )?(vendor|partner)/i.test(text)) return {kind:"blocked",why:"waiting on an external approval"};
+  let base = f.mark==="🟡" ? (/typo|cosmetic|copy|label|wording/i.test(text)?0:1) : 2;
+  if (f.custom && /typo|readme|wording|copy|label|rename.*(label|text)|docs?\b/i.test(text)) base=0;
+  if (/downgrad|bulk|orphan|in-flight|aggregation|migration|backfill|across|nightly job/i.test(text)) base=Math.max(base,3);
+  return {kind:"task",tier:Math.max(base,floor),floor,matched};
 }
-
-/* ---------- pipeline shapes per tier (from ship-task SKILL.md) ---------- */
 const RAILS = {
   0:["worktree","edit","verify","commit","PR"],
   1:["worktree","focused test","fix","verify","commit","PR"],
   2:["worktree","blind test","confirm red","implement","verify","feature test","commit","PR"],
   3:["worktree","blind test","confirm red","implement","adversarial review","verify","feature test","commit","PR"],
+};
+const NOTE = {
+  "worktree":"git worktree off a freshly pulled base branch · env files symlinked · setup command run",
+  "edit":"Tier 0: make the edit directly — nothing to assert",
+  "focused test":"Tier 1: one hermetic test for the specified behavior, red first",
+  "fix":"make it green, max 3 attempts",
+  "blind test":"spec-only test agent — it never sees the implementation",
+  "confirm red":"the new test must fail before any implementation",
+  "implement":"separate implement agent, fresh context, reads BUILDER_PLAYBOOK.md first",
+  "adversarial review":"Tier 3: a reviewer tries to break it before verify",
+  "verify":"hard gate: the project's verify_command (lint + tests)",
+  "feature test":"/feature-tester: a fresh agent writes ONE integration test of the key behavior",
+  "commit":"commit only with a recorded, non-failing feature-test verdict",
+  "PR":"push the branch, open the PR with a manual test guide — then stop",
 };
 const PR_TITLES = {
   "1.1.1":"(auto qa) fix(upload): surface failed 200MB+ uploads and create the draft",
@@ -326,196 +439,234 @@ const PR_TITLES = {
   "4.1.2":"(auto qa) feat(shows): explain feed loss before deleting a show",
 };
 const GUIDES = {
-  "1.2.1":"1. Log in as demo.producer · set show tz Berlin\n2. Schedule an episode for 09:00\n3. Feed pubDate reads 07:00Z — ✅ Success = local 09:00",
-  "3.1.1":"1. Log in as demo.guest\n2. Open /settings/billing directly\n3. ✅ Success = 403 page, no card digits, API /api/billing also 403",
-  "notif":"1. As demo.producer, schedule an episode 2 min out\n2. ✅ Success = 'published' email arrives; comment on a draft → collaborator email",
-  "1.1.1":"1. Upload the 212MB WAV as demo.owner\n2. ✅ Success = draft appears, or an explicit error toast + activity entry",
+  "1.2.1":"1. Log in as demo.producer · set the show's timezone to Berlin\n2. Schedule an episode for 09:00\n3. Feed pubDate reads 07:00Z\n✅ Success = it publishes at local 09:00",
+  "3.1.1":"1. Log in as demo.guest\n2. Open /settings/billing directly\n✅ Success = 403 page, no card digits; /api/billing also 403",
+  "notif":"1. As demo.producer, schedule an episode 2 minutes out\n2. Wait for it to go live\n✅ Success = 'published' email arrives; a comment on a draft emails the collaborator",
+  "1.1.1":"1. Upload the 212MB WAV as demo.owner\n✅ Success = the draft appears, or an explicit error toast + activity entry",
 };
 
-/* ---------- DOM helpers ---------- */
+/* ============ state ============ */
+const S = { findings:[], tasks:[], blocked:[], runToken:0, speed:2, cap:2, paused:false, nextN:1, pr:60, running:false, source:"sample" };
 const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const el=(t,c,h)=>{const e=document.createElement(t); if(c) e.className=c; if(h!=null) e.innerHTML=h; return e;};
-const sleepBase=ms=>new Promise(r=>setTimeout(r,ms));
-let speed=2, runToken=0;
-const wait=async(ms,tok)=>{ await sleepBase(ms/speed); if(tok!==runToken) throw new Error("reset"); };
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function wait(ms,tok){ await sleep(ms/S.speed); while(S.paused && tok===S.runToken) await sleep(120); if(tok!==S.runToken) throw new Error("reset"); }
+const shortTitle=f=>{ const t=f.text.split(/(?<=\S)[.:;]\s|\s—\s|\s\(see /)[0].trim(); return t.length>96 ? t.slice(0,96).replace(/\s+\S*$/,"")+"…" : t; };
 
-function renderDoc(){
-  const ol=$("#findings"); ol.innerHTML="";
-  for (const f of FINDINGS){
-    const li=el("li","finding"); li.id="f-"+f.id.replaceAll(".","-");
-    li.innerHTML=`<span class="sec">${f.section}</span><span class="id">${f.mark} ${f.id}</span><span class="title">${esc(f.text)}</span><span class="file"></span><span class="stamp"></span>`;
-    ol.appendChild(li);
+/* ============ header: pills, live, controls ============ */
+function counts(){ const c={done:0,progress:0,parked:0,blocked:S.blocked.length,queued:0}; for(const t of S.tasks){ if(t.status==="done") c.done++; else if(t.status==="parked") c.parked++; else if(t.status==="running"||t.status==="testing") c.progress++; else if(t.status==="queued") c.queued++; } return c; }
+function renderPills(){
+  const c=counts(); const cov=$("#cov"); cov.innerHTML="";
+  [["PR ready",c.done,"--ready","done"],["in progress",c.progress,"--prog","progress"],["needs you",c.parked,"--wait","q"],["blocked",c.blocked,"--block","blocked"],["queued",c.queued,"--queued","queued"]].forEach(([l,n,v,sec])=>{
+    const b=el("button","pillc",`${n} ${l}`); b.dataset.n=n; b.style.color=`var(${v})`; b.style.background=`color-mix(in srgb, var(${v}) 13%, white)`;
+    b.onclick=()=>{ const t= sec==="q" ? $("#qhead") : document.querySelector(`[data-sec="${sec}"]`); t?.scrollIntoView({behavior:"smooth",block:"start"}); }; cov.appendChild(b); });
+  for (const k of ["progress","done","queued","blocked"]) $("#c-"+k).textContent = k==="progress"? c.progress : k==="done"? c.done : k==="queued"? c.queued : c.blocked;
+  $("#qcount").textContent=c.parked; $("#taskCount").textContent=S.tasks.length+S.blocked.length;
+}
+function setLive(txt,on){ $("#liveTxt").textContent=txt; $("#live").classList.toggle("idle",!on); }
+
+/* ============ sidebar ============ */
+function renderIndex(){
+  const w=$("#irows"); w.innerHTML="";
+  const all=[...S.tasks,...S.blocked.map(b=>({...b,status:"blocked"}))];
+  if(!all.length){ w.innerHTML='<div class="none">No batch yet.</div>'; return; }
+  for(const t of all){ const r=el("button","irow"); r.innerHTML=`<span class="sd" style="background:var(--${sdColor(t.status)})"></span><span class="it">${esc(t.title)}</span>`; r.onclick=()=>{ const c=document.getElementById("card-"+t.n); if(!c) return; const sec=c.closest("section.sec"); if(sec?.classList.contains("collapsed")) toggleSec(sec); c.classList.remove("collapsed"); c.scrollIntoView({behavior:"smooth",block:"center"}); c.classList.add("flash"); setTimeout(()=>c.classList.remove("flash"),1100); document.querySelectorAll(".irow").forEach(x=>x.classList.toggle("on",x===r)); }; w.appendChild(r); }
+}
+const sdColor=s=>({queued:"queued",running:"prog",testing:"test",parked:"wait",done:"ready",blocked:"block"})[s]||"none";
+
+/* ============ cards ============ */
+function crumbs(t){
+  const steps=[["queued","queued","--queued"],["in progress","running","--prog"],["testing","testing","--test"],["PR ready","done","--ready"]];
+  if(t.status==="parked") steps.splice(2,0,["needs you","parked","--wait"]);
+  const order=steps.map(s=>s[1]); const idx=order.indexOf(t.status);
+  return `<div class="prow">${steps.map((s,i)=>`<span class="pstep ${i===idx?'cur':''}" style="color:var(${s[2]});border-color:var(${s[2]})">${s[0]}</span>${i<steps.length-1?'<span class="parr">→</span>':''}`).join("")}</div>`;
+}
+function cardFor(t){
+  let c=document.getElementById("card-"+t.n);
+  if(!c){ c=el("article","tcard"); c.id="card-"+t.n; }
+  c.className=`tcard s-${t.status}${c.classList.contains("collapsed")?" collapsed":""}`;
+  const p=t.phase??-1; const rail=t.rail||[];
+  const gates=rail.length?`<div class="gates">${rail.map((g,k)=>`<span class="gate ${k<p?'done':k===p?(t.status==='parked'?'parked':t.gateFail?'fail':'cur'):''}">${g}</span>`).join("")}</div>`:"";
+  const note=t.note?`<div class="nprog ${t.noteKind||''}">${t.note}</div>`:"";
+  let acts="";
+  if(t.status==="done"){
+    acts=`<div class="tact"><span class="applink" tabindex="0" aria-disabled="true">Open PR to merge ↗</span><button class="tbtn" onclick="this.textContent='preview on :33${10+t.n}'">Test this branch</button><button class="tbtn gh" disabled>Rerun</button><span class="tspacer"></span><span class="ftchip ft-pass">feature test · pass</span><button class="tbtn gh mono" title="claude --resume ${t.session}">sess</button></div>
+    <details class="testplan"><summary>Manual test guide</summary><pre>${esc(t.guide||"1. Open the preview on the worktree port\n✅ Success = the reported behavior is gone")}</pre></details>`;
+  } else if(t.status!=="queued"){
+    acts=`<div class="tact"><span class="tspacer"></span><button class="tbtn gh mono" title="claude --resume ${t.session}">sess</button></div>`;
   }
+  c.innerHTML=`<div class="th" role="button" tabindex="0" aria-expanded="${!c.classList.contains("collapsed")}"><span class="bn">#${t.n}</span><span class="tt">${esc(t.title)}</span><span class="badge ${t.floor===2?'floor':''}" title="${t.floor===2?'risk floor raised this to at least Tier 2: '+t.matched.join(', '):'tier '+t.tier}">T${t.tier}${t.floor===2?' ↑':''}</span><span class="chev">▼</span></div>
+  <div class="tbody"><div class="src">${esc(t.src)}${t.branch?` · <span class="mono">${t.branch}</span>`:""}${t.prNum?` · PR <b>#${t.prNum}</b>`:""}</div>${crumbs(t)}${gates}${note}${acts}</div>`;
+  c.querySelector(".th").onclick=()=>{ c.classList.toggle("collapsed"); c.querySelector(".th").setAttribute("aria-expanded",!c.classList.contains("collapsed")); };
+  c.querySelector(".th").onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); c.querySelector(".th").click(); } };
+  const dest = t.status==="done"?"#s-done": t.status==="queued"?"#s-queued":"#s-progress";
+  if(c.parentElement!==$(dest)) $(dest).appendChild(c);
+  return c;
 }
-function esc(s){ return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-function stamp(id,cls,text){ const li=$("#f-"+id.replaceAll(".","-")); const s=li.querySelector(".stamp"); s.className="stamp "+cls; s.textContent=text; void s.offsetWidth; s.classList.add("on"); }
-function reading(id,on){ const li=$("#f-"+id.replaceAll(".","-")); li.classList.toggle("reading",on); if(on) li.scrollIntoView({block:"nearest"}); }
-function log(html){ const p=$("#logbody"); if(p.dataset.fresh!=="1"){p.textContent="";p.dataset.fresh="1";} p.innerHTML+=html+"\n"; p.scrollTop=p.scrollHeight; }
-function setStatus(t){ $("#status").textContent=t; }
-
-/* ---------- lanes ---------- */
-function buildLanes(n){ const w=$("#lanes"); w.innerHTML=""; for(let i=1;i<=n;i++){ const l=el("div","lane"); l.id="lane-"+i; l.innerHTML=`<div class="lh"><span>worker <b>${i}</b></span><span class="st">idle</span></div><div class="idle">Waiting for the queue.</div>`; w.appendChild(l);} }
-function laneRender(i,task,phaseIdx,state,note){
-  const l=$("#lane-"+i); l.querySelector(".st").textContent=state;
-  const body = el("div","task");
-  const floorCls = task.floor===2 ? " floor" : "";
-  body.innerHTML=`<div class="t"><span class="tier${floorCls}" title="${task.floor===2?'risk floor raised this to at least Tier 2':''}">T${task.tier}${task.floor===2?" ↑":""}</span>${esc(task.title)}</div><div class="src">${task.src} · branch <b>${task.branch}</b></div><div class="rail">${task.rail.map((g,k)=>`<span class="gate ${k<phaseIdx?'done':k===phaseIdx?(state==='parked'?'parked':state==='fail'?'fail':'now'):''}">${g}</span>`).join("")}</div><div class="note">${note||""}</div>`;
-  const old=l.querySelector(".task,.idle"); if(old) old.replaceWith(body); else l.appendChild(body);
+function blockedCard(b){
+  const c=el("article","tcard s-blocked"); c.id="card-"+b.n;
+  c.innerHTML=`<div class="th"><span class="bn">#${b.n}</span><span class="tt">${esc(b.title)}</span><span class="badge" style="color:var(--block)">blocked</span></div><div class="tbody"><div class="src">${esc(b.src)}</div><div class="nprog err">Not dispatched — ${esc(b.why)}. Reported to you instead of guessed at.</div></div>`;
+  $("#s-blocked").appendChild(c);
 }
-function laneIdle(i){ const l=$("#lane-"+i); l.querySelector(".st").textContent="idle"; const old=l.querySelector(".task,.idle"); const idle=el("div","idle","Waiting for the queue."); if(old) old.replaceWith(idle); else l.appendChild(idle); }
+function toggleSec(sec){ sec.classList.toggle("collapsed"); sec.querySelector(".sech").setAttribute("aria-expanded",!sec.classList.contains("collapsed")); }
+document.querySelectorAll(".sech").forEach(b=>b.addEventListener("click",()=>toggleSec(b.closest("section"))));
 
-/* ---------- inbox ---------- */
-function ask(task,question,options,context){
+/* ============ inbox ============ */
+function ask(t,question,options,context){
   return new Promise(resolve=>{
-    const box=$("#inboxBody"); const emp=box.querySelector(".empty"); if(emp) emp.remove();
-    const q=el("div","q");
-    q.innerHTML=`<div class="from">from worker ${task.lane} · task #${task.n} · ${task.src}</div><div class="qt">${esc(question)}</div><div class="ctx">${esc(context)}</div><div class="opts"></div><div class="ans"></div>`;
-    const opts=q.querySelector(".opts");
-    options.forEach((o,i)=>{ const b=el("button",i===0?"rec":"",esc(o)); b.onclick=()=>{ q.classList.add("answered"); q.querySelector(".ans").textContent="You answered: "+o+" — relayed into the running session."; $("#inboxBadge").classList.remove("on"); resolve(o); }; opts.appendChild(b); });
-    box.prepend(q); $("#inboxBadge").classList.add("on"); setStatus("Worker "+task.lane+" is parked on a question — answer it in the inbox to continue.");
+    const q=el("div","qcard");
+    q.innerHTML=`<div class="qh"><span class="pulse"></span> task #${t.n} · run ${t.session} · just now</div><div class="qq">${esc(question)}</div><div class="qctx">${esc(context)}</div><div class="qopts">${options.map((o,i)=>`<button class="tbtn ${i===0?'rec':''}">${esc(o)}</button>`).join("")}</div><textarea rows="2" placeholder="…or type a different answer"></textarea><div class="acts"><button class="tbtn primary send">Send reply</button><span class="src">Your reply is relayed into the still-running session.</span></div><div class="ans"></div>`;
+    const done=a=>{ q.classList.add("answered"); q.querySelector(".ans").textContent="You answered: "+a+" — delivered to the run."; renderPills(); resolve(a); };
+    q.querySelectorAll(".qopts .tbtn").forEach(b=>b.onclick=()=>done(b.textContent));
+    q.querySelector(".send").onclick=()=>{ const v=q.querySelector("textarea").value.trim(); done(v||options[0]); };
+    $("#qwrap").prepend(q); renderPills(); setLive("waiting on you",true); $("#qhead").scrollIntoView({behavior:"smooth",block:"start"});
   });
 }
 
-/* ---------- shelf + queue ---------- */
-function shelve(task){
-  const box=$("#shelfBody"); const emp=box.querySelector(".empty"); if(emp) emp.remove();
-  const pr=el("div","pr");
-  pr.innerHTML=`<div><div class="title">${esc(task.prTitle)} <span style="color:var(--mute);font-weight:400">· #${task.prNum}</span></div><div class="guide">${esc(task.guide||"1. Open the preview on the worktree port\n2. ✅ Success = the reported behavior is gone")}</div></div><div><button class="test" onclick="this.textContent='preview on :33${10+task.n}'">Test this branch</button><button class="merge" aria-describedby="mergeNote" tabindex="0">Merge</button></div>`;
-  box.appendChild(pr);
+/* ============ docs drawer ============ */
+function renderDoc(){
+  const d=$("#ndoc"); d.innerHTML=""; let sec="";
+  $("#docTitle").textContent = S.source==="sample" ? "qa-findings.md" : "your list";
+  $("#docSub").textContent = `· ${S.findings.length} findings`;
+  for(const f of S.findings){
+    if(f.section!==sec){ sec=f.section; d.appendChild(el("div","ntest",esc(sec))); }
+    const n=el("div","nfind"); n.id="doc-"+f.id.replaceAll(".","-");
+    const sev = f.mark==="🔴"?["bug","--block"]: f.mark==="🟡"?["minor","--wait"]: f.mark==="🟠"?["feature","--prog"]: f.mark==="⚪"?["note","--none"]:["done","--ready"];
+    n.innerHTML=`<div class="nfh" role="button" tabindex="0"><span class="fid">${f.id}</span><span class="sevtag" style="color:var(${sev[1]});background:color-mix(in srgb,var(${sev[1]}) 12%,white)">${sev[0]}</span><span class="stamp" id="stamp-${f.id.replaceAll(".","-")}"></span><span class="chev">▼</span></div><div class="nbody"><div class="nft">${esc(f.text)}</div><div class="ntask" id="dtask-${f.id.replaceAll(".","-")}" hidden></div></div>`;
+    n.querySelector(".nfh").onclick=()=>n.classList.toggle("collapsed");
+    d.appendChild(n);
+  }
 }
-function queueRender(items){
-  const ol=$("#queueBody"); ol.innerHTML="";
-  if(!items.length){ ol.innerHTML='<li class="empty" style="padding:12px;color:var(--mute);border:0">Nothing queued.</li>'; return; }
-  for (const t of items){ const li=el("li",t.kind==="blocked"?"blocked":""); li.innerHTML = t.kind==="blocked" ? `<span>⛔</span><span>${esc(t.title)} <span class="why">— ${t.why}</span></span>` : `<span class="tier${t.floor===2?' floor':''}">T${t.tier}</span><span>${esc(t.title)}</span>`; ol.appendChild(li); }
-}
+function docStamp(id,cls,text){ const s=document.getElementById("stamp-"+id.replaceAll(".","-")); if(!s) return; s.className="stamp "+cls; s.textContent=text; void s.offsetWidth; s.classList.add("on"); const n=s.closest(".nfind"); n.classList.add("st-"+cls.split(" ")[0]); }
+function docTask(id,html){ const t=document.getElementById("dtask-"+id.replaceAll(".","-")); if(!t) return; t.hidden=false; t.innerHTML=html; }
+function docReading(id,on){ const n=document.getElementById("doc-"+id.replaceAll(".","-")); if(n){ n.classList.toggle("reading",on); if(on && $("#docsScrim").classList.contains("on")) n.scrollIntoView({block:"nearest"}); } }
 
-/* ---------- the batch ---------- */
-let queue=[], blocked=[], done=[], nextN=1, prCounter=60;
+/* ============ beacons ============ */
+function beacon(k,v,done){ const b=document.querySelector(`.beacon[data-k="${k}"]`); b.classList.add("on"); b.classList.toggle("done",!!done); b.querySelector(".v").textContent=v; }
+
+/* ============ the batch ============ */
 async function runBatch(){
-  const tok=++runToken; resetBoard(); $("#run").disabled=true; $("#cap").disabled=true;
-  const cap=+$("#cap").value; buildLanes(cap);
+  resetBoard(false); const tok=S.runToken; S.running=true;
+  S.findings = S.source==="sample" ? parseSample(DOC) : parseCustom($("#customSrc").value);
+  if(!S.findings.length){ $("#status").textContent="Paste at least one line first."; return; }
+  $("#run").disabled=true; $("#pauseBtn").disabled=false; $("#beacons").classList.add("on"); renderDoc(); setLive("ingesting",true);
   try{
-    log(`<span class="ph">[ingest]</span> reading qa-findings.md — ${FINDINGS.length} findings in ${new Set(FINDINGS.map(f=>f.section)).size} sections · ${FINDINGS.filter(f=>f.evidence).length} screenshots read as images`);
-    setStatus("Ingesting…");
-    await wait(900,tok);
-    /* ground */
-    log(`<span class="ph">[ground]</span> tracing each finding to the repo and the live base branch — never guessing about schema or routes`);
-    for (const f of FINDINGS){ reading(f.id,true); await wait(260,tok); const li=$("#f-"+f.id.replaceAll(".","-")); const fe=li.querySelector(".file"); fe.textContent="→ "+groundFile(f.text); fe.classList.add("on"); reading(f.id,false); }
-    /* dedup + consolidate + triage */
-    log(`<span class="ph">[dedup]</span> checking what already landed on main`);
-    const consolidated=[]; const tasks=[];
-    for (const f of FINDINGS){
-      reading(f.id,true); await wait(380,tok);
+    beacon("ingest",`${S.findings.length} findings · ${new Set(S.findings.map(f=>f.section)).size} section${S.findings.length>1?"s":""} · ${S.findings.filter(f=>f.evidence).length} screenshots read as images`);
+    await wait(900,tok); beacon("ingest",document.querySelector('.beacon[data-k="ingest"] .v').textContent,true);
+    beacon("ground","tracing each finding to the repo and the live base branch…");
+    for(const f of S.findings){ docReading(f.id,true); await wait(220,tok); f.file=groundFile(f.text); docTask(f.id,`→ <span class="mono">${esc(f.file)}</span>`); docReading(f.id,false); }
+    beacon("ground","every finding points at a file, not a guess",true);
+    beacon("dedup","checking what already landed on main…"); setLive("triaging",true);
+    const consolidated=[]; const tasks=[]; let skipped=0;
+    for(const f of S.findings){
+      docReading(f.id,true); await wait(330,tok);
       const t=triage(f);
-      if(t.kind==="shipped"){ stamp(f.id,"green","SHIPPED #"+(t.pr||"")); $("#f-"+f.id.replaceAll(".","-")).classList.add("skipped"); log(`  ${f.id} already on main (PR #${t.pr}) <span class="ok">✓ skipped</span>`); }
-      else if(t.kind==="blocked"){ stamp(f.id,"red","BLOCKED"); blocked.push({kind:"blocked",title:f.id+" "+shortTitle(f),why:t.why}); log(`  ${f.id} <span class="warn">blocked</span> — ${t.why}`); }
-      else if(/^2\.1\./.test(f.id)){ consolidated.push(f); stamp(f.id,"ink","→ ONE TASK"); }
-      else { stamp(f.id, t.floor===2?"yellow":"ink", "TIER "+t.tier+(t.floor===2?" ↑floor":"")); tasks.push(mkTask(f.id,shortTitle(f),f.id,t)); if(t.floor===2) log(`  ${f.id} risk floor → min T2 <span class="dim">(${t.matched.join(", ")})</span>`); }
-      reading(f.id,false);
+      if(t.kind==="shipped"){ skipped++; docStamp(f.id,"shipped","shipped"+(t.pr?" #"+t.pr:"")); docTask(f.id,`already on main${t.pr?` (PR #${t.pr})`:""} — <b>skipped</b>`); }
+      else if(t.kind==="blocked"){ const b={n:S.nextN++,title:f.id+" "+shortTitle(f),src:srcOf(f),why:t.why}; S.blocked.push(b); docStamp(f.id,"blocked","blocked"); docTask(f.id,`<b>blocked</b> — ${esc(t.why)}`); blockedCard(b); }
+      else if(S.source==="sample" && /^2\.1\./.test(f.id)){ consolidated.push(f); docStamp(f.id,"merged","→ one task"); }
+      else { const task=mkTask(f.id,shortTitle(f),srcOf(f),t,f); tasks.push(task); docStamp(f.id,"tier"+(t.floor===2?" floor":""),"tier "+t.tier+(t.floor===2?" ↑floor":"")); docTask(f.id,`task <b>#${task.n}</b> · T${t.tier}${t.floor===2?` <span style="color:var(--wait)">risk floor: ${esc(t.matched.join(", "))}</span>`:""}`); }
+      docReading(f.id,false); renderPills(); renderIndex();
     }
-    if(consolidated.length){ log(`<span class="ph">[consolidate]</span> ${consolidated.map(f=>f.id).join(" + ")} → one task: producer notifications (one mailer path)`); const t={kind:"task",tier:3,floor:0,matched:[]}; tasks.push(mkTask("notif","Notifications: published · comment on draft · failed upload", consolidated.map(f=>f.id).join("+"), t)); }
-    log(`<span class="ph">[triage]</span> ${tasks.length} tasks · ${blocked.length} blocked · priority: 🔴 bugs first, then risk-floor items, then features`);
+    beacon("dedup",`${skipped} already shipped — skipped, not re-dispatched`,true);
+    if(consolidated.length){ const task=mkTask("notif","Notifications: published · comment on draft · failed upload", "qa-findings.md · "+consolidated.map(f=>f.id).join(" + "), {kind:"task",tier:3,floor:0,matched:[]}); tasks.push(task); consolidated.forEach(f=>docTask(f.id,`merged into task <b>#${task.n}</b> (one mailer path)`)); beacon("consolidate",`${consolidated.map(f=>f.id).join(" + ")} → one task #${task.n}`,true); }
+    else beacon("consolidate","no duplicates to merge",true);
     tasks.sort((a,b)=>(b.priority-a.priority)||(b.tier-a.tier));
-    queue=tasks; queueRender([...queue,...blocked]);
-    await wait(700,tok);
-    log(`<span class="ph">[dispatch]</span> ${cap} worker${cap>1?"s":""} · ${queue.length} queued · each in its own worktree off origin/main`);
-    setStatus("Dispatching — up to "+cap+" at once.");
-    const lanes=Array.from({length:cap},(_,i)=>i+1);
-    await Promise.all(lanes.map(i=>worker(i,tok)));
-    const rep=$("#report"); rep.className="report on";
-    rep.innerHTML=`<b>Batch done.</b> ${done.length} PR-ready · ${blocked.length} blocked (reported, not guessed) · ${FINDINGS.filter(f=>f.mark==="✅"||f.mark==="🟢").length} skipped (already shipped) · ${consolidated.length} findings merged into 1 task<br>Nothing was merged. Test the branches from the panel, then merge from GitHub — that step stays human.`;
-    setStatus("Done. Hover Merge on the shelf.");
+    S.tasks=tasks; tasks.forEach(cardFor); renderPills(); renderIndex();
+    beacon("triage",`${tasks.length} task${tasks.length!==1?"s":""} queued by priority · ${S.blocked.length} blocked · ${tasks.filter(t=>t.floor===2).length} raised by the risk floor`,true);
+    await wait(600,tok);
+    beacon("dispatch",`${S.cap} worker${S.cap>1?"s":""} · each run in its own worktree off origin/main`,true);
+    $("#intake").classList.add("compact"); setLive("running",true);
+    await Promise.all(Array.from({length:S.cap},(_,i)=>worker(i+1,tok)));
+    const r=$("#report"); r.className="on";
+    r.innerHTML=`<b>Batch done.</b> ${S.tasks.filter(t=>t.status==="done").length} PR-ready · ${S.blocked.length} blocked (reported, not guessed) · ${skipped} already shipped · ${consolidated.length?`${consolidated.length} findings merged into 1 task`:"nothing to merge"}<br>Nothing was merged. Test the branches, then merge from GitHub — that step stays human.`;
+    setLive("done · nothing merged",false); $("#pauseBtn").disabled=true; S.running=false;
   }catch(e){ if(e.message!=="reset") console.error(e); }
-  finally{ if(tok===runToken){ $("#run").disabled=false; $("#cap").disabled=false; } }
 }
-function shortTitle(f){ return f.text.split(/[.:—]/)[0].replace(/^(Uploading|Scheduling|A Guest editor|Downgrading|Deleting a show|Producers get|When a collaborator|Failed uploads|There's no way)/,m=>m).slice(0,80); }
-function mkTask(key,title,src,t){
-  const n=nextN++; const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,32);
-  return {key,n,title,src:"qa-findings.md · "+src,tier:t.tier,floor:t.floor,matched:t.matched,rail:RAILS[t.tier],branch:"auto-qa/"+slug,priority:(t.floor===2?2:0)+(/^(1\.1\.1|1\.2\.1|3\.1\.1|4\.1\.1)$/.test(key)?3:0),prTitle:PR_TITLES[key]||("(auto qa) "+title),guide:GUIDES[key]};
+const srcOf=f=> (S.source==="sample"?"qa-findings.md · ":"your list · ")+f.kind+" "+f.id;
+function mkTask(key,title,src,t,f){
+  const n=S.nextN++; const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,30);
+  return {key,n,title,src,tier:t.tier,floor:t.floor,matched:t.matched,rail:RAILS[t.tier],branch:"auto-qa/"+slug,status:"queued",phase:-1,
+    session:"sess-"+Math.random().toString(16).slice(2,6),
+    priority:(t.floor===2?2:0)+(/^(1\.1\.1|1\.2\.1|3\.1\.1|4\.1\.1)$/.test(key)?3:0)+(f&&f.mark==="🔴"?1:0),
+    prTitle:PR_TITLES[key]||("(auto qa) "+title.toLowerCase()),guide:GUIDES[key],asks: key==="3.1.1" || (f&&f.custom&&t.floor===2&&!S.tasks.some(x=>x.asks))};
 }
 async function worker(lane,tok){
-  while(queue.length){
-    const task=queue.shift(); task.lane=lane; queueRender([...queue,...blocked]);
-    for(let p=0;p<task.rail.length;p++){
-      const g=task.rail[p];
-      laneRender(lane,task,p,"running",noteFor(g,task));
+  while(true){
+    const t=S.tasks.find(x=>x.status==="queued"); if(!t) break;
+    t.status="running"; t.lane=lane;
+    for(let p=0;p<t.rail.length;p++){
+      const g=t.rail[p]; t.phase=p; t.note=`worker ${lane} · ${g}: ${NOTE[g]}`; t.noteKind=""; t.gateFail=false;
+      if(g==="feature test"||g==="verify") t.status="testing"; else if(t.status==="testing") t.status="running";
+      cardFor(t); renderPills(); renderIndex();
       await wait(g==="implement"?1400:g==="blind test"?1100:800,tok);
-      if(task.key==="3.1.1" && g==="implement"){
-        laneRender(lane,task,p,"parked","Parked: one preference the repo can't settle. Waiting on the inbox.");
-        const ans=await ask(task,"A guest hitting /settings/billing — show a 403 page, or redirect to /settings?",["403 page (recommended)","Redirect to /settings"],"The route is unprotected; only the nav link is hidden. The API already answers 403 on /api/billing for guests, so a 403 page keeps web and API consistent.");
-        if(tok!==runToken) throw new Error("reset");
-        task.prTitle = ans.startsWith("403") ? task.prTitle : "(auto qa) fix(auth): redirect guests away from /settings/billing";
-        laneRender(lane,task,p,"running","Answer received: "+ans+". Continuing in the same session.");
-        await wait(700,tok);
+      if(t.asks && g==="implement"){
+        t.status="parked"; t.note="Parked — one preference the repo can't settle. Waiting on your answer in the inbox."; cardFor(t); renderPills(); renderIndex();
+        const custom = t.key.startsWith("L");
+        const ans = await ask(t,
+          custom ? `This touches ${t.matched.join(" and ")}. Take the conservative path or the minimal one?` : "A guest hitting /settings/billing — show a 403 page, or redirect to /settings?",
+          custom ? ["Conservative (recommended): deny by default, log, add a test for the negative path","Minimal: smallest change that resolves the report"] : ["403 page (recommended)","Redirect to /settings"],
+          custom ? "The run grounded the task and found no precedent in the repo for this case. It recommends the conservative path because the risk floor flagged it." : "The route is unprotected; only the nav link is hidden. The API already answers 403 on /api/billing for guests, so a 403 page keeps web and API consistent.");
+        if(tok!==S.runToken) throw new Error("reset");
+        if(!custom && !ans.startsWith("403")) t.prTitle="(auto qa) fix(auth): redirect guests away from /settings/billing";
+        t.status="running"; t.note=`answer received — "${esc(ans)}". Continuing in the same session.`; t.noteKind="ok"; cardFor(t); renderPills(); renderIndex(); await wait(700,tok);
       }
-      if(task.key==="1.1.1" && g==="feature test"){
-        laneRender(lane,task,p,"fail","feature test ✗ — fresh agent's test: 'draft exists after a 212MB upload' failed. Builder gets the failing test, not the diff.");
+      if(t.key==="1.1.1" && g==="feature test"){
+        t.gateFail=true; t.noteKind="err"; t.note="feature test ✗ — the fresh agent's test 'a draft exists after a 212 MB upload' failed. The builder gets the failing test, not the tester's reasoning."; cardFor(t);
         await wait(1300,tok);
-        laneRender(lane,task,p,"running","builder fixed the draft-creation path → re-running the independent test…");
-        await wait(900,tok);
+        t.gateFail=false; t.noteKind=""; t.note="builder fixed the draft-creation path → re-running the independent test…"; cardFor(t); await wait(900,tok);
       }
     }
-    task.prNum=++prCounter; done.push(task);
-    laneRender(lane,task,task.rail.length,"done",`<span style="color:var(--green);font-weight:600">PR #${task.prNum} open</span> — stopped here. Worktree kept for "Test this branch".`);
-    shelve(task); log(`<span class="ok">✓</span> #${task.n} ${esc(task.prTitle)} — PR #${task.prNum}`);
-    await wait(600,tok);
+    t.status="done"; t.phase=t.rail.length; t.prNum=++S.pr; t.note=`PR #${t.prNum} open — stopped here. Worktree kept for "Test this branch".`; t.noteKind="ok";
+    cardFor(t); renderPills(); renderIndex(); docTask(t.key.includes("+")?"":t.key,`task <b>#${t.n}</b> · <span style="color:var(--ready)">PR ready</span> · PR #${t.prNum}`);
+    await wait(500,tok);
   }
-  laneIdle(lane);
-}
-function noteFor(g,task){
-  return ({
-    "worktree":"git worktree off a freshly pulled base branch · env files symlinked · setup command run",
-    "edit":"Tier 0: make the edit directly — nothing to assert",
-    "focused test":"Tier 1: one hermetic test for the specified behavior, red first",
-    "fix":"make it green, max 3 attempts",
-    "blind test":"spec-only test agent — it never sees the implementation",
-    "confirm red":"the new test must fail before any implementation",
-    "implement":"separate implement agent, fresh context, reads BUILDER_PLAYBOOK.md first",
-    "adversarial review":"Tier 3: a reviewer tries to break it before verify",
-    "verify":"hard gate: the project's verify_command (lint + tests)",
-    "feature test":"/feature-tester: a fresh agent writes ONE integration test of the key behavior",
-    "commit":"commit only with a recorded, non-failing feature-test verdict",
-    "PR":"push the branch, open the PR with a manual test guide, stop",
-  })[g]||"";
-}
-function resetBoard(){
-  queue=[];blocked=[];done=[];nextN=1;prCounter=60;
-  renderDoc(); $("#logbody").textContent="Press Run. The manager reads the doc top to bottom; watch the stamps land on the left."; $("#logbody").dataset.fresh="0";
-  $("#inboxBody").innerHTML='<p class="empty">A running agent lands here only with a genuine preference it couldn\'t settle from the repo — one question, with a recommendation. Everything else proceeds.</p>'; $("#inboxBadge").classList.remove("on");
-  $("#shelfBody").innerHTML='<p class="empty">Finished work collects here as open PRs with a manual test guide. You test, you merge.</p>';
-  queueRender([]); $("#report").className="report"; $("#lanes").innerHTML="";
 }
 
-/* ---------- router tab ---------- */
+/* ============ reset ============ */
+function resetBoard(full=true){
+  S.runToken++; S.tasks=[]; S.blocked=[]; S.nextN=1; S.pr=60; S.running=false; S.paused=false;
+  ["#s-progress","#s-done","#s-queued","#s-blocked","#qwrap"].forEach(s=>$(s).innerHTML="");
+  $("#report").className=""; $("#intake").classList.remove("compact"); $("#beacons").classList.remove("on");
+  document.querySelectorAll(".beacon").forEach(b=>{b.className="beacon"; b.querySelector(".v").textContent="";});
+  $("#run").disabled=false; $("#pauseBtn").disabled=true; $("#pauseBtn").textContent="⏸ Pause"; $("#pausebanner").classList.remove("on");
+  if(full){ S.findings=[]; $("#ndoc").innerHTML=""; }
+  renderPills(); renderIndex(); setLive("idle",false);
+}
+
+/* ============ router ============ */
 function route(text){
   const {floor,matched}=riskFloor(text);
-  let base=2, why="a real behavior change — gets the full pipeline: blind spec test, separate implementer, verify gate, independent feature test.";
+  let base=2, why="a real behavior change — the full pipeline: blind spec test, separate implementer, verify gate, independent feature test.";
   if(/typo|readme|wording|copy|label|rename.*(label|text)|comment|docs?\b/i.test(text)){ base=0; why="docs or copy with no behavior change — edited directly, nothing to assert."; }
   else if(/^(fix|patch)\b/i.test(text) && text.length<70){ base=1; why="one obvious fix — a single focused test first, then the fix, no subagents."; }
-  if(/migration|backfill|across|refactor|redesign|nightly job|two|multiple|all the/i.test(text)){ base=Math.max(base,3); why="multi-file or ambiguous — Tier 2 plus an adversarial reviewer; it stops and asks if the acceptance criteria can't be tested."; }
-  const tier=Math.max(base,floor);
-  const raised=floor>base;
-  const box=$("#route");
-  box.innerHTML=`<div class="big"><span class="tierbig">T${tier}</span><span class="lbl">${["trivial","small","standard","large / ambiguous"][tier]}</span>${raised?`<span class="lbl" style="color:var(--red)">raised from T${base} by the risk floor</span>`:""}</div>
-  ${matched.length?`<div class="cats">${matched.map(m=>`<span>${m}</span>`).join("")}</div>`:`<div class="cats"><span style="background:var(--card)">no risk category matched</span></div>`}
-  <p class="why">${raised?`It reads like a T${base}, but it touches <b>${matched.join(", ")}</b>. The floor is a regex, not a judgment, so it can't be forgotten: minimum Tier 2 — ${["","","blind spec test, separate implementer, verify gate, independent feature test.","plus an adversarial reviewer."][tier]}`:why}</p>
-  <div class="rail">${RAILS[tier].map(g=>`<span class="gate">${g}</span>`).join("")}</div>
+  if(/migration|backfill|across|refactor|redesign|nightly job|multiple|all the/i.test(text)){ base=Math.max(base,3); why="multi-file or ambiguous — Tier 2 plus an adversarial reviewer; it stops and asks if the acceptance criteria can't be tested."; }
+  const tier=Math.max(base,floor); const raised=floor>base;
+  $("#route").innerHTML=`<div class="big"><span class="tierbig">T${tier}</span><span class="lbl">${["trivial","small","standard","large / ambiguous"][tier]}</span>${raised?`<span class="lbl raised">raised from T${base} by the risk floor</span>`:""}</div>
+  <div class="cats">${matched.length?matched.map(m=>`<span class="badge floor">${m}</span>`).join(""):`<span class="badge" style="color:var(--dim)">no risk category matched</span>`}</div>
+  <p class="why">${raised?`It reads like a T${base}, but it touches <b>${matched.join(", ")}</b>. The floor is a regex, not a judgment, so it can't be forgotten: minimum Tier 2 — ${tier>=3?"blind spec test, separate implementer, adversarial reviewer, verify gate, independent feature test.":"blind spec test, separate implementer, verify gate, independent feature test."}`:why}</p>
+  <div class="gates">${RAILS[tier].map(g=>`<span class="gate cur" style="box-shadow:none;background:var(--paper)">${g}</span>`).join("")}</div>
   <p class="fine">Every tier lands the same way: verify gate → branch → push → PR → <b>stop</b>. ${tier>=2?"The spec test and the feature test are written by agents that never see the implementation.":"If the work turns out to change behavior, the run re-routes itself upward — doubt tiers up, never down."}</p>`;
 }
 
-/* ---------- wiring ---------- */
-document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{
-  document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
-  document.querySelectorAll("main").forEach(m=>m.hidden=m.id!==b.dataset.tab);
-  history.replaceState(null,"","#"+b.dataset.tab);
-}));
-if(location.hash==="#router") document.querySelector('[data-tab="router"]').click();
-$("#run").addEventListener("click",runBatch);
-$("#reset").addEventListener("click",()=>{ runToken++; resetBoard(); $("#run").disabled=false; $("#cap").disabled=false; setStatus("Reset. Idle."); });
-$("#speed").addEventListener("change",e=>speed=+e.target.value);
+/* ============ wiring ============ */
+$("#run").onclick=runBatch;
+$("#clearBtn").onclick=()=>resetBoard(true);
+$("#pauseBtn").onclick=()=>{ S.paused=!S.paused; $("#pauseBtn").textContent=S.paused?"▶ Resume":"⏸ Pause"; $("#pausebanner").classList.toggle("on",S.paused); setLive(S.paused?"paused":"running",!S.paused); };
+const capv=()=>{$("#capv").textContent=S.cap;}; $("#capm").onclick=()=>{S.cap=Math.max(1,S.cap-1);capv();}; $("#capp").onclick=()=>{S.cap=Math.min(4,S.cap+1);capv();};
+const spds=[1,2,4]; const spdv=()=>{$("#spdv").textContent=S.speed+"×";}; $("#spdm").onclick=()=>{S.speed=spds[Math.max(0,spds.indexOf(S.speed)-1)];spdv();}; $("#spdp").onclick=()=>{S.speed=spds[Math.min(2,spds.indexOf(S.speed)+1)];spdv();};
+document.querySelectorAll(".srcpick .tbtn").forEach(b=>b.onclick=()=>{ S.source=b.dataset.src; document.querySelectorAll(".srcpick .tbtn").forEach(x=>x.setAttribute("aria-pressed",x===b)); $("#customSrc").classList.toggle("on",S.source==="custom"); if(S.source==="custom") $("#customSrc").focus(); });
+$("#docsBtn").onclick=()=>{ if(!S.findings.length){ S.findings=parseSample(DOC); renderDoc(); } $("#docsScrim").classList.add("on"); };
+$("#docsClose").onclick=()=>$("#docsScrim").classList.remove("on");
+$("#docsCollapseAll").onclick=()=>{ const all=[...document.querySelectorAll(".nfind")]; const anyOpen=all.some(n=>!n.classList.contains("collapsed")); all.forEach(n=>n.classList.toggle("collapsed",anyOpen)); $("#docsCollapseAll").textContent=anyOpen?"Expand all":"Collapse all"; };
+$("#routeBtn").onclick=()=>{ $("#routeScrim").classList.add("on"); $("#taskInput").focus(); };
+$("#routeClose").onclick=()=>$("#routeScrim").classList.remove("on");
+document.querySelectorAll(".scrim").forEach(s=>s.addEventListener("click",e=>{ if(e.target===s) s.classList.remove("on"); }));
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".scrim.on").forEach(s=>s.classList.remove("on")); });
 const ta=$("#taskInput"); ta.addEventListener("input",()=>route(ta.value)); route(ta.value);
-document.querySelectorAll(".examples button").forEach(b=>b.addEventListener("click",()=>{ ta.value=b.dataset.ex; route(ta.value); ta.focus(); }));
-renderDoc();
+document.querySelectorAll(".exs .tbtn").forEach(b=>b.onclick=()=>{ ta.value=b.dataset.ex; route(ta.value); });
+if(location.hash==="#router") $("#routeBtn").click();
+renderPills();
 </script>
 </body>
 </html>
