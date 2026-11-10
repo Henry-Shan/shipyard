@@ -408,11 +408,11 @@ async function human(tok){
 }
 /* new reports keep arriving */
 async function reporter(tok){
-  await wait(7000,tok); let pass=2;
+  await wait(7000,tok); let pass=7;
   while(tok===S.tok){
     const q=counts().queued; await wait(q>=4?rnd(7000,10000):rnd(3500,6000),tok);
     if(counts().queued>=6) continue;
-    if(!S.incoming.length){ S.incoming=INCOMING.map(f=>({...f,id:f.id.replace(/^6\./,pass+"."),text:(pass%2?"Regression: ":"Still happening after the fix: ")+f.text,section:"QA pass "+pass})); pass++; feed(`📥 the tester started another pass — reports keep coming`); }
+    if(!S.incoming.length){ S.incoming=INCOMING.map(f=>({...f,id:f.id.replace(/^6\./,pass+"."),text:(pass%2?"Regression: ":"Still happening after the fix: ")+f.text,section:"QA pass "+(pass-5)})); pass++; feed(`📥 the tester started another pass — reports keep coming`); }
     const f=S.incoming.shift(); intake(f,{live:true}); renderPills();
   }
 }
