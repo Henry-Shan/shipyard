@@ -96,25 +96,8 @@ fi
 CONFIG_OK=no
 python3 "$HERE/skill_config.py" check >/dev/null 2>&1 && CONFIG_OK=yes
 
-# Cloud relay bridge: if this machine has saved relay config (relay.json), keep
-# the outbound bridge running so the board is also viewable on the hosted
-# dashboard — no separate long command to run. Idempotent: never starts a
-# second one. Skipped entirely when relay.json is absent (local-only setups).
-RELAY_STATUS=off
-if [ -f "$HERE/relay.json" ]; then
-  # Match the basename, not "$HERE/...": the skill is usually installed as a
-  # symlink, so a hand-started bridge's argv may use a different path prefix.
-  if pgrep -f "relay_client.py" >/dev/null 2>&1; then
-    RELAY_STATUS=already-running
-  else
-    nohup python3 -u "$HERE/relay_client.py" > "$HERE/runs/relay.out" 2>&1 &
-    disown 2>/dev/null || true
-    RELAY_STATUS=started
-  fi
-fi
 
 echo "PANEL_URL=$URL"
-echo "RELAY_BRIDGE=$RELAY_STATUS"
 echo "CONFIG_OK=$CONFIG_OK"
 echo "REPO=$(cfg repo)"
 echo "BASE_BRANCH=$(cfg base_branch)"

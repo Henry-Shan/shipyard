@@ -1,4 +1,4 @@
-# Install the manager skill package
+# Install Shipyard (manager · ship-task · feature-tester)
 
 You are an AI coding agent installing this package for a user. Work through the
 steps in order. Report everything that's missing — never fail silently.
@@ -71,34 +71,34 @@ real failure, not something to silently continue past (an install that
 stopped):
 
 ```bash
-WAREHOUSE=~/.claude/agent-warehouse
-if [ -d "$WAREHOUSE/.git" ]; then
-  OLD_SHA="$(git -C "$WAREHOUSE" rev-parse --short HEAD)"
-  git -C "$WAREHOUSE" fetch origin main --quiet
-  git -C "$WAREHOUSE" log --oneline HEAD..origin/main 2>/dev/null | head  # preview what's new
-  if ! git -C "$WAREHOUSE" pull --ff-only; then
-    echo "UPDATE FAILED — $WAREHOUSE has local changes blocking a fast-forward pull." >&2
+SHIPYARD=~/.claude/shipyard
+if [ -d "$SHIPYARD/.git" ]; then
+  OLD_SHA="$(git -C "$SHIPYARD" rev-parse --short HEAD)"
+  git -C "$SHIPYARD" fetch origin main --quiet
+  git -C "$SHIPYARD" log --oneline HEAD..origin/main 2>/dev/null | head  # preview what's new
+  if ! git -C "$SHIPYARD" pull --ff-only; then
+    echo "UPDATE FAILED — $SHIPYARD has local changes blocking a fast-forward pull." >&2
     echo "Report this to the user and STOP here; do not continue as if updated." >&2
-    echo "Show them: git -C \"$WAREHOUSE\" status" >&2
-    echo "Then ask before running either: git -C \"$WAREHOUSE\" stash   (keep the changes)" >&2
-    echo "                             or: git -C \"$WAREHOUSE\" reset --hard origin/main   (discard them)" >&2
+    echo "Show them: git -C \"$SHIPYARD\" status" >&2
+    echo "Then ask before running either: git -C \"$SHIPYARD\" stash   (keep the changes)" >&2
+    echo "                             or: git -C \"$SHIPYARD\" reset --hard origin/main   (discard them)" >&2
     exit 1
   fi
-  NEW_SHA="$(git -C "$WAREHOUSE" rev-parse --short HEAD)"
+  NEW_SHA="$(git -C "$SHIPYARD" rev-parse --short HEAD)"
   if [ "$OLD_SHA" = "$NEW_SHA" ]; then
     echo "Already up to date at $NEW_SHA"
   else
     echo "Updated $OLD_SHA -> $NEW_SHA"
   fi
 else
-  git clone https://github.com/Henry-Shan/agent-warehouse.git "$WAREHOUSE"
+  git clone https://github.com/Henry-Shan/shipyard.git "$SHIPYARD"
 fi
 mkdir -p ~/.claude/skills
-for s in "$WAREHOUSE"/skills/*/; do
+for s in "$SHIPYARD"/skills/*/; do
   name="$(basename "$s")"
   [ -e ~/.claude/skills/"$name" ] || ln -s "$s" ~/.claude/skills/"$name"
 done
-chmod +x "$WAREHOUSE"/skills/*/*.sh
+chmod +x "$SHIPYARD"/skills/*/*.sh
 ls -l ~/.claude/skills/    # report which skills are now linked (note any NEW ones to the user)
 ```
 
@@ -108,10 +108,10 @@ to the user verbatim — that's the proof it truly updated, not just a claim.
 Handle these cases:
 - **Old copy-based install** (`~/.claude/skills/manager` is a real directory,
   not a symlink): preserve the user's state first —
-  `cp ~/.claude/skills/manager/config.json "$WAREHOUSE/skills/manager/config.json"`
+  `cp ~/.claude/skills/manager/config.json "$SHIPYARD/skills/manager/config.json"`
   (plus `manager.db` and `runs/` if present) — then, with the user's OK, replace
   each real directory with the symlink.
-- **A skill folder exists but is neither a symlink into the warehouse nor the
+- **A skill folder exists but is neither a symlink into the shipyard nor the
   old install**: name-collision with something else the user has — ask before
   touching it.
 - **Update run** (clone already existed): still run Step 2's prerequisite
@@ -124,8 +124,8 @@ Handle these cases:
   and stop — still no project interview on an update.
 
 (If `git` is unavailable, fall back to the tarball:
-`curl -L https://github.com/Henry-Shan/agent-warehouse/archive/refs/heads/main.tar.gz | tar xz`
-into `$WAREHOUSE` — but note that updates then require re-downloading.)
+`curl -L https://github.com/Henry-Shan/shipyard/archive/refs/heads/main.tar.gz | tar xz`
+into `$SHIPYARD` — but note that updates then require re-downloading.)
 
 ## Step 2 — Check prerequisites, REPORT, then OFFER TO FIX
 

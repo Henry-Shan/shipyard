@@ -76,7 +76,7 @@ def read_source_pdf():
 
 # The packaged example task doc, shown read-only on the intake card so a new
 # user can SEE what the manager eats, before they've pasted their own source.
-# realpath: the skill dir is usually a symlink into the warehouse clone;
+# realpath: the skill dir is usually a symlink into the shipyard clone;
 # examples/ lives at the clone root.
 DEMO_DOC = os.path.normpath(os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "..", "..", "examples", "demo-qa-findings.md"))
